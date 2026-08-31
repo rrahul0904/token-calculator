@@ -1,0 +1,51 @@
+name: Release Autofix
+
+on:
+  push:
+    branches: [production-wave-4-release-candidate]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply exact release compatibility fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          schema = Path('src/db/schema.ts')
+          text = schema.read_text()
+          old = 'const jsonObject = <T extends Record<string, unknown>>() => jsonb("metadata").$type<T>().notNull().default({});\n\n'
+          if old not in text:
+              raise SystemExit('Expected schema helper was not found')
+          schema.write_text(text.replace(old, '', 1))
+
+          claude = Path('src/lib/collectors/claude.ts')
+          text = claude.read_text()
+          old = '    if (current?.status === "running") current.endedAt = lastAt;\n'
+          new = '    const lastTurn = turns.at(-1);\n    if (lastTurn?.status === "running") lastTurn.endedAt = lastAt;\n'
+          if old not in text:
+              raise SystemExit('Expected Claude final-turn line was not found')
+          claude.write_text(text.replace(old, new, 1))
+          PY
+      - name: Generate deterministic npm lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Remove one-time workflow
+        run: rm .github/workflows/release-autofix.yml
+      - name: Commit release compatibility fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/db/schema.ts src/lib/collectors/claude.ts package-lock.json .github/workflows/release-autofix.yml
+          git commit -m "fix: close release typecheck compatibility gaps"
+          git push origin HEAD:production-wave-4-release-candidate
