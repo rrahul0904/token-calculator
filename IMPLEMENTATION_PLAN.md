@@ -1,49 +1,103 @@
-# Token Intelligence — Implementation Roadmap
+# Token Intelligence implementation plan
 
-## Wave 1 — Working production slice
+## Wave 1 — Production calculator ✅
 
-Status: implemented on `implementation-v1`.
+Implemented:
 
-- Next.js App Router application.
-- Local-only tokenizer worker.
-- OpenAI `o200k_base` token counting.
-- Clearly marked estimated token counts for other provider families.
-- Multi-provider versioned pricing catalog.
-- Cached-input and output cost math.
-- Context-window warnings.
-- Monthly request-volume forecasting.
-- Token-boundary inspector.
-- Unit tests and CI.
+- local browser tokenization
+- model pricing catalog
+- input/cache/output cost math
+- context-window planning
+- monthly cost forecasting
+- responsive UI
+- production Vercel deployment
 
-## Wave 2 — Cost Lab
+## Wave 1B — Token-Calculator.net competitive parity ✅
 
-- Two-column prompt variant comparison.
-- Percentage and absolute token/cost deltas.
-- Saved local scenarios with IndexedDB.
-- Batch file analysis for `.txt`, `.md`, `.json`, and source code.
-- CSV/JSON export.
-- Model filters by context, price, and provider.
-- Perplexity search/reasoning/citation fee modeling.
-- Prompt compression suggestions without uploading source text by default.
+Implemented clean-room equivalents of useful observable features from the public reference product:
 
-## Wave 3 — Team economics
+- token-piece visualization
+- no-space and total character counts
+- full searchable model pricing table
+- automatic long-context tiers
+- dedicated cost calculator / workload presets
+- token ↔ word converter
+- GPU RAM / VRAM calculator
+- token-speed and TTFT simulator
+- public-beta token-count API
+- developer API documentation
+- dark/light theme
+- expanded application navigation
+- Free / Pro / Team / Enterprise pricing packaging
 
-- Optional authentication.
-- Projects, environments, budgets, and alert thresholds.
-- Usage import adapters for provider billing/usage exports.
-- Daily/weekly cost dashboards.
-- Cost-per-feature and cost-per-customer tags.
-- Budget anomaly alerts.
-- Historical pricing snapshots and repricing simulations.
+Improvements over the reference:
 
-## Wave 4 — Developer platform
+- xAI and DeepSeek coverage
+- shared schema-driven long-context pricing
+- conservative tokenizer precision labels
+- TTFT separated from decode speed
+- explicit browser-vs-server privacy boundary
 
-- Public calculation API that accepts counts rather than prompt text by default.
-- TypeScript/Python SDKs.
-- CI budget gate for prompt fixtures.
-- Model-routing recommendations constrained by budget/context.
-- MCP/tool interface for coding agents.
+## Wave 2 — SaaS foundation
 
-## Product principle
+- authentication
+- PostgreSQL
+- users and organizations
+- projects and saved scenarios
+- prompt comparison history
+- Stripe subscriptions
+- billing portal
+- plan entitlements
+- hashed API keys
+- quotas and usage records
+- Cost Lab workspace redesign
 
-The defensible product is not merely a token counter. The target is an LLM economics workspace: model-aware token intelligence, cost forecasting, budget control, and prompt/model tradeoff analysis.
+## Wave 3 — Developer and coding-agent integrations
+
+- authenticated Streamable HTTP MCP server
+- OAuth
+- Codex integration
+- Claude Code integration
+- Cursor integration
+- Google Antigravity integration
+- TypeScript SDK
+- Python SDK
+- CLI
+- GitHub Action / CI integration
+
+Core MCP/API capabilities:
+
+- estimate cost
+- compare models
+- check context
+- recommend model
+- check budget
+- record usage
+- retrieve usage
+- identify savings opportunities
+
+## Wave 4 — AI gateway / FinOps
+
+- OpenAI-compatible and provider-specific gateway
+- BYOK credentials
+- actual usage reconciliation
+- budgets
+- model allowlists
+- policy enforcement
+- rate limits
+- routing
+- fallbacks
+- estimated-vs-actual spend
+
+## Wave 5 — Enterprise
+
+- SSO
+- SCIM
+- RBAC
+- service accounts
+- audit logs
+- SIEM export
+- retention controls
+- dedicated deployments
+- enterprise onboarding
+- SLA and security documentation
