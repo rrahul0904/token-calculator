@@ -24,6 +24,21 @@ export const apiKeyQuotas = pgTable(
   ],
 );
 
+export const retentionPolicies = pgTable(
+  "retention_policies",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    telemetryDays: integer("telemetry_days").notNull().default(90),
+    runDays: integer("run_days").notNull().default(365),
+    findingDays: integer("finding_days").notNull().default(365),
+    auditDays: integer("audit_days").notNull().default(730),
+    enabled: boolean("enabled").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex("retention_policies_org_uq").on(table.organizationId)],
+);
+
 export const alertEndpoints = pgTable(
   "alert_endpoints",
   {
