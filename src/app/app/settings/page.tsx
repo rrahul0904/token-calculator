@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { organizations, providerConnections } from "@/db/schema";
 import { AppPageHeader, StatusBadge } from "@/components/app-ui";
+import { RetentionSettings } from "@/components/retention-settings";
 import { getTenantContext } from "@/lib/auth/session";
 import { getConfigurationStatus, requiredConfiguration } from "@/lib/config";
 
@@ -16,6 +17,7 @@ export default async function SettingsPage() {
   ]);
   const organization = orgRows[0];
   const services = (Object.entries(configuration) as Array<[keyof typeof configuration, string]>).map(([key, state]) => ({ key, state, required: requiredConfiguration(key) }));
+  const canManage = tenant.role === "owner" || tenant.role === "admin";
 
   return <>
     <AppPageHeader kicker="Operations" title="Settings & connectivity" description="Live status comes from configuration and persisted provider state. This page does not turn missing credentials into green checks." />
@@ -24,7 +26,9 @@ export default async function SettingsPage() {
 
       <section className="app-panel"><div className="app-panel__header"><div><h2>AI provider status</h2><p>Only provider connections that passed a credential check are marked verified.</p></div></div><div className="app-panel__body">{providers.length ? <div className="integration-grid">{providers.map((provider) => <article className="integration-card" key={`${provider.provider}:${provider.label}`}><div className="integration-card__top"><div><h3>{provider.provider}</h3><p>{provider.label}{provider.lastVerifiedAt ? ` · checked ${new Date(provider.lastVerifiedAt).toLocaleString()}` : ""}</p></div><StatusBadge status={provider.status} /></div></article>)}</div> : <div className="empty-state"><div className="empty-state__icon">AI</div><h3>No verified providers</h3><p>Connect OpenAI, Claude, or Gemini from Integrations before the governed gateway can execute a provider request.</p></div>}</div></section>
 
-      <section className="app-panel"><div className="app-panel__header"><div><h2>Privacy & retention</h2><p>Content retention is independent from usage-metadata retention.</p></div></div><div className="app-panel__body"><div className="config-list"><div className="config-row"><span>Telemetry retention</span><code>{organization?.retentionDays ?? 90} days</code></div><div className="config-row"><span>Prompt/code persistence</span><code>{organization?.contentRetentionEnabled ? "explicitly enabled" : "disabled by default"}</code></div><div className="config-row"><span>Gateway content</span><code>transit only by default</code></div><div className="config-row"><span>Provider credentials</span><code>AES-256-GCM encrypted</code></div></div></div></section>
+      <RetentionSettings canManage={canManage} />
+
+      <section className="app-panel"><div className="app-panel__header"><div><h2>Privacy posture</h2><p>Content retention is independent from usage-metadata retention.</p></div></div><div className="app-panel__body"><div className="config-list"><div className="config-row"><span>Legacy telemetry default</span><code>{organization?.retentionDays ?? 90} days</code></div><div className="config-row"><span>Prompt/code persistence</span><code>{organization?.contentRetentionEnabled ? "explicitly enabled" : "disabled by default"}</code></div><div className="config-row"><span>Gateway content</span><code>transit only by default</code></div><div className="config-row"><span>Provider credentials</span><code>AES-256-GCM + tenant/provider/version AAD</code></div></div></div></section>
     </div>
   </>;
 }
