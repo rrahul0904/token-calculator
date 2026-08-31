@@ -1,35 +1,49 @@
-# Deployment status
+# Deployment record
 
-## Production
+## Production baseline
 
 - Vercel project: `token-intelligence`
-- Production URL: https://token-intelligence-eight.vercel.app
+- Stable production URL: `https://token-intelligence-eight.vercel.app`
 - Production deployment: `dpl_G6FJ8Wte3vFM9a9scauPXngdyvLH`
 - Region: `iad1`
-- Verified: 2026-08-30
+- Baseline production build: READY
 
-## Build verification
+The baseline production deployment passed optimized Next.js compilation, TypeScript validation, page-data collection, and static generation.
 
-The production deployment completed successfully on Vercel using Next.js 16.3.3 / Turbopack.
+## Competitive-parity preview
 
-Verified build stages:
+A newer preview containing the Token-Calculator.net parity wave is READY:
 
-- dependency installation completed
-- optimized production compilation completed
-- strict TypeScript validation completed
-- page data collection completed
-- static page generation completed
-- `/`, `/_not-found`, and `/robots.txt` generated successfully
-- production deployment reached `READY`
-- stable production URL returned HTTP 200
-- Vercel runtime error query returned no errors after deployment
+- Deployment: `dpl_LJDhNiFcggGVZsU9nAHFsN4uJgZA`
+- Preview: `https://token-intelligence-lena6z9xs-rrahul0904-5013s-projects.vercel.app`
+- Next.js: 16.3.3
+- Build result: PASS
+- TypeScript: PASS
+- Static/dynamic route generation: PASS
 
-## GitHub Actions note
+Validated routes in this preview include:
 
-The repository includes `.github/workflows/ci.yml` for typecheck, tests, and build. During this implementation session, GitHub created the workflow jobs but assigned no runner and recorded zero job steps. That failure occurred before checkout and is therefore an Actions execution/infrastructure issue, not a reported application test or build failure.
+- `/`
+- `/api/v1/tokenize`
+- `/developers`
+- `/models`
+- `/pricing`
+- `/robots.txt`
+- `/sitemap.xml`
+- `/tools/cost`
+- `/tools/memory`
+- `/tools/speed`
+- `/tools/tokens-words`
 
-The independent Vercel production build was used to validate compilation and TypeScript correctness.
+The parity preview compiled successfully and generated all application routes. It has not yet replaced the stable production alias in this record.
 
-## Next deployment hardening
+## CI caveat
 
-The Vercel project was created through direct file deployment. Connect the Vercel project to `rrahul0904/token-calculator` Git integration so future pull requests receive automatic preview deployments and merges to `main` can drive production deployments.
+GitHub Actions jobs for this repository have repeatedly been created without a runner and with zero executed steps. Those checks fail before checkout and therefore do not demonstrate an application test/build failure. Vercel has provided an independent clean build environment and has caught real TypeScript issues when present.
+
+## Remaining deployment hardening
+
+1. Connect the Vercel project to the GitHub repository.
+2. Resolve the GitHub Actions runner/account issue.
+3. Promote the current parity build after final smoke testing.
+4. Enable PR preview deployments automatically through Git integration.
