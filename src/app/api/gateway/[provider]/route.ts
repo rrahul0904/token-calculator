@@ -2,14 +2,15 @@ import { isDatabaseConfigured } from "@/db/client";
 import { authenticateApiKey } from "@/lib/auth/api-auth";
 import { executeGovernedGateway, gatewayRequestSchema } from "@/lib/gateway/execute";
 import type { GatewayProviderName } from "@/lib/gateway/provider-connectivity";
+import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
 import { isVaultConfigured } from "@/lib/security/vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-function reply(data: unknown, status = 200) {
-  return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
+function reply(data: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
+  return Response.json(data, { status, headers: { "Cache-Control": "no-store", ...extraHeaders } });
 }
 
 function statusForError(message: string) {
@@ -26,6 +27,18 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   if (!isVaultConfigured()) return reply({ error: "CREDENTIAL_VAULT_NOT_CONFIGURED" }, 503);
   const principal = await authenticateApiKey(request, "gateway:invoke");
   if (!principal) return reply({ error: "UNAUTHORIZED", requiredScope: "gateway:invoke" }, 401);
+
+  // Fail closed: gateway enforcement is not trustworthy if the shared rate-limit state cannot be updated.
+  try {
+    const rate = await consumeGatewayRateLimit(principal.organizationId, principal.apiKeyId);
+    if (!rate.allowed) return reply({ error: "RATE_LIMIT_EXCEEDED", limit: rate.limit, resetAt: rate.resetAt.toISOString() }, 429, {
+      "x-ratelimit-limit": String(rate.limit),
+      "x-ratelimit-remaining": "0",
+      "x-ratelimit-reset": rate.resetAt.toISOString(),
+    });
+  } catch {
+    return reply({ error: "RATE_LIMIT_AUTHORITY_UNAVAILABLE" }, 503);
+  }
 
   const { provider } = await context.params;
   if (!(["openai", "anthropic", "gemini"] as const).includes(provider as GatewayProviderName)) {
