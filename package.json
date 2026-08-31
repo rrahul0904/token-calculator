@@ -1,18 +1,22 @@
 {
   "name": "token-intelligence",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
-    "verify": "npm run typecheck && npm test"
+    "sdk:build": "npm --prefix packages/sdk-typescript run build",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run db:check && npm run sdk:build && npm run build"
   },
   "engines": {
     "node": ">=22.11.0"
@@ -36,6 +40,8 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "drizzle-kit": "^0.31.10",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.3.3",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   }
