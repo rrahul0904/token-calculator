@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, implementation-v1, observability-control-research, production-wave-2-agent-economics, production-wave-3-full-connectivity]
+    branches: [main, implementation-v1, observability-control-research, production-wave-2-agent-economics, production-wave-3-full-connectivity, production-wave-4-release-candidate]
   pull_request:
   workflow_dispatch:
 
@@ -12,20 +12,26 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: package-lock.json
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - name: Lint
+        run: npm run lint
       - name: Typecheck
         run: npm run typecheck
       - name: Unit tests
         run: npm test
       - name: Drizzle schema check
         run: npm run db:check
+      - name: TypeScript SDK build
+        run: npm run sdk:build
       - name: Production build
         run: npm run build
