@@ -31,6 +31,15 @@ type Tx = Parameters<PostgresJsDatabase<typeof schema>["transaction"]>[0] extend
 const money = (value: number | null | undefined) => (value === null || value === undefined ? null : value.toString());
 const score = money;
 
+export function parseTelemetryEvent(context: IngestContext, input: unknown): TelemetryEventInput {
+  const event = telemetryEventSchema.parse(input);
+  assertMetadataOnly(event.payload);
+  if (context.projectId && event.projectId && context.projectId !== event.projectId) {
+    throw new Error("PROJECT_SCOPE_VIOLATION");
+  }
+  return event;
+}
+
 async function ensureRunOwned(tx: Tx, organizationId: string, runId: string) {
   const row = (await tx.select({ organizationId: schema.runs.organizationId }).from(schema.runs).where(eq(schema.runs.id, runId)).limit(1))[0];
   if (!row) throw new Error("RUN_NOT_FOUND");
@@ -246,30 +255,51 @@ async function materialize(tx: Tx, context: IngestContext, event: TelemetryEvent
   return { materializedType: "budget_decision", materializedId: decisionId };
 }
 
+export async function ingestParsedTelemetryEvent(
+  tx: Tx,
+  context: IngestContext,
+  event: TelemetryEventInput,
+): Promise<IngestResult> {
+  const inserted = await tx.insert(schema.usageEvents).values({
+    id: `evt_${randomUUID()}`,
+    organizationId: context.organizationId,
+    projectId: event.projectId ?? context.projectId ?? null,
+    runId: event.runId ?? null,
+    sourceEventId: event.sourceEventId,
+    source: event.source,
+    eventType: event.eventType,
+    occurredAt: event.occurredAt,
+    payload: event.payload,
+  }).onConflictDoNothing().returning({ id: schema.usageEvents.id });
+
+  if (inserted.length === 0) return { sourceEventId: event.sourceEventId, duplicate: true };
+  const materialized = await materialize(tx, context, event);
+  return { sourceEventId: event.sourceEventId, duplicate: false, ...materialized };
+}
+
 export async function ingestTelemetryEvent(
   db: PostgresJsDatabase<typeof schema>,
   context: IngestContext,
   input: unknown,
 ): Promise<IngestResult> {
-  const event = telemetryEventSchema.parse(input);
-  assertMetadataOnly(event.payload);
-  if (context.projectId && event.projectId && context.projectId !== event.projectId) throw new Error("PROJECT_SCOPE_VIOLATION");
+  const event = parseTelemetryEvent(context, input);
+  return db.transaction((tx) => ingestParsedTelemetryEvent(tx, context, event));
+}
+
+export async function ingestTelemetryBatch(
+  db: PostgresJsDatabase<typeof schema>,
+  context: IngestContext,
+  inputs: readonly unknown[],
+): Promise<IngestResult[]> {
+  // Parse and enforce metadata-only privacy before opening the transaction. This
+  // means malformed payloads cannot leave a partially materialized economic batch.
+  const events = inputs.map((input) => parseTelemetryEvent(context, input));
 
   return db.transaction(async (tx) => {
-    const inserted = await tx.insert(schema.usageEvents).values({
-      id: `evt_${randomUUID()}`,
-      organizationId: context.organizationId,
-      projectId: event.projectId ?? context.projectId ?? null,
-      runId: event.runId ?? null,
-      sourceEventId: event.sourceEventId,
-      source: event.source,
-      eventType: event.eventType,
-      occurredAt: event.occurredAt,
-      payload: event.payload,
-    }).onConflictDoNothing().returning({ id: schema.usageEvents.id });
-
-    if (inserted.length === 0) return { sourceEventId: event.sourceEventId, duplicate: true };
-    const materialized = await materialize(tx, context, event);
-    return { sourceEventId: event.sourceEventId, duplicate: false, ...materialized };
+    const results: IngestResult[] = [];
+    for (const event of events) {
+      results.push(await ingestParsedTelemetryEvent(tx, context, event));
+    }
+    return results;
   });
 }
