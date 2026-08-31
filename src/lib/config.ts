@@ -17,7 +17,9 @@ export function getConfigurationStatus() {
     github: all("GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET")
       ? "live"
       : "code_complete_configuration_blocked",
-    otel: all("OTEL_EXPORTER_OTLP_ENDPOINT") ? "live" : "code_complete_configuration_blocked",
+    otel: all("OTEL_EXPORTER_OTLP_ENDPOINT") ? "live" : "not_enabled",
+    alerts: all("TOKEN_INTELLIGENCE_WEBHOOK_SECRET", "TOKEN_INTELLIGENCE_ENCRYPTION_KEY") ? "live" : "code_complete_configuration_blocked",
+    retention: all("CRON_SECRET") ? "live" : "code_complete_configuration_blocked",
     redis: all("REDIS_URL") ? "live" : "not_enabled",
   } satisfies Record<string, IntegrationState>;
 }
@@ -30,6 +32,8 @@ export function requiredConfiguration(feature: keyof ReturnType<typeof getConfig
     credentialVault: ["TOKEN_INTELLIGENCE_ENCRYPTION_KEY"],
     github: ["GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"],
     otel: ["OTEL_EXPORTER_OTLP_ENDPOINT"],
+    alerts: ["TOKEN_INTELLIGENCE_WEBHOOK_SECRET", "TOKEN_INTELLIGENCE_ENCRYPTION_KEY"],
+    retention: ["CRON_SECRET"],
     redis: ["REDIS_URL"],
   };
   return map[feature];
