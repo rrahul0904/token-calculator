@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function WorkspaceConfigurationGate({ database, auth }: { database: string; auth: string }) {
@@ -24,6 +25,7 @@ export function WorkspaceConfigurationGate({ database, auth }: { database: strin
 }
 
 export function WorkspaceOnboarding() {
+  const router = useRouter();
   const [organizationName, setOrganizationName] = useState("");
   const [projectName, setProjectName] = useState("My first project");
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,8 @@ export function WorkspaceOnboarding() {
       setSaving(false);
       return;
     }
-    window.location.assign("/app/overview");
+    router.push("/app/overview");
+    router.refresh();
   }
 
   return (
