@@ -1,6 +1,7 @@
+import type { NextRequest } from "next/server";
 import { getConfigurationStatus, requiredConfiguration } from "@/lib/config";
 
-export const GET = async (request: Request) => {
+export const GET = async (request: NextRequest) => {
   if (getConfigurationStatus().auth !== "live") {
     return Response.json(
       {
