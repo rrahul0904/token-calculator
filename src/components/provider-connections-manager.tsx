@@ -4,7 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { StatusBadge } from "@/components/app-ui";
 
 type ProviderName = "openai" | "anthropic" | "gemini";
-type Connection = { id: string; provider: ProviderName; label: string; status: string; lastVerifiedAt: string | null; createdAt: string };
+type Connection = {
+  id: string;
+  provider: ProviderName;
+  label: string;
+  status: string;
+  credentialKeyVersion: number;
+  lastVerifiedAt: string | null;
+  createdAt: string;
+};
 
 const PROVIDERS: Array<{ id: ProviderName; name: string; hint: string }> = [
   { id: "openai", name: "OpenAI", hint: "Server-side API key. Verified with the Models API before storage." },
@@ -17,6 +25,8 @@ export function ProviderConnectionsManager() {
   const [provider, setProvider] = useState<ProviderName>("openai");
   const [label, setLabel] = useState("Production");
   const [credential, setCredential] = useState("");
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
+  const [rotationCredential, setRotationCredential] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -24,6 +34,7 @@ export function ProviderConnectionsManager() {
     const response = await fetch("/api/v1/provider-connections", { cache: "no-store" });
     const body = await response.json().catch(() => null);
     if (response.ok) setConnections(body?.data ?? []);
+    else setMessage(body?.error ?? "Unable to load provider connections.");
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -66,6 +77,29 @@ export function ProviderConnectionsManager() {
     }
   }
 
+  async function rotate(id: string) {
+    if (rotationCredential.length < 8) return;
+    setBusy(`rotate:${id}`);
+    setMessage("Verifying replacement credential before rotation…");
+    try {
+      const response = await fetch(`/api/v1/provider-connections/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ credential: rotationCredential }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail ?? body?.error ?? "Rotation failed");
+      setRotationCredential("");
+      setRotatingId(null);
+      setMessage(`Credential rotated and verified as key version ${body?.data?.credentialKeyVersion ?? "new"}.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rotation failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function remove(id: string) {
     setBusy(id);
     setMessage(null);
@@ -74,6 +108,10 @@ export function ProviderConnectionsManager() {
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error ?? "Delete failed");
       setMessage("Provider connection removed.");
+      if (rotatingId === id) {
+        setRotatingId(null);
+        setRotationCredential("");
+      }
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Delete failed");
@@ -83,13 +121,21 @@ export function ProviderConnectionsManager() {
   }
 
   return <section className="app-panel">
-    <div className="app-panel__header"><div><h2>Provider connections</h2><p>Credentials are verified before storage, encrypted server-side, and never returned to the browser.</p></div></div>
+    <div className="app-panel__header"><div><h2>Provider connections</h2><p>Credentials are verified before storage, encrypted server-side, versioned, and never returned to the browser.</p></div></div>
     <div className="app-panel__body app-stack">
       <div className="integration-grid">
         {connections.length === 0 ? <div className="empty-state"><div className="empty-state__icon">AI</div><h3>No providers connected</h3><p>Connect a provider to make the governed gateway usable. Credential verification uses a read-only model-list request, not a paid generation.</p></div> : connections.map((connection) => <article className="integration-card" key={connection.id}>
           <div className="integration-card__top"><div><h3>{PROVIDERS.find((item) => item.id === connection.provider)?.name ?? connection.provider}</h3><p>{connection.label}</p></div><StatusBadge status={connection.status} /></div>
-          <p>{connection.lastVerifiedAt ? `Verified ${new Date(connection.lastVerifiedAt).toLocaleString()}` : "Not verified"}</p>
-          <div className="form-actions" style={{ marginTop: 12 }}><button type="button" className="button button--ghost" disabled={busy === connection.id} onClick={() => void verify(connection.id)}>Verify</button><button type="button" className="button button--ghost" disabled={busy === connection.id} onClick={() => void remove(connection.id)}>Remove</button></div>
+          <p>{connection.lastVerifiedAt ? `Verified ${new Date(connection.lastVerifiedAt).toLocaleString()}` : "Not verified"} · key version {connection.credentialKeyVersion}</p>
+          <div className="form-actions" style={{ marginTop: 12 }}>
+            <button type="button" className="button button--ghost" disabled={busy === connection.id} onClick={() => void verify(connection.id)}>Verify</button>
+            <button type="button" className="button button--ghost" disabled={busy !== null} onClick={() => { setRotatingId(rotatingId === connection.id ? null : connection.id); setRotationCredential(""); }}>Rotate</button>
+            <button type="button" className="button button--ghost" disabled={busy === connection.id} onClick={() => void remove(connection.id)}>Remove</button>
+          </div>
+          {rotatingId === connection.id ? <div className="form-grid" style={{ marginTop: 12 }}>
+            <div className="form-row"><label htmlFor={`rotate-${connection.id}`}>Replacement API key</label><input id={`rotate-${connection.id}`} type="password" autoComplete="off" value={rotationCredential} onChange={(event) => setRotationCredential(event.target.value)} placeholder="Paste replacement server-side key" /><small>The existing credential remains active unless the replacement verifies successfully.</small></div>
+            <div className="form-actions"><button type="button" className="button button--primary" disabled={busy === `rotate:${connection.id}` || rotationCredential.length < 8} onClick={() => void rotate(connection.id)}>{busy === `rotate:${connection.id}` ? "Verifying…" : "Verify & rotate"}</button><button type="button" className="button button--ghost" disabled={busy !== null} onClick={() => { setRotatingId(null); setRotationCredential(""); }}>Cancel</button></div>
+          </div> : null}
         </article>)}
       </div>
 
