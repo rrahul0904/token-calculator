@@ -27,6 +27,7 @@ const groups = [
     items: [
       ["/app/team", "Team"],
       ["/app/api-keys", "API Keys"],
+      ["/app/audit", "Audit"],
       ["/app/billing", "Billing"],
       ["/app/settings", "Settings"],
     ],
