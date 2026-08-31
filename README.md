@@ -2,6 +2,8 @@
 
 A local-first LLM token and cost intelligence workspace inspired by the observable utility of public token calculators, implemented independently from scratch.
 
+**Production:** https://token-intelligence-eight.vercel.app
+
 ## What is implemented
 
 - Three planning modes: raw text, word count, or known token count.
@@ -15,7 +17,7 @@ A local-first LLM token and cost intelligence workspace inspired by the observab
 - Output-size presets and custom percentage planning.
 - Monthly spend projection by request volume.
 - Responsive no-account UI with no prompt-analysis backend.
-- Unit tests, strict TypeScript, production build script, and GitHub Actions CI.
+- Unit tests, strict TypeScript, production build script, and GitHub Actions CI definition.
 
 ## Architecture
 
@@ -45,6 +47,8 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+The production Vercel build has completed successfully with Next.js 16.3.3, including strict TypeScript validation and static page generation. See `DEPLOYMENT.md` for deployment details.
 
 ## Pricing maintenance
 
