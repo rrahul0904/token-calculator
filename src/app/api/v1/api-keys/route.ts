@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, count, eq, isNull } from "drizzle-orm";
 import * as z from "zod";
-import { apiKeys, auditEvents } from "@/db/schema";
 import { getDb, isDatabaseConfigured } from "@/db/client";
+import { apiKeyQuotas } from "@/db/controls-schema";
+import { apiKeys, auditEvents, projects } from "@/db/schema";
 import { getTenantContext } from "@/lib/auth/session";
 import { PLAN_ENTITLEMENTS, hasEntitlement } from "@/lib/billing/entitlements";
 import { generateApiKey } from "@/lib/security/api-keys";
@@ -11,8 +12,11 @@ const allowedScopes = ["read:models", "read:usage", "read:runs", "write:events",
 const requestSchema = z.object({
   name: z.string().trim().min(2).max(80),
   environment: z.enum(["live", "test"]).default("live"),
-  projectId: z.string().nullable().optional(),
+  projectId: z.string().max(180).nullable().optional(),
   scopes: z.array(z.enum(allowedScopes)).min(1).max(12),
+  requestsPerMinute: z.number().int().min(1).max(10_000).default(120),
+  monthlyTokenLimit: z.number().int().positive().nullable().optional(),
+  monthlyCostLimitUsd: z.number().positive().max(1_000_000).nullable().optional(),
 });
 
 function noStore(data: unknown, status = 200) {
@@ -23,8 +27,7 @@ export async function GET() {
   if (!isDatabaseConfigured()) return noStore({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   const tenant = await getTenantContext();
   if (!tenant) return noStore({ error: "UNAUTHENTICATED_OR_NOT_ONBOARDED" }, 401);
-  const db = getDb();
-  const rows = await db.select({
+  const rows = await getDb().select({
     id: apiKeys.id,
     name: apiKeys.name,
     environment: apiKeys.environment,
@@ -36,7 +39,13 @@ export async function GET() {
     createdAt: apiKeys.createdAt,
     lastUsedAt: apiKeys.lastUsedAt,
     revokedAt: apiKeys.revokedAt,
-  }).from(apiKeys).where(eq(apiKeys.organizationId, tenant.organizationId));
+    requestsPerMinute: apiKeyQuotas.requestsPerMinute,
+    monthlyTokenLimit: apiKeyQuotas.monthlyTokenLimit,
+    monthlyCostLimitUsd: apiKeyQuotas.monthlyCostLimitUsd,
+    quotaEnabled: apiKeyQuotas.enabled,
+  }).from(apiKeys)
+    .leftJoin(apiKeyQuotas, and(eq(apiKeyQuotas.apiKeyId, apiKeys.id), eq(apiKeyQuotas.organizationId, tenant.organizationId)))
+    .where(eq(apiKeys.organizationId, tenant.organizationId));
   return noStore({ data: rows });
 }
 
@@ -57,12 +66,22 @@ export async function POST(request: Request) {
   }
 
   const db = getDb();
+  if (parsed.data.projectId) {
+    const project = (await db.select({ id: projects.id, archivedAt: projects.archivedAt }).from(projects).where(and(
+      eq(projects.id, parsed.data.projectId),
+      eq(projects.organizationId, tenant.organizationId),
+    )).limit(1))[0];
+    if (!project) return noStore({ error: "PROJECT_NOT_FOUND" }, 404);
+    if (project.archivedAt) return noStore({ error: "PROJECT_ARCHIVED" }, 409);
+  }
+
   const active = await db.select({ value: count() }).from(apiKeys).where(and(eq(apiKeys.organizationId, tenant.organizationId), isNull(apiKeys.revokedAt)));
   const limit = entitlements.apiKeys;
   if (limit !== null && Number(active[0]?.value ?? 0) >= limit) return noStore({ error: "API_KEY_LIMIT_REACHED", limit }, 429);
 
   const material = generateApiKey(parsed.data.environment);
   const id = `key_${randomUUID()}`;
+  const quotaId = `keyq_${randomUUID()}`;
   await db.transaction(async (tx) => {
     await tx.insert(apiKeys).values({
       id,
@@ -76,6 +95,15 @@ export async function POST(request: Request) {
       secretHash: material.hash,
       scopes: parsed.data.scopes,
     });
+    await tx.insert(apiKeyQuotas).values({
+      id: quotaId,
+      organizationId: tenant.organizationId,
+      apiKeyId: id,
+      requestsPerMinute: parsed.data.requestsPerMinute,
+      monthlyTokenLimit: parsed.data.monthlyTokenLimit ?? null,
+      monthlyCostLimitUsd: parsed.data.monthlyCostLimitUsd?.toString() ?? null,
+      enabled: true,
+    });
     await tx.insert(auditEvents).values({
       id: `aud_${randomUUID()}`,
       organizationId: tenant.organizationId,
@@ -84,7 +112,17 @@ export async function POST(request: Request) {
       action: "api_key.created",
       resourceType: "api_key",
       resourceId: id,
-      details: { name: parsed.data.name, scopes: parsed.data.scopes, environment: material.environment },
+      details: {
+        name: parsed.data.name,
+        scopes: parsed.data.scopes,
+        environment: material.environment,
+        projectId: parsed.data.projectId ?? null,
+        quota: {
+          requestsPerMinute: parsed.data.requestsPerMinute,
+          monthlyTokenLimit: parsed.data.monthlyTokenLimit ?? null,
+          monthlyCostLimitUsd: parsed.data.monthlyCostLimitUsd ?? null,
+        },
+      },
     });
   });
 
@@ -95,6 +133,12 @@ export async function POST(request: Request) {
       prefix: material.prefix,
       lastFour: material.lastFour,
       scopes: parsed.data.scopes,
+      projectId: parsed.data.projectId ?? null,
+      quota: {
+        requestsPerMinute: parsed.data.requestsPerMinute,
+        monthlyTokenLimit: parsed.data.monthlyTokenLimit ?? null,
+        monthlyCostLimitUsd: parsed.data.monthlyCostLimitUsd ?? null,
+      },
       warning: "This secret is returned once and is not stored in plaintext.",
     },
   }, 201);
