@@ -11,6 +11,18 @@ CREATE TABLE IF NOT EXISTS api_key_quotas (
 );
 CREATE INDEX IF NOT EXISTS api_key_quotas_org_idx ON api_key_quotas(organization_id);
 
+CREATE TABLE IF NOT EXISTS retention_policies (
+  id text PRIMARY KEY,
+  organization_id text NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+  telemetry_days integer NOT NULL DEFAULT 90 CHECK (telemetry_days BETWEEN 1 AND 3650),
+  run_days integer NOT NULL DEFAULT 365 CHECK (run_days BETWEEN 1 AND 3650),
+  finding_days integer NOT NULL DEFAULT 365 CHECK (finding_days BETWEEN 1 AND 3650),
+  audit_days integer NOT NULL DEFAULT 730 CHECK (audit_days BETWEEN 30 AND 3650),
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS alert_endpoints (
   id text PRIMARY KEY,
   organization_id text NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
