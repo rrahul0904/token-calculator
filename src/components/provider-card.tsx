@@ -40,13 +40,14 @@ export function ProviderCard({ provider, models, inputTokensFor, outputTokens, c
   }, [model, inputTokensFor, outputTokens, cachedPercent, requestsPerMonth]);
 
   if (!model || !calculation) return null;
+  const result = calculation;
 
-  const warning = calculation.inputTokens + outputTokens > model.contextWindow;
-  const openAiLongContext = provider === "OpenAI" && calculation.inputTokens > 272_000;
-  const grokLongContext = provider === "xAI" && calculation.inputTokens >= 200_000;
+  const warning = result.inputTokens + outputTokens > model.contextWindow;
+  const openAiLongContext = provider === "OpenAI" && result.inputTokens > 272_000;
+  const grokLongContext = provider === "xAI" && result.inputTokens >= 200_000;
 
   async function copyEstimate() {
-    const text = `${model.name}: ${formatTokens(calculation.inputTokens)} input + ${formatTokens(outputTokens)} output tokens ≈ ${formatMoney(calculation.cost.total)} per request (${formatCompactMoney(calculation.monthly)}/month at ${formatTokens(requestsPerMonth)} requests).`;
+    const text = `${model.name}: ${formatTokens(result.inputTokens)} input + ${formatTokens(outputTokens)} output tokens ≈ ${formatMoney(result.cost.total)} per request (${formatCompactMoney(result.monthly)}/month at ${formatTokens(requestsPerMonth)} requests).`;
     await navigator.clipboard.writeText(text);
   }
 
@@ -69,21 +70,21 @@ export function ProviderCard({ provider, models, inputTokensFor, outputTokens, c
       </select>
 
       <div className="token-row">
-        <div><span>Input tokens</span><strong>{formatTokens(calculation.inputTokens)}</strong></div>
+        <div><span>Input tokens</span><strong>{formatTokens(result.inputTokens)}</strong></div>
         <div><span>Output tokens</span><strong>{formatTokens(outputTokens)}</strong></div>
-        <div><span>Context used</span><strong>{calculation.context.toFixed(calculation.context < 1 ? 2 : 1)}%</strong></div>
+        <div><span>Context used</span><strong>{result.context.toFixed(result.context < 1 ? 2 : 1)}%</strong></div>
       </div>
 
       <div className="cost-grid">
-        <div><span>Input</span><strong>{formatMoney(calculation.cost.input)}</strong></div>
-        {model.pricing.cachedInput !== undefined && <div><span>Cached input</span><strong>{formatMoney(calculation.cost.cachedInput)}</strong></div>}
-        <div><span>Output</span><strong>{formatMoney(calculation.cost.output)}</strong></div>
-        <div className="cost-grid__total"><span>Est. total</span><strong>{formatMoney(calculation.cost.total)}</strong></div>
+        <div><span>Input</span><strong>{formatMoney(result.cost.input)}</strong></div>
+        {model.pricing.cachedInput !== undefined && <div><span>Cached input</span><strong>{formatMoney(result.cost.cachedInput)}</strong></div>}
+        <div><span>Output</span><strong>{formatMoney(result.cost.output)}</strong></div>
+        <div className="cost-grid__total"><span>Est. total</span><strong>{formatMoney(result.cost.total)}</strong></div>
       </div>
 
       <div className="monthly-line">
         <span>Projected monthly</span>
-        <strong>{formatCompactMoney(calculation.monthly)}</strong>
+        <strong>{formatCompactMoney(result.monthly)}</strong>
       </div>
 
       {(warning || openAiLongContext || grokLongContext) && (
