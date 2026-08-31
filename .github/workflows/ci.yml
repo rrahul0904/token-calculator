@@ -12,7 +12,26 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
+      DATABASE_SSL: disable
+      TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_BASE_URL: http://localhost:3000
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: token_intelligence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d token_intelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +50,10 @@ jobs:
         run: npm test
       - name: Drizzle schema check
         run: npm run db:check
+      - name: Apply migrations on disposable PostgreSQL
+        run: npm run db:migrate
+      - name: Verify migrated schema and quota trigger
+        run: npm run db:verify
       - name: TypeScript SDK build
         run: npm run sdk:build
       - name: Production build
