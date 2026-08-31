@@ -83,8 +83,8 @@ export async function getTenantContext(): Promise<TenantContext | null> {
 }
 
 const PERMISSIONS = {
-  owner: new Set(["org:manage", "billing:manage", "integrations:manage", "secrets:manage", "policy:manage", "api_keys:manage", "usage:read", "runs:read", "exports:read"]),
-  admin: new Set(["org:manage", "integrations:manage", "secrets:manage", "policy:manage", "api_keys:manage", "usage:read", "runs:read", "exports:read"]),
+  owner: new Set(["org:manage", "billing:manage", "integrations:manage", "secrets:manage", "policy:manage", "api_keys:manage", "usage:read", "runs:read", "exports:read", "scenarios:write"]),
+  admin: new Set(["org:manage", "integrations:manage", "secrets:manage", "policy:manage", "api_keys:manage", "usage:read", "runs:read", "exports:read", "scenarios:write"]),
   finance: new Set(["billing:manage", "usage:read", "runs:read", "exports:read"]),
   developer: new Set(["api_keys:self", "usage:read", "runs:read", "scenarios:write"]),
   viewer: new Set(["usage:read", "runs:read"]),
