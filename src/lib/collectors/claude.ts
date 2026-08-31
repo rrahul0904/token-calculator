@@ -197,7 +197,8 @@ export const claudeCollector: CollectorAdapter = {
       }
     }
 
-    if (current?.status === "running") current.endedAt = lastAt;
+    const lastTurn = turns.at(-1);
+    if (lastTurn?.status === "running") lastTurn.endedAt = lastAt;
     for (const turn of turns) {
       events.push({
         sourceEventId: `claude:${sessionId}:turn:${turn.id}`, source: "claude", eventType: "turn.upsert", occurredAt: turn.endedAt ?? turn.startedAt,

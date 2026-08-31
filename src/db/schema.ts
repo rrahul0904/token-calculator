@@ -15,8 +15,6 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 };
 
-const jsonObject = <T extends Record<string, unknown>>() => jsonb("metadata").$type<T>().notNull().default({});
-
 export const users = pgTable(
   "users",
   {
