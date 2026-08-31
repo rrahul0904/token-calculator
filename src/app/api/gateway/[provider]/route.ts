@@ -15,10 +15,11 @@ function reply(data: unknown, status = 200, extraHeaders: Record<string, string>
 
 function statusForError(message: string) {
   if (message === "GATEWAY_ENTITLEMENT_REQUIRED") return 402;
-  if (message === "PROJECT_SCOPE_VIOLATION") return 403;
+  if (message === "PROJECT_SCOPE_VIOLATION" || message === "RUN_SCOPE_VIOLATION") return 403;
   if (message === "PROJECT_NOT_FOUND" || message === "PROVIDER_CONNECTION_NOT_FOUND" || message === "ORGANIZATION_NOT_FOUND") return 404;
-  if (message === "PROVIDER_UNSUPPORTED" || message === "PROVIDER_CONNECTION_MISMATCH") return 400;
-  if (message === "ENCRYPTION_KEY_NOT_CONFIGURED" || message === "ENCRYPTION_KEY_INVALID_LENGTH") return 503;
+  if (message === "PROVIDER_UNSUPPORTED" || message === "PROVIDER_CONNECTION_MISMATCH" || message === "PROVIDER_CONNECTION_NOT_VERIFIED") return 400;
+  if (message === "GATEWAY_UPSTREAM_UNAVAILABLE" || message === "GATEWAY_RETRY_EXHAUSTED") return 502;
+  if (message === "PROVIDER_CREDENTIAL_DECRYPTION_FAILED" || message === "ENCRYPTION_KEY_NOT_CONFIGURED" || message === "ENCRYPTION_KEY_INVALID_LENGTH") return 503;
   return 500;
 }
 
