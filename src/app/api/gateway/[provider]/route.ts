@@ -1,6 +1,7 @@
 import { isDatabaseConfigured } from "@/db/client";
 import { authenticateApiKey } from "@/lib/auth/api-auth";
 import { executeGovernedGateway, gatewayRequestSchema } from "@/lib/gateway/execute";
+import type { GatewayProviderName } from "@/lib/gateway/provider-connectivity";
 import { isVaultConfigured } from "@/lib/security/vault";
 
 export const runtime = "nodejs";
@@ -14,9 +15,8 @@ function reply(data: unknown, status = 200) {
 function statusForError(message: string) {
   if (message === "GATEWAY_ENTITLEMENT_REQUIRED") return 402;
   if (message === "PROJECT_SCOPE_VIOLATION") return 403;
-  if (message === "PROJECT_NOT_FOUND" || message === "PROVIDER_CONNECTION_NOT_FOUND") return 404;
-  if (message === "PROVIDER_UNSUPPORTED") return 400;
-  if (message === "ORGANIZATION_NOT_FOUND") return 404;
+  if (message === "PROJECT_NOT_FOUND" || message === "PROVIDER_CONNECTION_NOT_FOUND" || message === "ORGANIZATION_NOT_FOUND") return 404;
+  if (message === "PROVIDER_UNSUPPORTED" || message === "PROVIDER_CONNECTION_MISMATCH") return 400;
   if (message === "ENCRYPTION_KEY_NOT_CONFIGURED" || message === "ENCRYPTION_KEY_INVALID_LENGTH") return 503;
   return 500;
 }
@@ -28,7 +28,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   if (!principal) return reply({ error: "UNAUTHORIZED", requiredScope: "gateway:invoke" }, 401);
 
   const { provider } = await context.params;
-  if (!(["openai", "anthropic", "gemini"] as const).includes(provider as "openai" | "anthropic" | "gemini")) {
+  if (!(["openai", "anthropic", "gemini"] as const).includes(provider as GatewayProviderName)) {
     return reply({ error: "PROVIDER_UNSUPPORTED", provider }, 404);
   }
 
@@ -36,9 +36,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   if (!parsed.success) return reply({ error: "INVALID_REQUEST", issues: parsed.error.issues }, 400);
 
   try {
-    const result = await executeGovernedGateway(principal, parsed.data);
-    const responseProvider = parsed.data.providerConnectionId;
-    void responseProvider;
+    const result = await executeGovernedGateway(principal, parsed.data, provider as GatewayProviderName);
     return result.response;
   } catch (error) {
     const message = error instanceof Error ? error.message : "GATEWAY_EXECUTION_FAILED";
