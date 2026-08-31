@@ -34,14 +34,14 @@ export function decryptAlertUrl(ciphertext: string, organizationId: string, endp
   return decryptSecret(ciphertext, endpointAad(organizationId, endpointId));
 }
 
-function isPrivateV4(ip: string) {
+export function isPrivateV4(ip: string) {
   const parts = ip.split(".").map(Number);
   if (parts.length !== 4 || parts.some((value) => !Number.isInteger(value))) return true;
   const [a, b] = parts;
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
 }
 
-function isPrivateAddress(address: string) {
+export function isPrivateAddress(address: string) {
   if (address.includes(":")) {
     const normalized = address.toLowerCase();
     return normalized === "::1" || normalized === "::" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb") || normalized.startsWith("::ffff:127.") || normalized.startsWith("::ffff:10.") || normalized.startsWith("::ffff:192.168.");
@@ -66,13 +66,17 @@ function signingSecret() {
   return secret;
 }
 
+export function signAlertPayload(timestamp: string, payload: string, secret = signingSecret()) {
+  return createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex");
+}
+
 async function deliver(endpoint: typeof alertEndpoints.$inferSelect, envelope: AlertEnvelope) {
   const deliveryId = `ald_${randomUUID()}`;
   const occurredAt = (envelope.occurredAt ?? new Date()).toISOString();
   const payload = JSON.stringify({ id: deliveryId, type: envelope.eventType, occurredAt, resource: { type: envelope.resourceType, id: envelope.resourceId ?? null }, data: envelope.data });
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const signature = createHmac("sha256", signingSecret()).update(`${timestamp}.${payload}`).digest("hex");
-  const destination = decryptAlertUrl(endpoint.encryptedUrl, endpoint.organizationId, endpoint.id);
+  const signature = signAlertPayload(timestamp, payload);
+  const decryptedDestination = decryptAlertUrl(endpoint.encryptedUrl, endpoint.organizationId, endpoint.id);
   let finalStatus = 0;
   let delivered = false;
   let attempts = 0;
@@ -80,6 +84,9 @@ async function deliver(endpoint: typeof alertEndpoints.$inferSelect, envelope: A
   for (let attempt = 0; attempt < 3; attempt += 1) {
     attempts = attempt + 1;
     try {
+      // Re-resolve the hostname on every attempt; an endpoint that later resolves to
+      // loopback/private/link-local space is refused rather than trusted forever.
+      const destination = await validateAlertDestination(decryptedDestination);
       const response = await fetch(destination, {
         method: "POST",
         headers: { "content-type": "application/json", "user-agent": "Token-Intelligence-Alerts/1.0", "x-ti-delivery": deliveryId, "x-ti-timestamp": timestamp, "x-ti-signature": `sha256=${signature}` },
