@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 import "./features.css";
+import "./commercial.css";
 
 export const metadata: Metadata = {
-  title: { default: "Token Intelligence — LLM Cost & Context Lab", template: "%s · Token Intelligence" },
-  description: "Private token counting, model price comparison, context planning, LLM cost forecasting, GPU memory planning, and streaming simulations.",
+  title: { default: "Token Intelligence — AI Workload Economics", template: "%s · Token Intelligence" },
+  description: "Estimate AI workload cost before a run, trace agent economics during execution, reconcile actual usage, and control budgets without storing prompts by default.",
   applicationName: "Token Intelligence",
-  openGraph: { title: "Token Intelligence", description: "Plan token cost, context, memory, and latency before you ship AI workloads.", type: "website" },
+  openGraph: { title: "Token Intelligence", description: "AI FinOps, ContextOps and agent-run economics from pre-flight estimates to budget control.", type: "website" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
