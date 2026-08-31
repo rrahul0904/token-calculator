@@ -5,7 +5,6 @@ import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { TokenMetrics, TokenizerWorkerRequest } from "@/types/tokenizer";
 
 declare const self: DedicatedWorkerGlobalScope;
-
 const encoding = new Tiktoken(o200kBase);
 const textEncoder = new TextEncoder();
 
@@ -22,14 +21,11 @@ function wordCount(text: string) {
 self.onmessage = (event: MessageEvent<TokenizerWorkerRequest>) => {
   const { text, requestId } = event.data;
   const tokenIds = encoding.encode(text);
-  const pieces = tokenIds.slice(0, 240).map((id) => ({
-    id,
-    text: encoding.decode([id]),
-  }));
-
+  const pieces = tokenIds.slice(0, 240).map((id) => ({ id, text: encoding.decode([id]) }));
   const result: TokenMetrics = {
     requestId,
     characters: Array.from(text).length,
+    charactersWithoutSpaces: Array.from(text.replace(/\s/gu, "")).length,
     words: wordCount(text),
     openaiExact: tokenIds.length,
     anthropicEstimate: estimateByBytes(text, 3.65),
@@ -38,7 +34,6 @@ self.onmessage = (event: MessageEvent<TokenizerWorkerRequest>) => {
     grokEstimate: estimateByBytes(text, 4.0),
     pieces,
   };
-
   self.postMessage(result);
 };
 
