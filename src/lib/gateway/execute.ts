@@ -9,6 +9,9 @@ import { MODEL_CATALOG } from "@/lib/models";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 import { decryptSecret } from "@/lib/security/vault";
 import { parseSseUsage, providerForName, type GatewayProviderAdapter, type GatewayRequest, type GatewayUsage } from "@/lib/gateway/providers";
+import type { GatewayProviderName } from "@/lib/gateway/provider-connectivity";
+
+const metadataSchema = z.record(z.string(), z.string()).refine((value) => Object.keys(value).length <= 20, "At most 20 metadata entries are allowed.");
 
 export const gatewayRequestSchema = z.object({
   providerConnectionId: z.string().min(8).max(180),
@@ -22,7 +25,7 @@ export const gatewayRequestSchema = z.object({
   maxOutputTokens: z.number().int().positive().max(1_000_000).optional(),
   stream: z.boolean().default(false),
   temperature: z.number().min(0).max(2).optional(),
-  metadata: z.record(z.string(), z.string()).max(20).optional(),
+  metadata: metadataSchema.optional(),
 });
 
 export type GovernedGatewayRequest = z.infer<typeof gatewayRequestSchema>;
@@ -156,7 +159,7 @@ async function fetchWithBoundedRetry(adapter: GatewayProviderAdapter, request: G
   throw new Error("GATEWAY_RETRY_EXHAUSTED");
 }
 
-export async function executeGovernedGateway(principal: ApiPrincipal, input: GovernedGatewayRequest): Promise<GatewayExecutionResult> {
+export async function executeGovernedGateway(principal: ApiPrincipal, input: GovernedGatewayRequest, expectedProvider: GatewayProviderName): Promise<GatewayExecutionResult> {
   const db = getDb();
   const orgRows = await db.select({ plan: organizations.plan }).from(organizations).where(eq(organizations.id, principal.organizationId)).limit(1);
   if (!orgRows[0]) throw new Error("ORGANIZATION_NOT_FOUND");
@@ -169,7 +172,7 @@ export async function executeGovernedGateway(principal: ApiPrincipal, input: Gov
   )).limit(1);
   const connection = connectionRows[0];
   if (!connection) throw new Error("PROVIDER_CONNECTION_NOT_FOUND");
-  if (!['openai', 'anthropic', 'gemini'].includes(connection.provider)) throw new Error("PROVIDER_UNSUPPORTED");
+  if (connection.provider !== expectedProvider) throw new Error("PROVIDER_CONNECTION_MISMATCH");
   const adapter = providerForName(connection.provider);
   if (!adapter) throw new Error("PROVIDER_UNSUPPORTED");
 
@@ -314,7 +317,6 @@ export async function executeGovernedGateway(principal: ApiPrincipal, input: Gov
   baseHeaders.set("x-ti-call-id", callId);
   baseHeaders.set("x-ti-usage-source", "provider_measured");
   if (cost !== null) baseHeaders.set("x-ti-reconciled-cost-usd", cost.toFixed(8));
-  const contentType = upstreamResponse.headers.get("content-type") ?? "application/json";
-  baseHeaders.set("content-type", contentType);
+  baseHeaders.set("content-type", upstreamResponse.headers.get("content-type") ?? "application/json");
   return { runId, callId, policyAction: policy.decision.action, response: new Response(rawText, { status: upstreamResponse.status, headers: baseHeaders }) };
 }
