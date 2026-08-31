@@ -1,6 +1,7 @@
 import { AppPageHeader } from "@/components/app-ui";
 import { CostLabWorkspace } from "@/components/cost-lab-workspace";
 import { getTenantContext } from "@/lib/auth/session";
+import "./cost-lab.css";
 
 export default async function AppCostLabPage() {
   const tenant = await getTenantContext();
