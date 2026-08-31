@@ -7,7 +7,7 @@ import { getTenantContext } from "@/lib/auth/session";
 import { PLAN_ENTITLEMENTS, hasEntitlement } from "@/lib/billing/entitlements";
 import { generateApiKey } from "@/lib/security/api-keys";
 
-const allowedScopes = ["read:models", "read:usage", "read:runs", "write:events", "write:runs", "read:budgets", "write:budgets", "mcp:tools"] as const;
+const allowedScopes = ["read:models", "read:usage", "read:runs", "write:events", "write:runs", "read:budgets", "write:budgets", "mcp:tools", "gateway:invoke"] as const;
 const requestSchema = z.object({
   name: z.string().trim().min(2).max(80),
   environment: z.enum(["live", "test"]).default("live"),
@@ -52,6 +52,9 @@ export async function POST(request: Request) {
   if (!hasEntitlement(entitlements, "personal_api_key")) return noStore({ error: "PLAN_UPGRADE_REQUIRED", entitlement: "personal_api_key" }, 402);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return noStore({ error: "INVALID_REQUEST", issues: parsed.error.issues }, 400);
+  if (parsed.data.scopes.includes("gateway:invoke") && !hasEntitlement(entitlements, "gateway")) {
+    return noStore({ error: "PLAN_UPGRADE_REQUIRED", entitlement: "gateway" }, 402);
+  }
 
   const db = getDb();
   const active = await db.select({ value: count() }).from(apiKeys).where(and(eq(apiKeys.organizationId, tenant.organizationId), isNull(apiKeys.revokedAt)));
