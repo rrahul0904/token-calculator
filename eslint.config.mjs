@@ -12,5 +12,12 @@ export default defineConfig([
       "react-hooks/set-state-in-effect": "off",
     },
   },
+  {
+    files: ["src/db/schema.ts", "src/lib/openapi.ts"],
+    rules: {
+      // These declarative schema/spec modules retain small named helpers for generated/adjacent definitions.
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
   globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "packages/sdk-typescript/dist/**"]),
 ]);
