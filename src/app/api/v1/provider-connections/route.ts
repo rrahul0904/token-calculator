@@ -4,6 +4,7 @@ import * as z from "zod";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { auditEvents, providerConnections } from "@/db/schema";
 import { getTenantContext, roleCan } from "@/lib/auth/session";
+import { verifyProviderCredential } from "@/lib/gateway/provider-connectivity";
 import { encryptSecret, isVaultConfigured } from "@/lib/security/vault";
 
 const createSchema = z.object({
@@ -33,13 +34,42 @@ export async function POST(request: Request) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return reply({ error: "INVALID_REQUEST", issues: parsed.error.issues }, 400);
 
+  const verification = await verifyProviderCredential(parsed.data.provider, parsed.data.credential);
+  if (!verification.ok) {
+    return reply({
+      error: "PROVIDER_CREDENTIAL_REJECTED",
+      provider: parsed.data.provider,
+      upstreamStatus: verification.status,
+      detail: verification.detail,
+    }, 422);
+  }
+
   const id = `pvc_${randomUUID()}`;
   const aad = `${tenant.organizationId}:${parsed.data.provider}:${id}`;
   const encryptedCredential = encryptSecret(parsed.data.credential, aad);
   const db = getDb();
+  const verifiedAt = new Date();
   await db.transaction(async (tx) => {
-    await tx.insert(providerConnections).values({ id, organizationId: tenant.organizationId, provider: parsed.data.provider, label: parsed.data.label, encryptedCredential, credentialKeyVersion: 1, status: "active" });
-    await tx.insert(auditEvents).values({ id: `aud_${randomUUID()}`, organizationId: tenant.organizationId, actorType: "user", actorId: tenant.internalUserId, action: "provider_connection.created", resourceType: "provider_connection", resourceId: id, details: { provider: parsed.data.provider, label: parsed.data.label } });
+    await tx.insert(providerConnections).values({
+      id,
+      organizationId: tenant.organizationId,
+      provider: parsed.data.provider,
+      label: parsed.data.label,
+      encryptedCredential,
+      credentialKeyVersion: 1,
+      status: "verified",
+      lastVerifiedAt: verifiedAt,
+    });
+    await tx.insert(auditEvents).values({
+      id: `aud_${randomUUID()}`,
+      organizationId: tenant.organizationId,
+      actorType: "user",
+      actorId: tenant.internalUserId,
+      action: "provider_connection.created_and_verified",
+      resourceType: "provider_connection",
+      resourceId: id,
+      details: { provider: parsed.data.provider, label: parsed.data.label },
+    });
   });
-  return reply({ data: { id, provider: parsed.data.provider, label: parsed.data.label, status: "active" }, warning: "Credential encrypted; plaintext is not persisted or returned." }, 201);
+  return reply({ data: { id, provider: parsed.data.provider, label: parsed.data.label, status: "verified", lastVerifiedAt: verifiedAt }, warning: "Credential verified, encrypted, and never returned or persisted in plaintext." }, 201);
 }
