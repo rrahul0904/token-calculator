@@ -15,9 +15,9 @@ export type ModelCatalogEntry = {
   name: string;
   provider: ProviderName;
   tokenizer: TokenizerFamily;
-  tokenizerAccuracy: "exact" | "estimate";
+  tokenizerAccuracy: "reference" | "estimate";
   contextWindow: number;
-  maxOutput: number;
+  maxOutput: number | null;
   pricing: ModelPricing;
   pricingLabel?: string;
   sourceUrl: string;
@@ -32,7 +32,7 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     name: "GPT-5.6 Sol",
     provider: "OpenAI",
     tokenizer: "openai-o200k",
-    tokenizerAccuracy: "exact",
+    tokenizerAccuracy: "reference",
     contextWindow: 1_050_000,
     maxOutput: 128_000,
     pricing: { input: 4, cachedInput: 0.4, output: 20 },
@@ -40,35 +40,36 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     sourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
     sourceLabel: "OpenAI model docs",
     verifiedAt: "2026-08-30",
-    note: "Requests above 272K input tokens use long-context multipliers; this calculator flags that threshold but does not apply the multiplier automatically.",
+    note: "The browser count uses the local o200k_base encoding as a planning reference. Requests above 272K input tokens use long-context multipliers; this calculator flags that threshold but does not apply the multiplier automatically.",
   },
   {
     id: "gpt-5.6-terra",
     name: "GPT-5.6 Terra",
     provider: "OpenAI",
     tokenizer: "openai-o200k",
-    tokenizerAccuracy: "exact",
+    tokenizerAccuracy: "reference",
     contextWindow: 1_050_000,
     maxOutput: 128_000,
     pricing: { input: 2, cachedInput: 0.2, output: 12 },
     sourceUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-terra",
     sourceLabel: "OpenAI model docs",
     verifiedAt: "2026-08-30",
-    note: "Requests above 272K input tokens use long-context multipliers; this calculator flags that threshold but does not apply the multiplier automatically.",
+    note: "The browser count uses the local o200k_base encoding as a planning reference. Requests above 272K input tokens use long-context multipliers; this calculator flags that threshold but does not apply the multiplier automatically.",
   },
   {
     id: "gpt-5.6-luna",
     name: "GPT-5.6 Luna",
     provider: "OpenAI",
     tokenizer: "openai-o200k",
-    tokenizerAccuracy: "exact",
+    tokenizerAccuracy: "reference",
     contextWindow: 1_050_000,
     maxOutput: 128_000,
     pricing: { input: 0.2, cachedInput: 0.02, output: 1.2 },
     pricingLabel: "Current rate card",
-    sourceUrl: "https://help.openai.com/en/articles/20001415",
-    sourceLabel: "OpenAI rate card",
+    sourceUrl: "https://developers.openai.com/api/docs/models/compare",
+    sourceLabel: "OpenAI model comparison",
     verifiedAt: "2026-08-30",
+    note: "The browser count uses the local o200k_base encoding as a planning reference.",
   },
   {
     id: "claude-fable-5",
@@ -132,7 +133,7 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
     tokenizer: "grok-estimate",
     tokenizerAccuracy: "estimate",
     contextWindow: 500_000,
-    maxOutput: 500_000,
+    maxOutput: null,
     pricing: { input: 2, cachedInput: 0.5, output: 6 },
     sourceUrl: "https://docs.x.ai/developers/models/grok-4.6",
     sourceLabel: "xAI model docs",

@@ -1,11 +1,12 @@
 /// <reference lib="webworker" />
 
-import { getEncoding } from "js-tiktoken";
+import { Tiktoken } from "js-tiktoken/lite";
+import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { TokenMetrics, TokenizerWorkerRequest } from "@/types/tokenizer";
 
 declare const self: DedicatedWorkerGlobalScope;
 
-const encoding = getEncoding("o200k_base");
+const encoding = new Tiktoken(o200kBase);
 const textEncoder = new TextEncoder();
 
 function estimateByBytes(text: string, charsPerToken: number) {

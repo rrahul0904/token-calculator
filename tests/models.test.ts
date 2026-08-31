@@ -15,9 +15,10 @@ describe("pricing catalog", () => {
     }
   });
 
-  it("labels non-OpenAI tokenizer families as estimates", () => {
-    for (const model of MODEL_CATALOG.filter((entry) => entry.provider !== "OpenAI")) {
-      expect(model.tokenizerAccuracy).toBe("estimate");
+  it("labels tokenizer precision conservatively", () => {
+    for (const model of MODEL_CATALOG) {
+      if (model.provider === "OpenAI") expect(model.tokenizerAccuracy).toBe("reference");
+      else expect(model.tokenizerAccuracy).toBe("estimate");
     }
   });
 });

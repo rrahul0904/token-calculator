@@ -33,7 +33,6 @@ export function ProviderCard({ provider, models, inputTokensFor, outputTokens, c
     const cost = calculateCost(model, { inputTokens, outputTokens, cachedInputTokens });
     return {
       inputTokens,
-      cachedInputTokens,
       cost,
       context: contextUsage(inputTokens, outputTokens, model.contextWindow),
       monthly: monthlyProjection(cost.total, requestsPerMonth),
@@ -60,7 +59,7 @@ export function ProviderCard({ provider, models, inputTokensFor, outputTokens, c
           <h3>{model.name}</h3>
         </div>
         <span className={`accuracy-badge accuracy-badge--${model.tokenizerAccuracy}`}>
-          {model.tokenizerAccuracy === "exact" ? "Exact tokenizer" : "Estimated tokens"}
+          {model.tokenizerAccuracy === "reference" ? "o200k reference" : "Estimated tokens"}
         </span>
       </div>
 
