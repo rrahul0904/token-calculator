@@ -1,0 +1,18 @@
+name: Runner Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - production-wave-3-full-connectivity
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "runner allocated"
+      - run: node --version
