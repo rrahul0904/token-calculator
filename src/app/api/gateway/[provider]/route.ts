@@ -2,6 +2,7 @@ import { isDatabaseConfigured } from "@/db/client";
 import { authenticateApiKey } from "@/lib/auth/api-auth";
 import { executeGovernedGateway, gatewayRequestSchema } from "@/lib/gateway/execute";
 import type { GatewayProviderName } from "@/lib/gateway/provider-connectivity";
+import { checkApiKeyQuota } from "@/lib/gateway/quota";
 import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
 import { isVaultConfigured } from "@/lib/security/vault";
 
@@ -29,9 +30,19 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   const principal = await authenticateApiKey(request, "gateway:invoke");
   if (!principal) return reply({ error: "UNAUTHORIZED", requiredScope: "gateway:invoke" }, 401);
 
-  // Fail closed: gateway enforcement is not trustworthy if the shared rate-limit state cannot be updated.
+  // Fail closed: shared quota/rate-limit state is part of the gateway enforcement authority.
   try {
-    const rate = await consumeGatewayRateLimit(principal.organizationId, principal.apiKeyId);
+    const quota = await checkApiKeyQuota(principal.organizationId, principal.apiKeyId);
+    if (!quota.allowed) return reply({
+      error: quota.reason,
+      resetAt: quota.state.resetAt.toISOString(),
+      monthlyTokenLimit: quota.state.monthlyTokenLimit,
+      monthlyCostLimitUsd: quota.state.monthlyCostLimitUsd,
+      usedTokens: quota.state.usedTokens,
+      usedCostUsd: quota.state.usedCostUsd,
+    }, 429, { "x-ratelimit-reset": quota.state.resetAt.toISOString() });
+
+    const rate = await consumeGatewayRateLimit(principal.organizationId, principal.apiKeyId, quota.state.requestsPerMinute);
     if (!rate.allowed) return reply({ error: "RATE_LIMIT_EXCEEDED", limit: rate.limit, resetAt: rate.resetAt.toISOString() }, 429, {
       "x-ratelimit-limit": String(rate.limit),
       "x-ratelimit-remaining": "0",
