@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { runs } from "@/db/schema";
 import { authenticateRequest, authenticateApiKey } from "@/lib/auth/api-auth";
