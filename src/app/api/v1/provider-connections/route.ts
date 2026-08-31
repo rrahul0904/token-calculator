@@ -4,8 +4,9 @@ import * as z from "zod";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { auditEvents, providerConnections } from "@/db/schema";
 import { getTenantContext, roleCan } from "@/lib/auth/session";
+import { encryptProviderCredential } from "@/lib/gateway/provider-credential";
 import { verifyProviderCredential } from "@/lib/gateway/provider-connectivity";
-import { encryptSecret, isVaultConfigured } from "@/lib/security/vault";
+import { isVaultConfigured } from "@/lib/security/vault";
 
 const createSchema = z.object({
   provider: z.enum(["openai", "anthropic", "gemini"]),
@@ -21,7 +22,18 @@ export async function GET() {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   const tenant = await getTenantContext();
   if (!tenant) return reply({ error: "UNAUTHENTICATED" }, 401);
-  const rows = await getDb().select({ id: providerConnections.id, provider: providerConnections.provider, label: providerConnections.label, status: providerConnections.status, lastVerifiedAt: providerConnections.lastVerifiedAt, createdAt: providerConnections.createdAt }).from(providerConnections).where(eq(providerConnections.organizationId, tenant.organizationId));
+  const rows = await getDb()
+    .select({
+      id: providerConnections.id,
+      provider: providerConnections.provider,
+      label: providerConnections.label,
+      status: providerConnections.status,
+      credentialKeyVersion: providerConnections.credentialKeyVersion,
+      lastVerifiedAt: providerConnections.lastVerifiedAt,
+      createdAt: providerConnections.createdAt,
+    })
+    .from(providerConnections)
+    .where(eq(providerConnections.organizationId, tenant.organizationId));
   return reply({ data: rows });
 }
 
@@ -45,8 +57,14 @@ export async function POST(request: Request) {
   }
 
   const id = `pvc_${randomUUID()}`;
-  const aad = `${tenant.organizationId}:${parsed.data.provider}:${id}`;
-  const encryptedCredential = encryptSecret(parsed.data.credential, aad);
+  const credentialKeyVersion = 1;
+  const encryptedCredential = encryptProviderCredential(
+    parsed.data.credential,
+    tenant.organizationId,
+    parsed.data.provider,
+    id,
+    credentialKeyVersion,
+  );
   const db = getDb();
   const verifiedAt = new Date();
   await db.transaction(async (tx) => {
@@ -56,7 +74,7 @@ export async function POST(request: Request) {
       provider: parsed.data.provider,
       label: parsed.data.label,
       encryptedCredential,
-      credentialKeyVersion: 1,
+      credentialKeyVersion,
       status: "verified",
       lastVerifiedAt: verifiedAt,
     });
@@ -68,8 +86,22 @@ export async function POST(request: Request) {
       action: "provider_connection.created_and_verified",
       resourceType: "provider_connection",
       resourceId: id,
-      details: { provider: parsed.data.provider, label: parsed.data.label },
+      details: {
+        provider: parsed.data.provider,
+        label: parsed.data.label,
+        credentialKeyVersion,
+      },
     });
   });
-  return reply({ data: { id, provider: parsed.data.provider, label: parsed.data.label, status: "verified", lastVerifiedAt: verifiedAt }, warning: "Credential verified, encrypted, and never returned or persisted in plaintext." }, 201);
+  return reply({
+    data: {
+      id,
+      provider: parsed.data.provider,
+      label: parsed.data.label,
+      status: "verified",
+      credentialKeyVersion,
+      lastVerifiedAt: verifiedAt,
+    },
+    warning: "Credential verified, encrypted, and never returned or persisted in plaintext.",
+  }, 201);
 }
