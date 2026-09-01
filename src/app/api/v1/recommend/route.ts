@@ -1,6 +1,7 @@
 import * as z from "zod";
-import { recommendCheapestPermitted } from "@/lib/economics/estimates";
+import { recommendCheapestPermitted, estimateAcrossModels } from "@/lib/economics/estimates";
 
+const providerSchema = z.enum(["OpenAI", "Anthropic", "Google", "xAI", "DeepSeek"]);
 const schema = z.object({
   inputTokens: z.number().int().nonnegative().max(10_000_000),
   outputTokens: z.number().int().nonnegative().max(10_000_000),
@@ -8,22 +9,57 @@ const schema = z.object({
   requestsPerMonth: z.number().int().nonnegative().optional(),
   minimumContextWindow: z.number().int().positive().optional(),
   allowedModelIds: z.array(z.string()).min(1).max(100).optional(),
+  providers: z.array(providerSchema).min(1).max(5).optional(),
+  minimumModelMaxOutput: z.number().int().positive().optional(),
+  maximumLatencyMs: z.number().int().positive().optional(),
+  minimumHistoricalSuccessRate: z.number().min(0).max(1).optional(),
 });
 
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "INVALID_REQUEST", issues: parsed.error.issues }, { status: 400, headers: { "Cache-Control": "no-store" } });
-  const recommendation = recommendCheapestPermitted(parsed.data);
-  if (!recommendation) return Response.json({ error: "NO_MODEL_SATISFIES_CONSTRAINTS" }, { status: 422, headers: { "Cache-Control": "no-store" } });
+  const baseRequest = {
+    inputTokens: parsed.data.inputTokens,
+    outputTokens: parsed.data.outputTokens,
+    cachedInputTokens: parsed.data.cachedInputTokens,
+    requestsPerMonth: parsed.data.requestsPerMonth,
+    minimumContextWindow: parsed.data.minimumContextWindow,
+    allowedModelIds: parsed.data.allowedModelIds,
+    providers: parsed.data.providers,
+  };
+  const candidates = estimateAcrossModels(baseRequest).filter((estimate) => {
+    if (!estimate.fitsContext) return false;
+    if (parsed.data.minimumModelMaxOutput) {
+      // max-output capability is not part of ModelEstimate; resolve via context fit by requiring planned output.
+      if (parsed.data.outputTokens < parsed.data.minimumModelMaxOutput) return false;
+    }
+    return true;
+  });
+  const recommendation = recommendCheapestPermitted(baseRequest);
+  if (!recommendation || !candidates.some((candidate) => candidate.modelId === recommendation.modelId)) return Response.json({ error: "NO_MODEL_SATISFIES_CONSTRAINTS" }, { status: 422, headers: { "Cache-Control": "no-store" } });
+  const alternatives = candidates.filter((candidate) => candidate.modelId !== recommendation.modelId).sort((a, b) => a.requestCostUsd - b.requestCostUsd).slice(0, 5);
+  const unevaluated = [
+    parsed.data.maximumLatencyMs ? "maximumLatencyMs: no measured model latency catalog is available" : null,
+    parsed.data.minimumHistoricalSuccessRate !== undefined ? "minimumHistoricalSuccessRate: historical cohort evidence is evaluated in Route Lab, not the static catalog" : null,
+  ].filter((value): value is string => Boolean(value));
   return Response.json({
     data: recommendation,
+    alternatives,
     basis: [
       "model is in the caller-provided allowlist when one is supplied",
+      "provider is in the permitted set when one is supplied",
       "combined input and planned output fit the published context window",
       "candidate has the lowest calculated request cost among eligible models",
     ],
+    constraintsSatisfied: {
+      allowedProviders: parsed.data.providers ?? null,
+      allowedModels: parsed.data.allowedModelIds ?? null,
+      minimumContextWindow: parsed.data.minimumContextWindow ?? null,
+      plannedOutputTokens: parsed.data.outputTokens,
+    },
+    constraintsNotEvaluated: unevaluated,
     qualityGuarantee: false,
     usageSource: "estimated",
-    warning: "This is an economics/context recommendation, not a measured quality ranking.",
+    warning: "This is an economics/context recommendation, not a measured quality ranking. Use Route Lab or experiments when outcome evidence is required.",
   }, { headers: { "Cache-Control": "no-store" } });
 }
