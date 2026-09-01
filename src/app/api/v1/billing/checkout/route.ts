@@ -15,6 +15,11 @@ function response(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+function billingReturnOrigin(request: Request): string {
+  if (process.env.VERCEL_ENV === "preview") return new URL(request.url).origin;
+  return process.env.APP_BASE_URL?.replace(/\/$/, "") ?? new URL(request.url).origin;
+}
+
 export async function POST(request: Request) {
   if (!isDatabaseConfigured()) return response({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   if (!isStripeConfigured()) return response({ error: "STRIPE_NOT_CONFIGURED", state: "code_complete_configuration_blocked" }, 503);
@@ -43,7 +48,7 @@ export async function POST(request: Request) {
     }).returning())[0];
   }
 
-  const baseUrl = process.env.APP_BASE_URL ?? "http://localhost:3000";
+  const baseUrl = billingReturnOrigin(request);
   const quantity = parsed.data.plan === "team" ? parsed.data.seats ?? 1 : 1;
   const checkout = await stripe.checkout.sessions.create({
     mode: "subscription",
