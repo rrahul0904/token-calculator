@@ -16,12 +16,13 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
       DATABASE_SSL: disable
       TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-      APP_BASE_URL: http://localhost:3000
+      APP_BASE_URL: http://127.0.0.1:3000
+      NEXT_TELEMETRY_DISABLED: "1"
     services:
       postgres:
         image: postgres:18
@@ -65,3 +66,20 @@ jobs:
         run: npm run sdk:build
       - name: Production build
         run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start production server
+        run: |
+          npm start > /tmp/token-intelligence-next.log 2>&1 &
+          echo $! > /tmp/token-intelligence-next.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/token-intelligence-health.json; then
+              cat /tmp/token-intelligence-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/token-intelligence-next.log
+          exit 1
+      - name: Playwright production smoke
+        run: npm run test:e2e
