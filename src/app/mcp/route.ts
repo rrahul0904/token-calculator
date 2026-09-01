@@ -3,14 +3,15 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { organizations } from "@/db/schema";
 import { authenticateApiKey } from "@/lib/auth/api-auth";
+import { authenticateMcpOAuth, mcpWwwAuthenticateHeader } from "@/lib/auth/mcp-oauth";
 import { PLAN_ENTITLEMENTS, hasEntitlement } from "@/lib/billing/entitlements";
 import { createTokenIntelligenceMcpServer } from "@/lib/mcp/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function error(code: string, status: number) {
-  return Response.json({ error: code }, { status, headers: { "Cache-Control": "no-store" } });
+function error(code: string, status: number, extraHeaders: Record<string, string> = {}) {
+  return Response.json({ error: code }, { status, headers: { "Cache-Control": "no-store", ...extraHeaders } });
 }
 
 function originAllowed(request: Request) {
@@ -27,8 +28,15 @@ function originAllowed(request: Request) {
 async function serve(request: Request) {
   if (!originAllowed(request)) return error("MCP_ORIGIN_NOT_ALLOWED", 403);
   if (!isDatabaseConfigured()) return error("DATABASE_NOT_CONFIGURED", 503);
-  const principal = await authenticateApiKey(request, "mcp:tools");
-  if (!principal) return error("MCP_API_KEY_REQUIRED", 401);
+
+  // API keys remain the stable CI/service-account path. Standards-based user or
+  // agent OAuth tokens are verified as WorkOS/AuthKit resource tokens when the
+  // API-key lookup does not match.
+  const principal = await authenticateApiKey(request, "mcp:tools") ?? await authenticateMcpOAuth(request, "mcp:tools");
+  if (!principal) {
+    const challenge = mcpWwwAuthenticateHeader();
+    return error("MCP_AUTHORIZATION_REQUIRED", 401, challenge ? { "WWW-Authenticate": challenge } : {});
+  }
 
   const organization = (await getDb().select({ plan: organizations.plan }).from(organizations).where(eq(organizations.id, principal.organizationId)).limit(1))[0];
   if (!organization) return error("ORGANIZATION_NOT_FOUND", 404);
