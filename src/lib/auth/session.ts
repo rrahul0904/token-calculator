@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import type { OrganizationRole } from "@/db/schema";
 import { organizationMembers, organizations, users } from "@/db/schema";
@@ -23,7 +25,27 @@ export function isAuthConfigured(): boolean {
   return getConfigurationStatus().auth === "live";
 }
 
+function safeEqual(left: string, right: string) {
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+async function getExplicitE2eSession(): Promise<ExternalAuthSession | null> {
+  const secret = process.env.TOKEN_INTELLIGENCE_E2E_AUTH_SECRET;
+  if (!secret || process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED !== "1") return null;
+  const incoming = (await headers()).get("x-ti-e2e-auth");
+  if (!incoming || !safeEqual(incoming, secret)) return null;
+  const userId = process.env.TOKEN_INTELLIGENCE_E2E_USER_ID;
+  const email = process.env.TOKEN_INTELLIGENCE_E2E_USER_EMAIL;
+  const organizationId = process.env.TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID;
+  if (!userId || !email || !organizationId) return null;
+  return { userId, email, name: "Token Intelligence E2E Owner", workosOrganizationId: organizationId };
+}
+
 export async function getExternalAuthSession(): Promise<ExternalAuthSession | null> {
+  const e2e = await getExplicitE2eSession();
+  if (e2e) return e2e;
   if (!isAuthConfigured()) return null;
   const { withAuth } = await import("@workos-inc/authkit-nextjs");
   const auth = await withAuth();
