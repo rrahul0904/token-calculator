@@ -1,0 +1,81 @@
+name: Token Intelligence Policy Gate
+description: Check an AI workload against Token Intelligence project/budget policy without uploading repository source.
+author: Token Intelligence
+inputs:
+  api-key:
+    description: Scoped Token Intelligence API key with read:budgets
+    required: true
+  base-url:
+    description: Token Intelligence deployment URL
+    required: false
+    default: https://token-intelligence-eight.vercel.app
+  project-id:
+    description: Token Intelligence project ID
+    required: false
+  observed-cost-usd:
+    description: Spend already observed for the run/scope
+    required: false
+    default: "0"
+  projected-cost-usd:
+    description: Projected cost of the next operation
+    required: false
+    default: "0"
+  provider:
+    description: Proposed provider
+    required: false
+  model:
+    description: Proposed model
+    required: false
+  fail-on-block:
+    description: Fail the CI step for hard block/kill/approval decisions
+    required: false
+    default: "true"
+outputs:
+  action:
+    description: Policy action returned by Token Intelligence
+    value: ${{ steps.policy.outputs.action }}
+  run-result:
+    description: continue, block, or await_approval
+    value: ${{ steps.policy.outputs.enforcement }}
+runs:
+  using: composite
+  steps:
+    - id: policy
+      shell: bash
+      env:
+        TI_API_KEY: ${{ inputs.api-key }}
+        TI_BASE_URL: ${{ inputs.base-url }}
+        TI_PROJECT_ID: ${{ inputs.project-id }}
+        TI_OBSERVED: ${{ inputs.observed-cost-usd }}
+        TI_PROJECTED: ${{ inputs.projected-cost-usd }}
+        TI_PROVIDER: ${{ inputs.provider }}
+        TI_MODEL: ${{ inputs.model }}
+        TI_FAIL: ${{ inputs.fail-on-block }}
+      run: |
+        node <<'NODE'
+        const base = process.env.TI_BASE_URL.replace(/\/$/, '');
+        const body = {
+          projectId: process.env.TI_PROJECT_ID || null,
+          observedCostUsd: Number(process.env.TI_OBSERVED || 0),
+          projectedNextCallCostUsd: Number(process.env.TI_PROJECTED || 0),
+          tokens: 0, turns: 0, retries: 0, failedToolCalls: 0, toolCalls: 0,
+          provider: process.env.TI_PROVIDER || undefined,
+          model: process.env.TI_MODEL || undefined,
+        };
+        const response = await fetch(`${base}/api/v1/budgets/check`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${process.env.TI_API_KEY}`, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(`Token Intelligence policy request failed (${response.status}): ${payload?.error ?? 'unknown'}`);
+        const decision = payload?.data?.decision ?? payload?.decision ?? payload?.data ?? payload;
+        const action = String(decision?.action ?? 'UNKNOWN');
+        const enforcement = String(payload?.data?.enforcement ?? payload?.enforcement ?? (['BLOCK_NEXT_CALL','KILL_RUN'].includes(action) ? 'block' : action === 'REQUIRE_APPROVAL' ? 'await_approval' : 'continue'));
+        require('fs').appendFileSync(process.env.GITHUB_OUTPUT, `action=${action}\nenforcement=${enforcement}\n`);
+        require('fs').appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Token Intelligence policy\n\n- Action: **${action}**\n- Enforcement: **${enforcement}**\n- Provider: ${body.provider ?? 'not specified'}\n- Model: ${body.model ?? 'not specified'}\n- Project: ${body.projectId ?? 'organization scope'}\n`);
+        if (process.env.TI_FAIL === 'true' && enforcement !== 'continue') process.exit(2);
+        NODE
+branding:
+  icon: activity
+  color: blue

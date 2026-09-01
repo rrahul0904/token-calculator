@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main, implementation-v1, observability-control-research, production-wave-2-agent-economics, production-wave-3-full-connectivity, production-wave-4-release-candidate]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
+      DATABASE_SSL: disable
+      TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_BASE_URL: http://127.0.0.1:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: token_intelligence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d token_intelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Full-history secret scan
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo"
+          zricethezav/gitleaks:v8.24.3
+          detect --source=/repo --redact --exit-code=2 --log-opts="--all"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Drizzle schema check
+        run: npm run db:check
+      - name: Apply migrations on disposable PostgreSQL
+        run: npm run db:migrate
+      - name: Verify migrated schema and quota trigger
+        run: npm run db:verify
+      - name: Database integration tests
+        env:
+          TOKEN_INTELLIGENCE_INTEGRATION_TESTS: "1"
+        run: npm run test:integration
+      - name: TypeScript SDK build
+        run: npm run sdk:build
+      - name: Python SDK import
+        env:
+          PYTHONPATH: packages/sdk-python
+        run: python3 -c "from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError; assert TokenIntelligenceClient and TokenIntelligenceError"
+      - name: CLI help smoke
+        run: npm run ti -- --help
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start production server
+        run: |
+          npm start > /tmp/token-intelligence-next.log 2>&1 &
+          echo $! > /tmp/token-intelligence-next.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /tmp/token-intelligence-health.json; then
+              cat /tmp/token-intelligence-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/token-intelligence-next.log
+          exit 1
+      - name: CLI local API smoke
+        run: npm run ti -- estimate --base-url http://127.0.0.1:3000 --input 1000 --output 200 --cached 100 --requests 10
+      - name: Playwright production smoke
+        run: npm run test:e2e

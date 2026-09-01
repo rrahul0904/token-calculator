@@ -1,0 +1,9 @@
+.cost-lab-prompts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cost-lab-prompts textarea { min-height: 210px; border-radius: 10px; }
+.cost-lab-delta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.cost-lab-delta > div { border: 1px solid var(--line); border-radius: 9px; padding: 11px; display: grid; gap: 6px; background: var(--panel-2); }
+.cost-lab-delta span { color: var(--muted); font-size: .67rem; }
+.cost-lab-delta strong { font: 620 .83rem var(--font-mono); }
+.scenario-save { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 9px; align-items: center; }
+.scenario-save span { color: var(--muted); font-size: .72rem; }
+@media (max-width: 800px) { .cost-lab-prompts, .cost-lab-delta { grid-template-columns: 1fr; } .scenario-save { grid-template-columns: 1fr; } }
