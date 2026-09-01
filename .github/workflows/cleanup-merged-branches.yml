@@ -1,0 +1,71 @@
+name: Cleanup merged branches
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-merged-branches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify all redundant branches are contained in main
+        shell: bash
+        run: |
+          set -euo pipefail
+          branches=(
+            implementation-v1
+            observability-control-research
+            production-wave-2-agent-economics
+            production-wave-3-full-connectivity
+            production-wave-4-release-candidate
+          )
+          git fetch origin --prune
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              git fetch origin "$branch:refs/remotes/origin/$branch"
+              if ! git merge-base --is-ancestor "origin/$branch" origin/main; then
+                echo "Refusing to delete $branch because it has commits not contained in main."
+                exit 1
+              fi
+              echo "$branch is fully contained in main."
+            fi
+          done
+
+      - name: Delete redundant remote branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          branches=(
+            implementation-v1
+            observability-control-research
+            production-wave-2-agent-economics
+            production-wave-3-full-connectivity
+            production-wave-4-release-candidate
+          )
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              git push origin --delete "$branch"
+            fi
+          done
+
+      - name: Remove temporary cleanup workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/cleanup-merged-branches.yml
+          git add -u .github/workflows/cleanup-merged-branches.yml
+          git commit -m "chore: remove temporary branch cleanup workflow"
+          git push origin HEAD:main
