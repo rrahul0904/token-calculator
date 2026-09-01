@@ -120,6 +120,7 @@ const anthropic: GatewayProviderAdapter = {
   normalizeUsage(payload) {
     const root = record(payload);
     const usage = record(root?.usage);
+    const outputDetails = record(usage?.output_tokens_details);
     const input = num(usage?.input_tokens);
     const cacheRead = num(usage?.cache_read_input_tokens);
     const cacheWrite = num(usage?.cache_creation_input_tokens);
@@ -128,7 +129,7 @@ const anthropic: GatewayProviderAdapter = {
       freshInputTokens: input,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
-      reasoningTokens: num(usage?.thinking_tokens),
+      reasoningTokens: num(outputDetails?.thinking_tokens),
       outputTokens: output,
       totalTokens: sumKnown(input, cacheRead, cacheWrite, output),
     };
@@ -165,7 +166,7 @@ const gemini: GatewayProviderAdapter = {
     const usage = record(root?.usageMetadata);
     const prompt = num(usage?.promptTokenCount);
     const cached = num(usage?.cachedContentTokenCount);
-    const output = num(usage?.candidatesTokenCount);
+    const output = num(usage?.candidatesTokenCount ?? usage?.responseTokenCount);
     const reasoning = num(usage?.thoughtsTokenCount);
     return {
       freshInputTokens: prompt === null ? null : Math.max(prompt - (cached ?? 0), 0),
