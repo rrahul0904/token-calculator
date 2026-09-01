@@ -70,18 +70,31 @@ export function compareHistoricalRoutes(args: {
   const current = summarize(currentRows);
   if (current.sampleSize < minimumSampleSize || current.successRate === null || current.medianCostUsd === null) return [];
 
+  // Capture the narrowed evidence before entering the candidate callback. This
+  // both preserves TypeScript's null-safety and makes the economics rule
+  // explicit: routes with unknown success or cost are not optimization inputs.
+  const currentSuccessRate = current.successRate;
+  const currentMedianCostUsd = current.medianCostUsd;
+
   const routeIds = [...new Set(cohort.map((run) => run.routeId))].filter((id) => id !== args.currentRouteId);
-  return routeIds.flatMap((candidateRouteId) => {
+  return routeIds.flatMap((candidateRouteId): RouteCandidateComparison[] => {
     const candidateRows = cohort.filter((run) => run.routeId === candidateRouteId);
     const candidate = summarize(candidateRows);
     if (candidate.sampleSize < minimumSampleSize || candidate.successRate === null || candidate.medianCostUsd === null) return [];
-    if (candidate.successRate + nonInferiorityMargin < current.successRate) return [];
-    if (candidate.medianCostUsd >= current.medianCostUsd) return [];
+
+    const candidateSuccessRate = candidate.successRate;
+    const candidateMedianCostUsd = candidate.medianCostUsd;
+    if (candidateSuccessRate + nonInferiorityMargin < currentSuccessRate) return [];
+    if (candidateMedianCostUsd >= currentMedianCostUsd) return [];
+    if (currentMedianCostUsd <= 0) return [];
+
     const currentExample = currentRows[0];
     const candidateExample = candidateRows[0];
-    const savings = (current.medianCostUsd - candidate.medianCostUsd) / current.medianCostUsd * 100;
+    if (!currentExample || !candidateExample) return [];
+
+    const savings = (currentMedianCostUsd - candidateMedianCostUsd) / currentMedianCostUsd * 100;
     const combinedSamples = current.sampleSize + candidate.sampleSize;
-    const confidence = combinedSamples >= 40 && Math.abs(candidate.successRate - current.successRate) <= 0.01 ? "high" : combinedSamples >= 20 ? "medium" : "low";
+    const confidence = combinedSamples >= 40 && Math.abs(candidateSuccessRate - currentSuccessRate) <= 0.01 ? "high" : combinedSamples >= 20 ? "medium" : "low";
     return [{
       currentRouteId: args.currentRouteId,
       candidateRouteId,
@@ -92,14 +105,14 @@ export function compareHistoricalRoutes(args: {
       candidateProvider: candidateExample.provider,
       currentSampleSize: current.sampleSize,
       candidateSampleSize: candidate.sampleSize,
-      currentSuccessRate: current.successRate,
-      candidateSuccessRate: candidate.successRate,
-      currentMedianCostUsd: current.medianCostUsd,
-      candidateMedianCostUsd: candidate.medianCostUsd,
+      currentSuccessRate,
+      candidateSuccessRate,
+      currentMedianCostUsd,
+      candidateMedianCostUsd,
       currentMedianLatencyMs: current.medianLatencyMs,
       candidateMedianLatencyMs: candidate.medianLatencyMs,
       estimatedSavingsPct: savings,
-      evidenceType: "historically_observed" as const,
+      evidenceType: "historically_observed",
       confidence,
       recommendation: "Validate this historically observed route in an approved experiment before changing enforcement policy.",
     }];
