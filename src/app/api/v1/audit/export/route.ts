@@ -41,7 +41,6 @@ export async function GET(request: Request) {
     resourceId: auditEvents.resourceId,
     details: auditEvents.details,
     ipHash: auditEvents.ipHash,
-    userAgentHash: auditEvents.userAgentHash,
     occurredAt: auditEvents.occurredAt,
   }).from(auditEvents)
     .where(and(...predicates))
