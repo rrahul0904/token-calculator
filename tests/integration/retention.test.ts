@@ -24,8 +24,8 @@ describeIntegration("retention cron", () => {
     process.env.CRON_SECRET = "integration-retention-secret";
     await sql`insert into organizations (id, name, slug) values (${org}, 'Retention Org', ${`retention-${suffix}`})`;
     await sql`insert into retention_policies
-      (id, organization_id, telemetry_days, run_days, finding_days, audit_days, retain_content, enabled)
-      values (${policy}, ${org}, 30, 30, 30, 30, false, true)`;
+      (id, organization_id, telemetry_days, run_days, finding_days, audit_days, enabled)
+      values (${policy}, ${org}, 30, 30, 30, 30, true)`;
     await sql`insert into runs (id, organization_id, agent_name, started_at, status, metadata) values
       (${oldRun}, ${org}, 'retention-test', now() - interval '60 days', 'completed', '{}'::jsonb),
       (${freshRun}, ${org}, 'retention-test', now() - interval '1 day', 'completed', '{}'::jsonb)`;
