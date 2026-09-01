@@ -57,6 +57,10 @@ jobs:
         run: npm run db:migrate
       - name: Verify migrated schema and quota trigger
         run: npm run db:verify
+      - name: Database integration tests
+        env:
+          TOKEN_INTELLIGENCE_INTEGRATION_TESTS: "1"
+        run: npm run test:integration
       - name: TypeScript SDK build
         run: npm run sdk:build
       - name: Production build
