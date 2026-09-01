@@ -168,6 +168,20 @@ export const telemetryEventSchema = z.object({
   payload: z.record(z.string(), z.unknown()),
 });
 
+// MCP tool schemas are converted to JSON Schema for tools/list. Keep this
+// boundary deliberately transport-only: Zod Date values cannot be represented
+// in JSON Schema, while an RFC 3339 datetime string can. The regular telemetry
+// schema above remains the domain contract used by HTTP ingestion and storage.
+export const mcpTelemetryEventSchema = z.object({
+  sourceEventId: z.string().min(1).max(240),
+  source: z.string().min(1).max(120),
+  eventType: z.enum(["run.upsert", "turn.upsert", "llm_call.recorded", "tool_call.recorded", "outcome.recorded", "budget_decision.recorded"]),
+  occurredAt: z.string().datetime({ offset: true }),
+  projectId: z.string().max(180).nullable().optional(),
+  runId: z.string().max(180).nullable().optional(),
+  payload: z.record(z.string(), z.unknown()),
+});
+
 export const telemetryBatchSchema = z.object({
   events: z.array(telemetryEventSchema).min(1).max(500),
 });
@@ -177,3 +191,13 @@ export type TurnReceiptInput = z.infer<typeof turnReceiptSchema>;
 export type LlmCallReceiptInput = z.infer<typeof llmCallReceiptSchema>;
 export type ToolCallReceiptInput = z.infer<typeof toolCallReceiptSchema>;
 export type TelemetryEventInput = z.infer<typeof telemetryEventSchema>;
+export type McpTelemetryEventInput = z.infer<typeof mcpTelemetryEventSchema>;
+
+/**
+ * Convert the JSON-compatible MCP transport shape into the existing internal
+ * telemetry contract only after the wire schema has accepted it.
+ */
+export function parseMcpTelemetryEvent(input: unknown): TelemetryEventInput {
+  const event = mcpTelemetryEventSchema.parse(input);
+  return telemetryEventSchema.parse({ ...event, occurredAt: new Date(event.occurredAt) });
+}

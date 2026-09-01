@@ -10,7 +10,7 @@ import { getOverviewData, getRunDetail } from "@/lib/app-data";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 import { policyCheckSchema } from "@/lib/policy/schemas";
 import { ingestTelemetryEvent } from "@/lib/telemetry/ingest";
-import { telemetryEventSchema } from "@/lib/telemetry/schemas";
+import { mcpTelemetryEventSchema, parseMcpTelemetryEvent } from "@/lib/telemetry/schemas";
 
 function text(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -58,7 +58,21 @@ export function createTokenIntelligenceMcpServer(principal: ApiPrincipal) {
     return text(await evaluateOrganizationPolicy(principal.organizationId, { ...input, projectId: principal.projectId ?? input.projectId, apiKeyId: principal.apiKeyId, serviceAccountId: principal.serviceAccountId ?? input.serviceAccountId }, Boolean(input.runId)));
   });
 
-  server.registerTool("record_usage", { description: "Explicitly ingest one metadata-only Agent Run Receipt event. Prompt, message, source-code, raw tool-output and credential fields are rejected by the server privacy boundary.", inputSchema: telemetryEventSchema }, async (input) => text({ recorded: true, ...(await ingestTelemetryEvent(getDb(), { organizationId: principal.organizationId, projectId: principal.projectId }, input)) }));
+  server.registerTool(
+    "record_usage",
+    {
+      description: "Explicitly ingest one metadata-only Agent Run Receipt event. Datetimes must be ISO-8601 strings. Prompt, message, source-code, raw tool-output and credential fields are rejected by the server privacy boundary.",
+      inputSchema: mcpTelemetryEventSchema,
+    },
+    async (input) => text({
+      recorded: true,
+      ...(await ingestTelemetryEvent(
+        getDb(),
+        { organizationId: principal.organizationId, projectId: principal.projectId },
+        parseMcpTelemetryEvent(input),
+      )),
+    }),
+  );
   server.registerTool("get_usage", { description: "Return the organization's current 30-day Agent Economics summary from stored receipts.", inputSchema: z.object({}) }, async () => text(await getOverviewData(principal.organizationId)));
 
   server.registerTool("get_project_spend", { description: "Return known spend and run counts for one project. Unknown prices remain unknown rather than zero.", inputSchema: z.object({ projectId: z.string().min(1) }) }, async ({ projectId }) => {

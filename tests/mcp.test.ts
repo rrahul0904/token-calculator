@@ -1,7 +1,17 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as z from "zod/v4";
 import { createTokenIntelligenceMcpServer } from "@/lib/mcp/server";
 import type { ApiPrincipal } from "@/lib/auth/api-auth";
+import { mcpTelemetryEventSchema, parseMcpTelemetryEvent } from "@/lib/telemetry/schemas";
+
+const mocks = vi.hoisted(() => ({
+  getDb: vi.fn(() => ({})),
+  ingestTelemetryEvent: vi.fn(),
+}));
+
+vi.mock("@/db/client", () => ({ getDb: mocks.getDb }));
+vi.mock("@/lib/telemetry/ingest", () => ({ ingestTelemetryEvent: mocks.ingestTelemetryEvent }));
 
 const principal: ApiPrincipal = {
   kind: "api_key",
@@ -81,5 +91,39 @@ describe("MCP production contract", () => {
       body: "{not-json",
     }));
     expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("uses JSON-safe tool schemas and converts ISO datetimes at the MCP application boundary", () => {
+    expect(() => z.toJSONSchema(mcpTelemetryEventSchema)).not.toThrow();
+    const wireSchema = z.toJSONSchema(mcpTelemetryEventSchema);
+    expect(JSON.stringify(wireSchema)).not.toContain('"type":"date"');
+
+    const event = parseMcpTelemetryEvent({
+      sourceEventId: "mcp-event-001",
+      source: "mcp",
+      eventType: "run.upsert",
+      occurredAt: "2026-09-01T15:42:13.123Z",
+      payload: {},
+    });
+    expect(event.occurredAt).toBeInstanceOf(Date);
+    expect(event.occurredAt.toISOString()).toBe("2026-09-01T15:42:13.123Z");
+  });
+
+  it("accepts an ISO datetime through record_usage and passes a Date to ingestion", async () => {
+    mocks.ingestTelemetryEvent.mockResolvedValueOnce({ sourceEventId: "mcp-event-002", duplicate: false });
+    const result = await rpc("tools/call", {
+      name: "record_usage",
+      arguments: {
+        sourceEventId: "mcp-event-002",
+        source: "mcp",
+        eventType: "run.upsert",
+        occurredAt: "2026-09-01T15:42:13.123Z",
+        payload: {},
+      },
+    });
+    expect(result.payload.error).toBeUndefined();
+    const event = mocks.ingestTelemetryEvent.mock.calls.at(-1)?.[2];
+    expect(event.occurredAt).toBeInstanceOf(Date);
+    expect(event.occurredAt.toISOString()).toBe("2026-09-01T15:42:13.123Z");
   });
 });
