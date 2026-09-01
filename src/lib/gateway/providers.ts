@@ -57,11 +57,22 @@ function withoutUndefined(value: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
+type CompatibilityEnvelope = { surface: GatewayApiSurface; body: Record<string, unknown> };
+function compatibilityEnvelope(input: unknown): CompatibilityEnvelope | null {
+  const root = record(input);
+  const surface = root?.__ti_compat_surface;
+  const body = record(root?.__ti_compat_body);
+  if (!body || !["responses", "chat_completions", "messages"].includes(String(surface))) return null;
+  return { surface: surface as GatewayApiSurface, body };
+}
+
 const openai: GatewayProviderAdapter = {
   provider: "openai",
   buildRequest(request, credential) {
-    if (request.apiSurface === "chat_completions") {
-      const body = request.compatibilityBody ?? {};
+    const envelope = compatibilityEnvelope(request.input);
+    const surface = request.apiSurface ?? envelope?.surface ?? "responses";
+    const body = request.compatibilityBody ?? envelope?.body ?? {};
+    if (surface === "chat_completions") {
       return {
         url: "https://api.openai.com/v1/chat/completions",
         init: {
@@ -79,7 +90,6 @@ const openai: GatewayProviderAdapter = {
       };
     }
 
-    const body = request.compatibilityBody ?? {};
     return {
       url: "https://api.openai.com/v1/responses",
       init: {
@@ -125,7 +135,8 @@ const openai: GatewayProviderAdapter = {
 const anthropic: GatewayProviderAdapter = {
   provider: "anthropic",
   buildRequest(request, credential) {
-    const body = request.compatibilityBody ?? {};
+    const envelope = compatibilityEnvelope(request.input);
+    const body = request.compatibilityBody ?? envelope?.body ?? {};
     return {
       url: "https://api.anthropic.com/v1/messages",
       init: {
