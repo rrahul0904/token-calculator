@@ -11,6 +11,7 @@ const groups = [
       ["/app/overview", "Overview"],
       ["/app/cost-lab", "Cost Lab"],
       ["/app/usage", "Usage"],
+      ["/app/finops", "FinOps"],
       ["/app/runs", "Agent Runs"],
       ["/app/projects", "Projects"],
     ],
