@@ -14,8 +14,7 @@ export interface McpOAuthPrincipal {
   workosOrganizationId: string;
 }
 
-type JwtHeader = { alg?: string; kid?: string; typ?: string };
-type JwtClaims = {
+export type McpJwtClaims = {
   iss?: string;
   aud?: string | string[];
   sub?: string;
@@ -26,8 +25,8 @@ type JwtClaims = {
   nbf?: number;
   iat?: number;
 };
+type JwtHeader = { alg?: string; kid?: string; typ?: string };
 type WorkosJwk = JsonWebKey & { kid?: string; alg?: string; use?: string };
-
 type JwksDocument = { keys?: WorkosJwk[] };
 
 const JWKS_TTL_MS = 5 * 60 * 1000;
@@ -96,20 +95,20 @@ function audienceIncludes(audience: string | string[] | undefined, expected: str
   return typeof audience === "string" ? audience === expected : Array.isArray(audience) ? audience.includes(expected) : false;
 }
 
-function scopesForClaims(claims: JwtClaims): string[] {
+export function mcpScopesForClaims(claims: McpJwtClaims): string[] {
   const fromScope = typeof claims.scope === "string" ? claims.scope.split(/\s+/).filter(Boolean) : [];
   const permissions = Array.isArray(claims.permissions) ? claims.permissions.filter((value): value is string => typeof value === "string") : [];
   return Array.from(new Set([...fromScope, ...permissions]));
 }
 
-async function verifyJwt(token: string, issuer: string, resource: string): Promise<JwtClaims | null> {
+export async function verifyMcpOAuthJwt(token: string, issuer: string, resource: string): Promise<McpJwtClaims | null> {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   let header: JwtHeader;
-  let claims: JwtClaims;
+  let claims: McpJwtClaims;
   try {
     header = base64UrlJson<JwtHeader>(parts[0]);
-    claims = base64UrlJson<JwtClaims>(parts[1]);
+    claims = base64UrlJson<McpJwtClaims>(parts[1]);
   } catch {
     return null;
   }
@@ -137,6 +136,10 @@ async function verifyJwt(token: string, issuer: string, resource: string): Promi
   }
 }
 
+export function resetMcpOAuthJwksCacheForTests() {
+  cachedJwks = null;
+}
+
 function bearerToken(request: Request): string | null {
   const value = request.headers.get("authorization");
   const match = value?.match(/^Bearer\s+(.+)$/i);
@@ -150,14 +153,14 @@ export async function authenticateMcpOAuth(request: Request, requiredScope = "mc
   const token = bearerToken(request);
   if (!issuer || !resource || !token || token.startsWith("ti_live_") || token.startsWith("ti_test_")) return null;
 
-  let claims: JwtClaims | null;
+  let claims: McpJwtClaims | null;
   try {
-    claims = await verifyJwt(token, issuer, resource);
+    claims = await verifyMcpOAuthJwt(token, issuer, resource);
   } catch {
     return null;
   }
   if (!claims?.org_id || !claims.sub) return null;
-  const scopes = scopesForClaims(claims);
+  const scopes = mcpScopesForClaims(claims);
   if (requiredScope && !scopes.includes(requiredScope) && !scopes.includes("*")) return null;
 
   const db = getDb();
