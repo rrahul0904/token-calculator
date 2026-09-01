@@ -3,7 +3,7 @@ import { and, count, eq, isNull } from "drizzle-orm";
 import * as z from "zod";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { apiKeyQuotas } from "@/db/controls-schema";
-import { apiKeys, auditEvents, projects } from "@/db/schema";
+import { apiKeys, auditEvents, projects, serviceAccounts } from "@/db/schema";
 import { getTenantContext } from "@/lib/auth/session";
 import { PLAN_ENTITLEMENTS, hasEntitlement } from "@/lib/billing/entitlements";
 import { generateApiKey } from "@/lib/security/api-keys";
@@ -13,6 +13,7 @@ const requestSchema = z.object({
   name: z.string().trim().min(2).max(80),
   environment: z.enum(["live", "test"]).default("live"),
   projectId: z.string().max(180).nullable().optional(),
+  serviceAccountId: z.string().max(180).nullable().optional(),
   scopes: z.array(z.enum(allowedScopes)).min(1).max(12),
   requestsPerMinute: z.number().int().min(1).max(10_000).default(120),
   monthlyTokenLimit: z.number().int().positive().nullable().optional(),
@@ -64,6 +65,10 @@ export async function POST(request: Request) {
   if (parsed.data.scopes.includes("gateway:invoke") && !hasEntitlement(entitlements, "gateway")) {
     return noStore({ error: "PLAN_UPGRADE_REQUIRED", entitlement: "gateway" }, 402);
   }
+  if (parsed.data.serviceAccountId) {
+    if (tenant.role !== "owner" && tenant.role !== "admin") return noStore({ error: "FORBIDDEN", reason: "SERVICE_ACCOUNT_KEY_REQUIRES_ORG_MANAGER" }, 403);
+    if (!hasEntitlement(entitlements, "service_accounts")) return noStore({ error: "PLAN_UPGRADE_REQUIRED", entitlement: "service_accounts" }, 402);
+  }
 
   const db = getDb();
   if (parsed.data.projectId) {
@@ -73,6 +78,14 @@ export async function POST(request: Request) {
     )).limit(1))[0];
     if (!project) return noStore({ error: "PROJECT_NOT_FOUND" }, 404);
     if (project.archivedAt) return noStore({ error: "PROJECT_ARCHIVED" }, 409);
+  }
+  if (parsed.data.serviceAccountId) {
+    const serviceAccount = (await db.select({ id: serviceAccounts.id, revokedAt: serviceAccounts.revokedAt }).from(serviceAccounts).where(and(
+      eq(serviceAccounts.id, parsed.data.serviceAccountId),
+      eq(serviceAccounts.organizationId, tenant.organizationId),
+    )).limit(1))[0];
+    if (!serviceAccount) return noStore({ error: "SERVICE_ACCOUNT_NOT_FOUND" }, 404);
+    if (serviceAccount.revokedAt) return noStore({ error: "SERVICE_ACCOUNT_REVOKED" }, 409);
   }
 
   const active = await db.select({ value: count() }).from(apiKeys).where(and(eq(apiKeys.organizationId, tenant.organizationId), isNull(apiKeys.revokedAt)));
@@ -87,6 +100,7 @@ export async function POST(request: Request) {
       id,
       organizationId: tenant.organizationId,
       createdByUserId: tenant.internalUserId,
+      serviceAccountId: parsed.data.serviceAccountId ?? null,
       projectId: parsed.data.projectId ?? null,
       name: parsed.data.name,
       environment: material.environment,
@@ -117,6 +131,7 @@ export async function POST(request: Request) {
         scopes: parsed.data.scopes,
         environment: material.environment,
         projectId: parsed.data.projectId ?? null,
+        serviceAccountId: parsed.data.serviceAccountId ?? null,
         quota: {
           requestsPerMinute: parsed.data.requestsPerMinute,
           monthlyTokenLimit: parsed.data.monthlyTokenLimit ?? null,
@@ -134,6 +149,7 @@ export async function POST(request: Request) {
       lastFour: material.lastFour,
       scopes: parsed.data.scopes,
       projectId: parsed.data.projectId ?? null,
+      serviceAccountId: parsed.data.serviceAccountId ?? null,
       quota: {
         requestsPerMinute: parsed.data.requestsPerMinute,
         monthlyTokenLimit: parsed.data.monthlyTokenLimit ?? null,
