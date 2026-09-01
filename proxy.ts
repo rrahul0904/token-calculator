@@ -1,20 +1,15 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-
-function authConfigured(): boolean {
-  return Boolean(
-    process.env.WORKOS_API_KEY &&
-      process.env.WORKOS_CLIENT_ID &&
-      process.env.WORKOS_COOKIE_PASSWORD &&
-      process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI,
-  );
-}
+import { getConfigurationStatus } from "@/lib/config";
+import { workosRedirectUriForRequest } from "@/lib/auth/redirect-uri";
 
 export default async function proxy(request: NextRequest) {
-  if (!authConfigured()) return NextResponse.next();
+  if (getConfigurationStatus().auth !== "live") return NextResponse.next();
 
   const { authkit, handleAuthkitHeaders } = await import("@workos-inc/authkit-nextjs");
-  const { session, headers, authorizationUrl } = await authkit(request);
+  const { session, headers, authorizationUrl } = await authkit(request, {
+    redirectUri: workosRedirectUriForRequest(request.nextUrl.origin),
+  });
 
   if (request.nextUrl.pathname.startsWith("/app") && !session.user && authorizationUrl) {
     return handleAuthkitHeaders(request, headers, { redirect: authorizationUrl });
@@ -24,5 +19,5 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*"],
+  matcher: ["/app/:path*", "/sign-in"],
 };
