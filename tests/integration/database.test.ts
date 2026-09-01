@@ -1,6 +1,9 @@
 import process from "node:process";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { closeDb } from "@/db/client";
+import { checkApiKeyQuota } from "@/lib/gateway/quota";
+import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
 
 const integrationEnabled = process.env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS === "1";
 const describeIntegration = integrationEnabled ? describe : describe.skip;
@@ -53,6 +56,7 @@ describeIntegration("database release invariants", () => {
   });
 
   afterAll(async () => {
+    await closeDb();
     await sql`delete from organizations where id in (${orgA}, ${orgB})`;
     await sql.end({ timeout: 3 });
   });
@@ -117,6 +121,27 @@ describeIntegration("database release invariants", () => {
     const values = new Map(rows.map((row) => [row.metric, Number(row.value)]));
     expect(values.get("gateway_tokens")).toBe(165);
     expect(values.get("gateway_cost_usd")).toBe(0.012346);
+  });
+
+  it("fails closed when the monthly token quota is exhausted", async () => {
+    await sql`update api_key_quotas set monthly_token_limit = 100 where organization_id = ${orgA} and api_key_id = ${keyA}`;
+    const quota = await checkApiKeyQuota(orgA, keyA);
+    expect(quota.allowed).toBe(false);
+    expect(quota.reason).toBe("MONTHLY_TOKEN_QUOTA_EXCEEDED");
+    expect(quota.state.usedTokens).toBeGreaterThanOrEqual(165);
+    await sql`update api_key_quotas set monthly_token_limit = null where organization_id = ${orgA} and api_key_id = ${keyA}`;
+  });
+
+  it("enforces the request-per-minute limit through shared PostgreSQL state", async () => {
+    const first = await consumeGatewayRateLimit(orgA, keyA, 2);
+    const second = await consumeGatewayRateLimit(orgA, keyA, 2);
+    const third = await consumeGatewayRateLimit(orgA, keyA, 2);
+    expect(first.allowed).toBe(true);
+    expect(first.remaining).toBe(1);
+    expect(second.allowed).toBe(true);
+    expect(second.remaining).toBe(0);
+    expect(third.allowed).toBe(false);
+    expect(third.remaining).toBe(0);
   });
 
   it("enforces telemetry event idempotency per organization/source/event id", async () => {
