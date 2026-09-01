@@ -36,3 +36,12 @@ export const workosDirectoryGroups = pgTable("workos_directory_groups", {
   index("workos_directory_groups_org_idx").on(table.organizationId),
   index("workos_directory_groups_directory_idx").on(table.directoryId),
 ]);
+
+export const organizationDataControls = pgTable("organization_data_controls", {
+  organizationId: text("organization_id").primaryKey().references(() => organizations.id, { onDelete: "cascade" }),
+  privacyMode: text("privacy_mode").notNull().default("metadata_only"),
+  requestedDataRegion: text("requested_data_region"),
+  configuredDataRegion: text("configured_data_region"),
+  updatedByUserId: text("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
