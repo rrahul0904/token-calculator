@@ -13,5 +13,8 @@ export const GET = async (request: NextRequest) => {
     );
   }
   const { handleAuth } = await import("@workos-inc/authkit-nextjs");
-  return handleAuth({ returnPathname: "/app/overview" })(request);
+  return handleAuth({
+    returnPathname: "/app/overview",
+    baseURL: request.nextUrl.origin,
+  })(request);
 };
