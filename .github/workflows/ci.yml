@@ -72,6 +72,12 @@ jobs:
         run: npm run test:integration
       - name: TypeScript SDK build
         run: npm run sdk:build
+      - name: Python SDK import
+        env:
+          PYTHONPATH: packages/sdk-python
+        run: python3 -c "from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError; assert TokenIntelligenceClient and TokenIntelligenceError"
+      - name: CLI help smoke
+        run: npm run ti -- --help
       - name: Production build
         run: npm run build
       - name: Install Playwright Chromium
@@ -89,5 +95,7 @@ jobs:
           done
           cat /tmp/token-intelligence-next.log
           exit 1
+      - name: CLI local API smoke
+        run: npm run ti -- estimate --base-url http://127.0.0.1:3000 --input 1000 --output 200 --cached 100 --requests 10
       - name: Playwright production smoke
         run: npm run test:e2e
