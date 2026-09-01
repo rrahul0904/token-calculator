@@ -42,10 +42,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Full-history secret scan
-        uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_COMMENTS: "false"
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo"
+          zricethezav/gitleaks:v8.24.3
+          detect --source=/repo --redact --exit-code=2 --log-opts="--all"
       - uses: actions/setup-node@v7
         with:
           node-version: 22
