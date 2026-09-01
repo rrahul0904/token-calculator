@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import * as z from "zod";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { promptComparisons, savedScenarios } from "@/db/schema";
