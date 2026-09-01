@@ -90,6 +90,17 @@ describeIntegration("database release invariants", () => {
     }
   });
 
+  it("rejects cross-tenant service-account key ownership", async () => {
+    try {
+      await sql`insert into api_keys
+        (id, organization_id, service_account_id, name, environment, prefix, last_four, secret_hash, scopes)
+        values (${`key_cross_service_${suffix}`}, ${orgB}, ${serviceA}, 'Cross service key', 'test', ${`ti_cross_${suffix}`}, '9876', 'integration-hash-2', '[]'::jsonb)`;
+      throw new Error("expected tenant guard rejection");
+    } catch (error) {
+      expectPgCode(error, "23514");
+    }
+  });
+
   it("meters measured gateway tokens and cost at the persistence boundary", async () => {
     await sql`insert into llm_calls
       (id, organization_id, run_id, turn_id, provider, model_requested, model_resolved,
@@ -105,7 +116,7 @@ describeIntegration("database release invariants", () => {
     `;
     const values = new Map(rows.map((row) => [row.metric, Number(row.value)]));
     expect(values.get("gateway_tokens")).toBe(165);
-    expect(values.get("gateway_cost_usd")).toBeCloseTo(0.01234567, 8);
+    expect(values.get("gateway_cost_usd")).toBe(0.012346);
   });
 
   it("enforces telemetry event idempotency per organization/source/event id", async () => {
