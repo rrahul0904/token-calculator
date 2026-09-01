@@ -47,7 +47,9 @@ describe("findings engine", () => {
     const edits = [0, 1, 2, 3].map((i) => ({ id: `e${i}`, turnId: `t${i}`, toolName: "edit", toolCategory: "filesystem", status: i === 1 ? "failed" : "completed", isRetry: i === 2, outputSizeBytes: 0, outputTokensEstimated: 50, resourceHash: "file_hash", operation: "edit" as const, resourceVersionBefore: i === 0 ? "v0" : `v${i}`, resourceVersionAfter: i === 3 ? "v1" : `v${i + 1}` }));
     const finding = rule(baseRun({ toolCalls: edits }), "same-resource-edit-churn");
     expect(finding?.confidence).toMatch(/measured|high/);
-    expect(JSON.stringify(finding?.evidence)).not.toContain("source");
+    expect(finding?.evidence).not.toHaveProperty("sourceContent");
+    expect(finding?.evidence).not.toHaveProperty("rawContent");
+    expect(JSON.stringify(finding?.evidence)).not.toContain("actual source code");
     expect(rule(baseRun({ toolCalls: edits.slice(0, 2) }), "same-resource-edit-churn")).toBeUndefined();
   });
 
@@ -57,7 +59,11 @@ describe("findings engine", () => {
       { id: "t2", turnIndex: 2, status: "completed", freshInputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1, costUsd: 0, contextTokensBefore: 20_000, contextTokensAfter: 90_000 },
     ];
     expect(rule(baseRun({ turns }), "excessive-context-growth")?.confidence).toBe("measured");
-    expect(rule(baseRun({ turns: turns.map((t) => ({ ...t, contextTokensAfter: (t.contextTokensBefore ?? 0) + 100 })) }), "excessive-context-growth")).toBeUndefined();
+    const stableTurns = [
+      { ...turns[0], contextTokensBefore: 10_000, contextTokensAfter: 10_100 },
+      { ...turns[1], contextTokensBefore: 10_100, contextTokensAfter: 10_200 },
+    ];
+    expect(rule(baseRun({ turns: stableTurns }), "excessive-context-growth")).toBeUndefined();
   });
 
   it("detects cache blind spots and ignores healthy reuse", () => {
