@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const payload = await request.text();
   try {
     const workos = new WorkOS(apiKey);
-    const event = workos.webhooks.constructEvent({ payload, sigHeader, secret });
+    const event = await workos.webhooks.constructEvent({ payload, sigHeader, secret });
     const normalized = {
       id: String(event.id),
       event: String(event.event),
