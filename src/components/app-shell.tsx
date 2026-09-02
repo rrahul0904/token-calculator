@@ -34,131 +34,48 @@ function Icon({ name }: { name: IconName }) {
 }
 
 const groups = [
-  {
-    label: "Analyze",
-    items: [
-      { href: "/app/cost-lab", label: "Cost Lab", icon: "lab" },
-      { href: "/app/usage", label: "Usage", icon: "usage" },
-      { href: "/app/runs", label: "Runs", icon: "runs" },
-    ],
-  },
-  {
-    label: "Control",
-    items: [
-      { href: "/app/projects", label: "Projects", icon: "projects" },
-      { href: "/app/budgets", label: "Budgets & policies", icon: "budget" },
-      { href: "/app/integrations", label: "Integrations", icon: "integrations" },
-      { href: "/app/api-keys", label: "API keys", icon: "keys" },
-    ],
-  },
-  {
-    label: "Finance",
-    items: [
-      { href: "/app/finops", label: "FinOps command", icon: "finops" },
-    ],
-  },
-  {
-    label: "Team",
-    items: [
-      { href: "/app/team", label: "Members & teams", icon: "team" },
-    ],
-  },
-  {
-    label: "Organization",
-    items: [
-      { href: "/app/billing", label: "Billing", icon: "billing" },
-      { href: "/app/audit", label: "Audit", icon: "audit" },
-      { href: "/app/settings", label: "Privacy & settings", icon: "settings" },
-    ],
-  },
+  { label: "Analyze", items: [
+    { href: "/app/cost-lab", label: "Cost Lab", icon: "lab" },
+    { href: "/app/usage", label: "Usage", icon: "usage" },
+    { href: "/app/runs", label: "Runs", icon: "runs" },
+    { href: "/app/findings", label: "Findings", icon: "runs" },
+    { href: "/app/route-lab", label: "Route Lab", icon: "finops" },
+    { href: "/app/experiments", label: "Experiments", icon: "lab" },
+  ]},
+  { label: "Control", items: [
+    { href: "/app/projects", label: "Projects", icon: "projects" },
+    { href: "/app/budgets", label: "Budgets & policies", icon: "budget" },
+    { href: "/app/integrations", label: "Integrations", icon: "integrations" },
+    { href: "/app/api-keys", label: "API keys", icon: "keys" },
+  ]},
+  { label: "Finance", items: [{ href: "/app/finops", label: "FinOps command", icon: "finops" }]},
+  { label: "Team", items: [{ href: "/app/team", label: "Members & teams", icon: "team" }]},
+  { label: "Organization", items: [
+    { href: "/app/billing", label: "Billing", icon: "billing" },
+    { href: "/app/audit", label: "Audit", icon: "audit" },
+    { href: "/app/settings", label: "Privacy & settings", icon: "settings" },
+  ]},
 ] as const;
 
-export interface AppShellProps {
-  organizationName: string;
-  userName: string;
-  role: string;
-  plan: string;
-  children: ReactNode;
-}
+export interface AppShellProps { organizationName: string; userName: string; role: string; plan: string; children: ReactNode; }
 
 export function AppShell({ organizationName, userName, role, plan, children }: AppShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigation = <>
+    <Link href="/app/overview" className={pathname === "/app/overview" ? "app-nav-link app-nav-link--active app-nav-link--overview" : "app-nav-link app-nav-link--overview"} onClick={() => setMobileOpen(false)}><span className="app-nav-icon"><Icon name="overview" /></span><span>Overview</span></Link>
+    {groups.map((group) => <details className="app-nav-group" key={group.label} open><summary className="app-nav-label">{group.label}<span aria-hidden="true">⌄</span></summary><div className="app-nav-items">{group.items.map((item) => { const active = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link key={item.href} href={item.href} className={active ? "app-nav-link app-nav-link--active" : "app-nav-link"} onClick={() => setMobileOpen(false)}><span className="app-nav-icon"><Icon name={item.icon} /></span><span>{item.label}</span></Link>; })}</div></details>)}
+  </>;
 
-  const navigation = (
-    <>
-      <Link href="/app/overview" className={pathname === "/app/overview" ? "app-nav-link app-nav-link--active app-nav-link--overview" : "app-nav-link app-nav-link--overview"} onClick={() => setMobileOpen(false)}>
-        <span className="app-nav-icon"><Icon name="overview" /></span><span>Overview</span>
-      </Link>
-      {groups.map((group) => (
-        <details className="app-nav-group" key={group.label} open>
-          <summary className="app-nav-label">{group.label}<span aria-hidden="true">⌄</span></summary>
-          <div className="app-nav-items">
-            {group.items.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              return (
-                <Link key={item.href} href={item.href} className={active ? "app-nav-link app-nav-link--active" : "app-nav-link"} onClick={() => setMobileOpen(false)}>
-                  <span className="app-nav-icon"><Icon name={item.icon} /></span><span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </details>
-      ))}
-    </>
-  );
-
-  return (
-    <div className="app-frame">
-      <aside className="app-sidebar" aria-label="Token Intelligence workspace navigation">
-        <Link href="/app/overview" className="app-brand">
-          <span className="app-brand__mark"><span>TI</span></span>
-          <span className="app-brand__copy"><strong>Token Intelligence</strong><small>Economics control plane</small></span>
-        </Link>
-
-        <div className="workspace-switcher" aria-label="Current organization">
-          <span className="workspace-switcher__signal" aria-hidden="true" />
-          <div><span>{organizationName}</span><small>{plan.toUpperCase()} PLAN · {role}</small></div>
-          <span className="workspace-switcher__chevron" aria-hidden="true">⌄</span>
-        </div>
-
-        <nav className="app-navigation" aria-label="Application navigation">{navigation}</nav>
-
-        <div className="app-sidebar__footer">
-          <div className="privacy-state">
-            <span className="privacy-state__dot" aria-hidden="true" />
-            <div><strong>Metadata only</strong><small>Prompt persistence off</small></div>
-          </div>
-          <Link href="/developers" className="app-nav-link"><span className="app-nav-icon"><Icon name="developer" /></span><span>Developer platform</span></Link>
-          <Link href="/" className="app-nav-link"><span className="app-nav-icon"><Icon name="calculator" /></span><span>Public calculator</span></Link>
-          <div className="app-user"><span className="app-user__avatar">{userName.slice(0, 1).toUpperCase()}</span><div><span>{userName}</span><small>{role}</small></div></div>
-        </div>
-      </aside>
-
-      <div className={mobileOpen ? "mobile-scrim mobile-scrim--open" : "mobile-scrim"} onClick={() => setMobileOpen(false)} aria-hidden="true" />
-      <aside className={mobileOpen ? "app-mobile-drawer app-mobile-drawer--open" : "app-mobile-drawer"} aria-label="Mobile workspace navigation">
-        <div className="app-mobile-drawer__top">
-          <Link href="/app/overview" className="app-brand" onClick={() => setMobileOpen(false)}><span className="app-brand__mark"><span>TI</span></span><span className="app-brand__copy"><strong>Token Intelligence</strong><small>Economics control plane</small></span></Link>
-          <button type="button" className="icon-button" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><Icon name="close" /></button>
-        </div>
-        <nav className="app-navigation" aria-label="Mobile application navigation">{navigation}</nav>
-      </aside>
-
-      <div className="app-content-frame">
-        <header className="app-command-bar">
-          <button type="button" className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button>
-          <div className="command-context" aria-label="Workspace analysis context">
-            <span className="command-context__item"><small>Scope</small><strong>Organization</strong></span>
-            <span className="command-context__item"><small>Window</small><strong>30 days</strong></span>
-            <span className="command-context__item command-context__item--wide"><small>Environment</small><strong>All observed</strong></span>
-          </div>
-          <div className="command-actions">
-            <span className="command-plan">{plan}</span>
-            <Link href="/app/cost-lab" className="command-button">Plan economics <span aria-hidden="true">→</span></Link>
-          </div>
-        </header>
-        <main className="app-main">{children}</main>
-      </div>
-    </div>
-  );
+  return <div className="app-frame">
+    <aside className="app-sidebar" aria-label="Token Intelligence workspace navigation">
+      <Link href="/app/overview" className="app-brand"><span className="app-brand__mark"><span>TI</span></span><span className="app-brand__copy"><strong>Token Intelligence</strong><small>Economics control plane</small></span></Link>
+      <div className="workspace-switcher" aria-label="Current organization"><span className="workspace-switcher__signal" aria-hidden="true" /><div><span>{organizationName}</span><small>{plan.toUpperCase()} PLAN · {role}</small></div><span className="workspace-switcher__chevron" aria-hidden="true">⌄</span></div>
+      <nav className="app-navigation" aria-label="Application navigation">{navigation}</nav>
+      <div className="app-sidebar__footer"><div className="privacy-state"><span className="privacy-state__dot" aria-hidden="true" /><div><strong>Metadata only</strong><small>Prompt persistence off</small></div></div><Link href="/developers" className="app-nav-link"><span className="app-nav-icon"><Icon name="developer" /></span><span>Developer platform</span></Link><Link href="/" className="app-nav-link"><span className="app-nav-icon"><Icon name="calculator" /></span><span>Public calculator</span></Link><div className="app-user"><span className="app-user__avatar">{userName.slice(0,1).toUpperCase()}</span><div><span>{userName}</span><small>{role}</small></div></div></div>
+    </aside>
+    <div className={mobileOpen ? "mobile-scrim mobile-scrim--open" : "mobile-scrim"} onClick={() => setMobileOpen(false)} aria-hidden="true" />
+    {mobileOpen && <aside className="app-mobile-drawer app-mobile-drawer--open" aria-label="Mobile workspace navigation"><div className="app-mobile-drawer__top"><Link href="/app/overview" className="app-brand" onClick={() => setMobileOpen(false)}><span className="app-brand__mark"><span>TI</span></span><span className="app-brand__copy"><strong>Token Intelligence</strong><small>Economics control plane</small></span></Link><button type="button" className="icon-button" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><Icon name="close" /></button></div><nav className="app-navigation" aria-label="Mobile application navigation">{navigation}</nav></aside>}
+    <div className="app-content-frame"><header className="app-command-bar"><button type="button" className="icon-button app-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Icon name="menu" /></button><div className="command-context" aria-label="Workspace analysis context"><span className="command-context__item"><small>Scope</small><strong>Organization</strong></span><span className="command-context__item"><small>Window</small><strong>30 days</strong></span><span className="command-context__item command-context__item--wide"><small>Environment</small><strong>All observed</strong></span></div><div className="command-actions"><span className="command-plan">{plan}</span><Link href="/app/cost-lab" className="command-button">Plan economics <span aria-hidden="true">→</span></Link></div></header><main className="app-main">{children}</main></div>
+  </div>;
 }
