@@ -101,6 +101,39 @@ test.describe("authenticated workspace", () => {
     });
     expect(replacementAfterRevoke.status).toBe(401);
   });
+
+  test("privacy controls stay metadata-only and never overstate residency", async ({ request }) => {
+    const initial = await request.get("/api/v1/settings/data-controls");
+    expect(initial.status()).toBe(200);
+    const initialBody = await initial.json();
+    expect(initialBody.data.privacyMode).toBe("metadata_only");
+    expect(initialBody.data.privacyModes.find((item: { mode: string }) => item.mode === "full_content")?.available).toBe(false);
+
+    const rejected = await request.patch("/api/v1/settings/data-controls", { data: { privacyMode: "full_content", requestedDataRegion: "us-east-1" } });
+    expect(rejected.status()).toBe(409);
+
+    const updated = await request.patch("/api/v1/settings/data-controls", { data: { privacyMode: "metadata_only", requestedDataRegion: "us-east-1" } });
+    expect(updated.status()).toBe(200);
+    const body = await updated.json();
+    expect(body.data.privacyMode).toBe("metadata_only");
+    expect(body.data.residencyClaim).not.toMatch(/^verified:/);
+  });
+
+  test("retention settings persist independently of content persistence", async ({ request }) => {
+    const updated = await request.patch("/api/v1/settings/retention", {
+      data: { telemetryDays: 45, runDays: 180, findingDays: 180, auditDays: 730, enabled: true },
+    });
+    expect(updated.status()).toBe(200);
+    const body = await updated.json();
+    expect(body.data.telemetryDays).toBe(45);
+    expect(body.data.auditDays).toBe(730);
+
+    const readBack = await request.get("/api/v1/settings/retention");
+    expect(readBack.status()).toBe(200);
+    const readBody = await readBack.json();
+    expect(readBody.data.telemetryDays).toBe(45);
+    expect(readBody.data.runDays).toBe(180);
+  });
 });
 
 test("session-only API routes reject an unauthenticated request", async ({ request }) => {
