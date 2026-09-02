@@ -3,12 +3,13 @@ import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 import "./features.css";
 import "./commercial.css";
+import "./premium.css";
 
 export const metadata: Metadata = {
-  title: { default: "Token Intelligence — AI Workload Economics", template: "%s · Token Intelligence" },
-  description: "Estimate AI workload cost before a run, trace agent economics during execution, reconcile actual usage, and control budgets without storing prompts by default.",
+  title: { default: "Token Intelligence — AI Economics Control Plane", template: "%s · Token Intelligence" },
+  description: "Estimate AI workload economics before execution, trace agent spend, reconcile provider usage, govern budgets, and verify whether optimizations actually worked.",
   applicationName: "Token Intelligence",
-  openGraph: { title: "Token Intelligence", description: "AI FinOps, ContextOps and agent-run economics from pre-flight estimates to budget control.", type: "website" },
+  openGraph: { title: "Token Intelligence", description: "The AI FinOps and governance command center for models, agents, spend, policy, and proof.", type: "website" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

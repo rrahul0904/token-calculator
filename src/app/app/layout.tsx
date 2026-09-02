@@ -5,6 +5,7 @@ import { WorkspaceConfigurationGate, WorkspaceOnboarding } from "@/components/wo
 import { getConfigurationStatus } from "@/lib/config";
 import { getExternalAuthSession, getTenantContext } from "@/lib/auth/session";
 import "./app.css";
+import "./premium-app.css";
 
 export default async function ApplicationLayout({ children }: { children: ReactNode }) {
   const configuration = getConfigurationStatus();
