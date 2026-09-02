@@ -58,13 +58,11 @@ export const OPENAPI_DOCUMENT = {
   paths: {
     "/api/health": { get: operation("Deployment health", { tags: ["Operations"] }) },
     "/.well-known/oauth-protected-resource": { get: operation("MCP OAuth protected-resource metadata", { tags: ["MCP", "Identity"] }) },
-
     "/api/v1/tokenize": { post: operation("Tokenize text without persistence", { request: { $ref: "#/components/schemas/TokenizeRequest" }, tags: ["Economics"] }) },
     "/api/v1/models": { get: operation("List model catalog and pricing provenance", { tags: ["Economics"] }) },
     "/api/v1/estimate": { post: operation("Estimate model costs", { request: { $ref: "#/components/schemas/EstimateRequest" }, tags: ["Economics"] }) },
     "/api/v1/compare": { post: operation("Compare model economics", { tags: ["Economics"] }) },
     "/api/v1/recommend": { post: operation("Recommend economically compatible models", { tags: ["Economics"] }) },
-
     "/api/v1/onboarding": { post: operation("Create or attach authenticated user workspace", { security: session, tags: ["Identity"] }) },
     "/api/v1/projects": { get: operation("List projects", { security: session, tags: ["Projects"] }), post: operation("Create a project", { security: session, tags: ["Projects"] }) },
     "/api/v1/projects/{id}": { get: operation("Get project detail", { security: session, tags: ["Projects"] }), patch: operation("Edit/archive/restore project", { security: session, tags: ["Projects"] }) },
@@ -78,35 +76,28 @@ export const OPENAPI_DOCUMENT = {
     "/api/v1/api-keys": { get: operation("List API keys without secret material", { security: session, tags: ["Identity"] }), post: operation("Create an API key; secret returned once", { security: session, tags: ["Identity"] }) },
     "/api/v1/api-keys/{id}": { patch: operation("Rotate an API key; new secret returned once", { security: session, tags: ["Identity"] }), delete: operation("Revoke an API key", { security: session, tags: ["Identity"] }) },
     "/api/v1/api-keys/{id}/quota": { get: operation("Get API-key quota", { security: session, tags: ["Control"] }), patch: operation("Set API-key quota", { security: session, tags: ["Control"] }) },
-
     "/api/v1/events": { post: operation("Ingest one metadata-only telemetry event", { security: bearer, tags: ["Telemetry"] }) },
     "/api/v1/events/batch": { post: operation("Atomically ingest telemetry events", { security: bearer, tags: ["Telemetry"] }) },
     "/api/v1/runs": { get: operation("List agent runs", { security: bearer, tags: ["Runs"] }), post: operation("Create an agent run receipt", { security: bearer, tags: ["Runs"] }) },
     "/api/v1/runs/{id}": { get: operation("Get a canonical agent run receipt", { security: bearer, tags: ["Runs"] }), patch: operation("Update a run", { security: bearer, tags: ["Runs"] }) },
     "/api/v1/usage": { get: operation("Get organization/project usage economics", { security: bearer, tags: ["Usage"] }) },
-
     "/api/v1/scenarios": { get: operation("List content-free saved economics scenarios", { security: session, tags: ["Economics"] }), post: operation("Save a metadata-only economics scenario", { security: session, tags: ["Economics"] }) },
     "/api/v1/scenarios/{id}": { get: operation("Get saved scenario", { security: session, tags: ["Economics"] }), patch: operation("Update or duplicate saved scenario", { security: session, tags: ["Economics"] }), delete: operation("Delete saved scenario", { security: session, tags: ["Economics"] }) },
     "/api/v1/scenario-comparisons": { get: operation("List scenario comparisons", { security: session, tags: ["Economics"] }), post: operation("Save economics comparison evidence", { security: session, tags: ["Economics"] }) },
     "/api/v1/provider-usage-imports": { get: operation("List provider usage imports", { security: session, tags: ["FinOps"] }), post: operation("Preview or commit provider CSV/JSON usage import", { security: session, tags: ["FinOps"] }) },
-
     "/api/v1/budgets": { get: operation("List budgets and policies", { security: bearer, tags: ["Control"] }), post: operation("Create budget or policy", { security: bearer, tags: ["Control"] }) },
     "/api/v1/budgets/check": { post: operation("Evaluate hierarchical policy/budget state", { security: bearer, tags: ["Control"] }) },
-    "/api/v1/approvals": { get: operation("List policy approvals", { security: session, tags: ["Control"] }), post: operation("Decide policy approval", { security: session, tags: ["Control"] }) },
-
+    "/api/v1/approvals": { get: operation("List policy approvals", { security: bearer, tags: ["Control"] }), post: operation("Request policy approval", { security: bearer, tags: ["Control"] }), patch: operation("Approve or deny pending policy request", { security: session, tags: ["Control"] }) },
     "/api/v1/provider-connections": { get: operation("List encrypted BYOK provider connections", { security: session, tags: ["Providers"] }), post: operation("Verify then connect provider credential", { security: session, tags: ["Providers"] }) },
     "/api/v1/provider-connections/{id}": { post: operation("Reverify provider credential", { security: session, tags: ["Providers"] }), patch: operation("Verify then rotate provider credential", { security: session, tags: ["Providers"] }), delete: operation("Delete provider connection", { security: session, tags: ["Providers"] }) },
-
     "/api/v1/settings/retention": { get: operation("Get metadata retention policy", { security: session, tags: ["Enterprise"] }), patch: operation("Update metadata retention policy", { security: session, tags: ["Enterprise"] }) },
     "/api/v1/settings/data-controls": { get: operation("Get privacy-mode and data-region truth state", { security: session, tags: ["Enterprise"] }), patch: operation("Update supported data controls", { security: session, tags: ["Enterprise"], description: "metadata_only is the active content posture; unavailable modes fail closed instead of becoming fake compliance settings." }) },
     "/api/v1/audit": { get: operation("List tenant-scoped audit events", { security: session, tags: ["Enterprise"] }) },
     "/api/v1/audit/export": { get: operation("Export tenant-scoped audit NDJSON", { security: session, tags: ["Enterprise"] }) },
     "/api/v1/alerts/endpoints": { get: operation("List signed alert destinations", { security: session, tags: ["Alerts"] }), post: operation("Create encrypted HTTPS alert destination", { security: session, tags: ["Alerts"] }) },
     "/api/v1/alerts/endpoints/{id}": { patch: operation("Enable or disable an alert destination", { security: session, tags: ["Alerts"] }), delete: operation("Delete alert destination", { security: session, tags: ["Alerts"] }) },
-
     "/api/v1/billing/checkout": { post: operation("Create hosted Stripe Checkout session", { security: session, tags: ["Billing"] }) },
     "/api/v1/billing/portal": { post: operation("Create Stripe Customer Portal session", { security: session, tags: ["Billing"] }) },
-
     "/api/gateway/{provider}": { post: operation("Execute governed OpenAI/Anthropic/Gemini request", { security: bearer, request: { $ref: "#/components/schemas/GatewayRequest" }, tags: ["Gateway"] }) },
     "/v1/responses": { post: operation("OpenAI Responses-compatible governed gateway", { security: bearer, request: { $ref: "#/components/schemas/ProviderCompatibleRequest" }, tags: ["Gateway"], description: "Requires x-ti-provider-connection-id and preserves provider-native response/streaming semantics while applying Token Intelligence governance." }) },
     "/v1/chat/completions": { post: operation("OpenAI Chat Completions-compatible governed gateway", { security: bearer, request: { $ref: "#/components/schemas/ProviderCompatibleRequest" }, tags: ["Gateway"] }) },
