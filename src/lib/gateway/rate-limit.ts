@@ -24,9 +24,14 @@ function minuteWindow(now = new Date()) {
 export async function consumeGatewayRateLimit(organizationId: string, apiKeyId: string, limit = 120): Promise<RateLimitResult> {
   const { start, end } = minuteWindow();
   const id = `rl:${organizationId}:${apiKeyId}:${start.toISOString()}`;
+  // Raw SQL parameters bypass Drizzle's column encoder, so bind RFC 3339
+  // strings and cast them in PostgreSQL rather than passing Date objects to
+  // postgres.js. This keeps the fixed window precise and portable.
+  const startAt = start.toISOString();
+  const endAt = end.toISOString();
   const result = await getDb().execute(sql`
     INSERT INTO usage_counters (id, organization_id, scope_type, scope_id, metric, period_start, period_end, value, created_at, updated_at)
-    VALUES (${id}, ${organizationId}, 'api_key', ${apiKeyId}, 'gateway_requests', ${start}, ${end}, 1, now(), now())
+    VALUES (${id}, ${organizationId}, 'api_key', ${apiKeyId}, 'gateway_requests', ${startAt}::timestamptz, ${endAt}::timestamptz, 1, now(), now())
     ON CONFLICT (organization_id, scope_type, scope_id, metric, period_start)
     DO UPDATE SET value = usage_counters.value + 1, updated_at = now()
     WHERE usage_counters.value < ${limit}
