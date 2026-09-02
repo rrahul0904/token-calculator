@@ -25,12 +25,16 @@ function hasExplicitE2eAuthAdapter(): boolean {
   );
 }
 
+/** True only when a real WorkOS/AuthKit runtime can be initialized. */
+export function hasWorkosAuthConfiguration(): boolean {
+  return all("WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD") && hasConfiguredWorkosRedirectUri();
+}
+
 export function getConfigurationStatus() {
   return {
     database: all("DATABASE_URL") ? "live" : "code_complete_configuration_blocked",
     auth:
-      (all("WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD") && hasConfiguredWorkosRedirectUri()) ||
-      hasExplicitE2eAuthAdapter()
+      hasWorkosAuthConfiguration() || hasExplicitE2eAuthAdapter()
         ? "live"
         : "code_complete_configuration_blocked",
     stripe: all("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM")

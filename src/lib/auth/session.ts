@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import type { OrganizationRole } from "@/db/schema";
 import { organizationMembers, organizations, users } from "@/db/schema";
 import { getDb, isDatabaseConfigured } from "@/db/client";
-import { getConfigurationStatus } from "@/lib/config";
+import { hasWorkosAuthConfiguration } from "@/lib/config";
 
 export interface ExternalAuthSession {
   userId: string;
@@ -22,7 +22,7 @@ export interface TenantContext extends ExternalAuthSession {
 }
 
 export function isAuthConfigured(): boolean {
-  return getConfigurationStatus().auth === "live";
+  return hasWorkosAuthConfiguration();
 }
 
 function safeEqual(left: string, right: string) {
