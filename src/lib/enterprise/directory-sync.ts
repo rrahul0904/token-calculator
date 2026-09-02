@@ -58,6 +58,10 @@ async function internalOrganizationId(workosOrganizationId: string) {
   return row[0]?.id ?? null;
 }
 
+function assertMappingOrganization(mappingOrganizationId: string | undefined, organizationId: string) {
+  if (mappingOrganizationId && mappingOrganizationId !== organizationId) throw new Error("DIRECTORY_SCOPE_VIOLATION");
+}
+
 export async function processDirectoryLifecycleEvent(input: DirectoryLifecycleEvent) {
   const workosOrganizationId = organizationExternalId(input.data);
   const dirId = directoryId(input.data);
@@ -93,6 +97,7 @@ export async function processDirectoryLifecycleEvent(input: DirectoryLifecycleEv
       const state = forceDeleted ? "deleted" : stateOf(data);
       const active = state === "active";
       const mapping = await tx.select().from(workosDirectoryUsers).where(eq(workosDirectoryUsers.directoryUserId, externalUserId)).limit(1);
+      assertMappingOrganization(mapping[0]?.organizationId, organizationId);
       let internalUserId = mapping[0]?.internalUserId ?? null;
       if (!internalUserId && email) {
         const existing = await tx.select().from(users).where(eq(users.email, email)).limit(1);
@@ -104,7 +109,8 @@ export async function processDirectoryLifecycleEvent(input: DirectoryLifecycleEv
       }
       if (internalUserId && name) await tx.update(users).set({ name, updatedAt: new Date() }).where(eq(users.id, internalUserId));
       if (mapping[0]) {
-        await tx.update(workosDirectoryUsers).set({ organizationId, directoryId: userDirectoryId, internalUserId, email, name, state, updatedAt: new Date() }).where(eq(workosDirectoryUsers.directoryUserId, externalUserId));
+        await tx.update(workosDirectoryUsers).set({ directoryId: userDirectoryId, internalUserId, email, name, state, updatedAt: new Date() })
+          .where(and(eq(workosDirectoryUsers.directoryUserId, externalUserId), eq(workosDirectoryUsers.organizationId, organizationId)));
       } else {
         await tx.insert(workosDirectoryUsers).values({ directoryUserId: externalUserId, organizationId, directoryId: userDirectoryId, internalUserId, email, name, state });
       }
@@ -117,6 +123,7 @@ export async function processDirectoryLifecycleEvent(input: DirectoryLifecycleEv
       if (!externalGroupId || !groupDirectoryId) return;
       const name = groupName(data);
       const mapping = await tx.select().from(workosDirectoryGroups).where(eq(workosDirectoryGroups.directoryGroupId, externalGroupId)).limit(1);
+      assertMappingOrganization(mapping[0]?.organizationId, organizationId);
       let teamId = mapping[0]?.teamId ?? null;
       if (!teamId && !deleted) {
         teamId = `team_${randomUUID()}`;
@@ -125,7 +132,8 @@ export async function processDirectoryLifecycleEvent(input: DirectoryLifecycleEv
         await tx.update(teams).set({ name, archivedAt: deleted ? new Date() : null, updatedAt: new Date() }).where(and(eq(teams.id, teamId), eq(teams.organizationId, organizationId)));
       }
       if (mapping[0]) {
-        await tx.update(workosDirectoryGroups).set({ organizationId, directoryId: groupDirectoryId, teamId, name, state: deleted ? "deleted" : "active", updatedAt: new Date() }).where(eq(workosDirectoryGroups.directoryGroupId, externalGroupId));
+        await tx.update(workosDirectoryGroups).set({ directoryId: groupDirectoryId, teamId, name, state: deleted ? "deleted" : "active", updatedAt: new Date() })
+          .where(and(eq(workosDirectoryGroups.directoryGroupId, externalGroupId), eq(workosDirectoryGroups.organizationId, organizationId)));
       } else {
         await tx.insert(workosDirectoryGroups).values({ directoryGroupId: externalGroupId, organizationId, directoryId: groupDirectoryId, teamId, name, state: deleted ? "deleted" : "active" });
       }
@@ -139,12 +147,14 @@ export async function processDirectoryLifecycleEvent(input: DirectoryLifecycleEv
       if (!externalUserId || !externalGroupId) return;
       const [userMap] = await tx.select().from(workosDirectoryUsers).where(eq(workosDirectoryUsers.directoryUserId, externalUserId)).limit(1);
       let [groupMap] = await tx.select().from(workosDirectoryGroups).where(eq(workosDirectoryGroups.directoryGroupId, externalGroupId)).limit(1);
+      assertMappingOrganization(userMap?.organizationId, organizationId);
+      assertMappingOrganization(groupMap?.organizationId, organizationId);
       if (!userMap) await upsertDirectoryUser(userData);
       if (!groupMap) {
         await upsertDirectoryGroup(groupData);
-        [groupMap] = await tx.select().from(workosDirectoryGroups).where(eq(workosDirectoryGroups.directoryGroupId, externalGroupId)).limit(1);
+        [groupMap] = await tx.select().from(workosDirectoryGroups).where(and(eq(workosDirectoryGroups.directoryGroupId, externalGroupId), eq(workosDirectoryGroups.organizationId, organizationId))).limit(1);
       }
-      const [resolvedUser] = await tx.select().from(workosDirectoryUsers).where(eq(workosDirectoryUsers.directoryUserId, externalUserId)).limit(1);
+      const [resolvedUser] = await tx.select().from(workosDirectoryUsers).where(and(eq(workosDirectoryUsers.directoryUserId, externalUserId), eq(workosDirectoryUsers.organizationId, organizationId))).limit(1);
       if (!resolvedUser?.internalUserId || !groupMap?.teamId) return;
       if (add) {
         await tx.insert(teamMembers).values({ id: `tm_${randomUUID()}`, organizationId, teamId: groupMap.teamId, userId: resolvedUser.internalUserId, role: "member" }).onConflictDoNothing();
