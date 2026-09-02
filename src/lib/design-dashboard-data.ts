@@ -2,6 +2,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { findings, llmCalls, projects, runs } from "@/db/schema";
 import { evaluationDatasets, experimentResults, experiments } from "@/db/gap-closure-schema";
+import { experimentEvidence } from "@/lib/evaluations/experiment-evidence";
 
 function money(value: string | null) {
   if (value === null) return null;
@@ -115,12 +116,20 @@ export async function getExperimentsDashboardData(organizationId: string) {
       if (result.latencyMs !== null) group.latencies.push(result.latencyMs);
       byVariant.set(result.variant, group);
     }
+    const variants = [...byVariant.entries()].map(([variant, group]) => ({ variant, count: group.count, successRate: group.count ? group.successful / group.count : null, medianCostUsd: median(group.costs), medianQuality: median(group.qualities), medianLatencyMs: median(group.latencies) }));
+    const variantByName = new Map(variants.map((variant) => [variant.variant.toLowerCase(), variant]));
     return {
       ...experiment,
       dataset: datasetById.get(experiment.datasetId) ?? null,
       resultCount: results.length,
-      variants: [...byVariant.entries()].map(([variant, group]) => ({ variant, count: group.count, successRate: group.count ? group.successful / group.count : null, medianCostUsd: median(group.costs), medianQuality: median(group.qualities), medianLatencyMs: median(group.latencies) })),
-      evidence: results.length ? "experiment_verified" as const : "unavailable" as const,
+      variants,
+      evidence: experimentEvidence({
+        status: experiment.status,
+        resultCount: results.length,
+        baseline: variantByName.get("baseline"),
+        candidate: variantByName.get("candidate"),
+        minimumQualityScore: money(experiment.qualityThreshold),
+      }),
     };
   });
   return { items, datasetCount: datasetRows.length, resultCount: resultRows.length };

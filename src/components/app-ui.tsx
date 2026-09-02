@@ -53,7 +53,7 @@ export function SourceBadge({ source }: { source: string }) {
       : lower === "provider_measured" || lower.includes("reconciled") || lower.includes("actual") ? "measured"
         : lower === "historically_observed" ? "observed"
           : lower === "counterfactual_estimate" ? "counterfactual"
-            : lower === "unavailable" || lower === "not_configured" || lower === "not configured" ? "unavailable"
+            : lower === "unavailable" || lower === "insufficient_sample" || lower === "results_recorded" || lower === "not_configured" || lower === "not configured" ? "unavailable"
               : "estimated";
   return <span className={`source-badge source-badge--${modifier}`}><span className="source-badge__dot" aria-hidden="true" />{source.replaceAll("_", " ")}</span>;
 }
