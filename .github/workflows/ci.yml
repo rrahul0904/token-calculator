@@ -89,8 +89,8 @@ jobs:
         run: npm run ti -- --help
       - name: Production build
         run: npm run build
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browser matrix
+        run: npx playwright install --with-deps chromium webkit
       - name: Start production server
         run: |
           npm start > /tmp/token-intelligence-next.log 2>&1 &
