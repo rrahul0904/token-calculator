@@ -4,7 +4,7 @@ const e2eSecret = process.env.TOKEN_INTELLIGENCE_E2E_AUTH_SECRET;
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const authenticated = Boolean(e2eSecret && process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED === "1");
 
-const authHeaders = e2eSecret ? { "x-ti-e2e-auth": e2eSecret } : {};
+const authHeaders: Record<string, string> = e2eSecret ? { "x-ti-e2e-auth": e2eSecret } : {};
 
 test.describe("authenticated workspace", () => {
   test.skip(!authenticated, "Explicit E2E auth adapter is not enabled.");
