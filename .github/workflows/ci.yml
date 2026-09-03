@@ -31,6 +31,7 @@ jobs:
       TOKEN_INTELLIGENCE_E2E_PLATFORM_ADMIN: "1"
       TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_ID: user_e2e_org_admin
       TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_EMAIL: e2e-org-admin@token-intelligence.invalid
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     services:
       postgres:
         image: postgres:18
@@ -116,7 +117,5 @@ jobs:
       - name: Playwright production smoke
         run: npm run test:e2e
       - name: Vercel output build (no deployment)
-        if: ${{ secrets.VERCEL_TOKEN != '' }}
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        if: ${{ env.VERCEL_TOKEN != '' }}
         run: vercel build --yes --scope rrahul0904-5013s-projects
