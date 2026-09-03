@@ -26,6 +26,10 @@ test.describe("authenticated workspace", () => {
     "/app/finops",
   ];
 
+  const adminPages = [
+    "/admin", "/admin/users", "/admin/organizations", "/admin/subscriptions", "/admin/revenue", "/admin/usage", "/admin/finops", "/admin/platform-costs", "/admin/providers", "/admin/system", "/admin/integrations", "/admin/audit", "/admin/release",
+  ];
+
   for (const path of workspacePages) {
     test(`${path} renders for the seeded owner`, async ({ page }) => {
       const response = await page.goto(path, { waitUntil: "domcontentloaded" });
@@ -34,6 +38,33 @@ test.describe("authenticated workspace", () => {
       await expect(page.locator("body")).not.toContainText(/internal server error/i);
     });
   }
+
+  for (const path of adminPages) {
+    test(`${path} renders for the explicit platform administrator`, async ({ page }) => {
+      const response = await page.goto(path, { waitUntil: "domcontentloaded" });
+      expect(response?.status()).toBeLessThan(400);
+      await expect(page.locator("body")).toContainText(/platform operations/i);
+      await expect(page.locator("body")).not.toContainText(/internal server error/i);
+    });
+  }
+
+  test("admin API rejects a normal tenant API key", async ({ request }) => {
+    const created = await request.post("/api/v1/api-keys", { data: { name: `Admin isolation ${Date.now()}`, environment: "test", projectId: "proj_e2e", scopes: ["read:usage"] } });
+    expect(created.status()).toBe(201);
+    const key = String((await created.json()).data.secret);
+    const response = await request.get("/api/admin/overview", { headers: { authorization: `Bearer ${key}`, "x-ti-e2e-auth": "not-the-e2e-secret" } });
+    expect(response.status()).toBe(403);
+  });
+
+  test("an organization administrator cannot reach platform administration", async ({ request }) => {
+    const response = await request.get("/api/admin/overview", { headers: { ...authHeaders, "x-ti-e2e-user": "user_e2e_org_admin" } });
+    expect(response.status()).toBe(403);
+  });
+
+  test("an organization administrator is denied the platform console", async ({ request }) => {
+    const response = await request.get("/admin", { headers: { ...authHeaders, "x-ti-e2e-user": "user_e2e_org_admin" } });
+    expect(response.status()).toBe(404);
+  });
 
   test("project lifecycle is tenant scoped", async ({ request }) => {
     const name = `Playwright Project ${Date.now()}`;

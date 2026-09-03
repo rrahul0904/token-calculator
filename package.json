@@ -15,10 +15,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:verify": "tsx scripts/verify-schema.ts",
+    "admin:rollup": "tsx scripts/admin-rollup.ts",
+    "admin:grant": "tsx scripts/grant-platform-admin.ts",
     "db:check": "drizzle-kit check",
     "sdk:build": "npm --prefix packages/sdk-typescript run build",
     "ti": "tsx scripts/ti.ts",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run db:check && npm run sdk:build && npm run build"
+    "predeploy": "npm run lint && npm run typecheck && npm test && npm run db:check && npm run db:migrate && npm run db:verify && TOKEN_INTELLIGENCE_INTEGRATION_TESTS=1 npm run test:integration && TOKEN_INTELLIGENCE_E2E_SEED=1 npx tsx scripts/seed-e2e.ts && npm run admin:rollup && npm run admin:rollup && npm run sdk:build && PYTHONPATH=packages/sdk-python python3 -c \"from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError; assert TokenIntelligenceClient and TokenIntelligenceError\" && npm run ti -- --help && npm run build && npm run test:e2e && vercel build --yes",
+    "verify": "npm run predeploy"
   },
   "engines": {
     "node": "22.x"

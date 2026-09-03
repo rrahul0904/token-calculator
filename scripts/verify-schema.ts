@@ -11,6 +11,7 @@ const requiredTables = [
   "provider_usage_imports", "provider_usage_import_rows", "anomalies", "prompt_config_versions", "run_config_attributions",
   "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results",
   "workos_directory_events", "workos_directory_users", "workos_directory_groups", "organization_data_controls",
+  "platform_admins", "platform_admin_audit_events", "platform_cost_entries", "platform_daily_metrics",
   "_token_intelligence_migrations",
 ];
 
@@ -22,6 +23,7 @@ const requiredMigrations = [
   "0004_provider_usage_import_rows.sql",
   "0005_enterprise_directory_lifecycle.sql",
   "0006_data_controls.sql",
+  "0007_platform_admin_operations.sql",
 ];
 
 const requiredTriggers = [
@@ -39,6 +41,14 @@ const requiredTriggers = [
   "ti_experiment_results_experiment_tenant",
   "ti_experiment_results_run_tenant",
   "ti_provider_usage_import_rows_import_tenant",
+];
+
+const requiredIndexes = [
+  "platform_admins_workos_user_uq", "platform_admins_active_idx",
+  "platform_admin_audit_time_idx", "platform_admin_audit_actor_idx",
+  "platform_cost_entries_time_idx", "platform_cost_entries_service_idx",
+  "users_created_at_idx", "organizations_created_at_idx",
+  "subscriptions_status_created_idx", "llm_calls_started_at_idx",
 ];
 
 async function main() {
@@ -75,6 +85,13 @@ async function main() {
     const missingTriggers = requiredTriggers.filter((name) => !triggerNames.has(name));
     if (missingTriggers.length) throw new Error(`MISSING_REQUIRED_TRIGGERS:${missingTriggers.join(",")}`);
 
+    const indexRows = await sql<{ indexname: string }[]>`
+      select indexname from pg_indexes where schemaname = 'public'
+    `;
+    const indexNames = new Set(indexRows.map((row) => row.indexname));
+    const missingIndexes = requiredIndexes.filter((name) => !indexNames.has(name));
+    if (missingIndexes.length) throw new Error(`MISSING_REQUIRED_INDEXES:${missingIndexes.join(",")}`);
+
     const foreignKeyRows = await sql<{ count: string }[]>`
       select count(*)::text as count
       from information_schema.table_constraints
@@ -86,6 +103,7 @@ async function main() {
       tables: requiredTables.length,
       migrations: migrationRows.map((row) => ({ name: row.name, checksum: row.checksum })),
       requiredTriggers: requiredTriggers.length,
+      requiredIndexes: requiredIndexes.length,
       foreignKeys: Number(foreignKeyRows[0]?.count ?? 0),
     }, null, 2));
   } finally {

@@ -36,6 +36,14 @@ async function getExplicitE2eSession(): Promise<ExternalAuthSession | null> {
   if (!secret || process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED !== "1") return null;
   const incoming = (await headers()).get("x-ti-e2e-auth");
   if (!incoming || !safeEqual(incoming, secret)) return null;
+  const selectedUserId = (await headers()).get("x-ti-e2e-user");
+  const secondaryUserId = process.env.TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_ID;
+  if (selectedUserId && secondaryUserId && safeEqual(selectedUserId, secondaryUserId)) {
+    const email = process.env.TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_EMAIL;
+    const organizationId = process.env.TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID;
+    if (!email || !organizationId) return null;
+    return { userId: secondaryUserId, email, name: "Token Intelligence E2E Organization Admin", workosOrganizationId: organizationId };
+  }
   const userId = process.env.TOKEN_INTELLIGENCE_E2E_USER_ID;
   const email = process.env.TOKEN_INTELLIGENCE_E2E_USER_EMAIL;
   const organizationId = process.env.TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID;
