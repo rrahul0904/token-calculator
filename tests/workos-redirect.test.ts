@@ -14,13 +14,21 @@ afterEach(() => {
 });
 
 describe("WorkOS redirect URI resolution", () => {
-  it("uses the exact Vercel deployment URL for previews", () => {
+  it("prefers an explicitly configured Preview callback over a stale Vercel URL", () => {
     process.env.VERCEL_ENV = "preview";
     process.env.VERCEL_URL = "token-intelligence-preview.example.vercel.app";
-    process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI = "https://production.example.com/auth/callback";
+    process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI = "https://token-intelligence-pr6.example.vercel.app/auth/callback";
+
+    expect(configuredWorkosRedirectUri()).toBe("https://token-intelligence-pr6.example.vercel.app/auth/callback");
+    expect(hasConfiguredWorkosRedirectUri()).toBe(true);
+  });
+
+  it("falls back to the Vercel deployment URL for previews without an explicit callback", () => {
+    process.env.VERCEL_ENV = "preview";
+    process.env.VERCEL_URL = "token-intelligence-preview.example.vercel.app";
+    delete process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI;
 
     expect(configuredWorkosRedirectUri()).toBe("https://token-intelligence-preview.example.vercel.app/auth/callback");
-    expect(hasConfiguredWorkosRedirectUri()).toBe(true);
   });
 
   it("prefers the canonical configured callback in production", () => {
