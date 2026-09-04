@@ -21,6 +21,7 @@ export interface OpenRouterNormalizedEndpoint {
 
 function moneyPerMillion(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number") return null;
+  if (typeof value === "string" && value.trim() === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
   return parsed * PER_TOKEN_TO_PER_MILLION;
@@ -64,6 +65,11 @@ export function normalizeOpenRouterPayload(payload: unknown, observedAt = new Da
     }];
   });
   if (rows.length === 0) throw new Error("OPENROUTER_EMPTY_CATALOG");
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (ids.has(row.id)) throw new Error("OPENROUTER_DUPLICATE_MODEL_ID");
+    ids.add(row.id);
+  }
   return rows;
 }
 
