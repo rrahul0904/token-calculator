@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site-header";
+import { PulseAtlasPageView } from "@/components/pulseatlas-page-view";
 import "./globals.css";
 import "./features.css";
 import "./commercial.css";
@@ -13,5 +14,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" suppressHydrationWarning><body><SiteHeader />{children}</body></html>;
+  return <html lang="en" suppressHydrationWarning><body><PulseAtlasPageView /><SiteHeader />{children}</body></html>;
 }
