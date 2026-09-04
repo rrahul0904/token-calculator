@@ -43,6 +43,16 @@ This repository is a clean-room implementation inspired by observable behaviors 
 - `/pricing` packaging for Free / Pro / Team / Enterprise
 - no fake checkout or fake subscriptions before billing infrastructure exists
 
+## Product and reverse-engineering blueprints
+
+The repository now has two complementary Codex execution tracks:
+
+- [Product Logic & Feature Plan](./docs/PRODUCT_LOGIC_AND_FEATURE_PLAN.md) — canonical product loops, calculator/pricing/tokenizer/API logic, page map, domain model, SaaS roadmap, and quality gates.
+- [Codex Vibe Reverse-Engineering Prompt](./docs/CODEX_VIBE_REVERSE_ENGINEERING_PROMPT.md) — clean-room end-to-end audit and implementation prompt focused on Token-Calculator.net parity plus deliberate improvements.
+- [Agent Economics Platform Prompt](./docs/CODEX_AGENT_ECONOMICS_PLATFORM_IMPLEMENTATION_PROMPT.md) — later-stage AI FinOps, agent observability, MCP, gateway, policy, and enterprise evolution.
+
+Use the vibe reverse-engineering prompt for the public product/parity pass. Use the Agent Economics prompt after the calculator/developer foundation is stable.
+
 ## Run locally
 
 ```bash
@@ -70,10 +80,13 @@ The public browser calculator keeps submitted prompt text in the browser and per
 
 See [`COMPETITIVE_PARITY.md`](./COMPETITIVE_PARITY.md) for the current observable-feature comparison against Token-Calculator.net.
 
+The clean-room reference audit must be refreshed before major parity work because model catalogs, pricing, public routes, and subscription packaging can change.
+
 ## Next production wave
 
 The next wave turns the toolkit into a real SaaS / enterprise AI FinOps product:
 
+- refresh the live Token-Calculator.net parity audit and close remaining product-quality gaps
 - authentication and organizations
 - Postgres-backed projects and saved scenarios
 - Stripe subscriptions and entitlement enforcement
