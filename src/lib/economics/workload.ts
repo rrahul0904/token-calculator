@@ -1,5 +1,6 @@
 import { pricingForInput } from "@/lib/cost";
 import { MODEL_CATALOG, type ModelCatalogEntry, type ModelPricing } from "@/lib/models";
+import { endpointById, isPricingStale } from "@/lib/pricing/catalog";
 
 export type WorkloadMode = "tokens2cost" | "cost2tokens";
 
@@ -43,10 +44,14 @@ export interface WorkloadEstimate {
   modelId: string;
   modelName: string;
   provider: string;
+  endpointId: string | null;
+  inferenceProvider: string;
   pricingTier: string;
-  pricing: ModelPricing;
+  pricing: ModelPricing & { cacheWrite?: number };
   pricingVerifiedAt: string;
   pricingSourceUrl: string;
+  pricingSourceLabel: string;
+  pricingStale: boolean;
   buckets: CacheBuckets;
   cost: MoneyBreakdown;
   noCacheCostUsd: number | null;
@@ -151,17 +156,7 @@ export function deriveCacheBuckets(
   const cacheWrite5mTokens = Math.round(cacheMissTokens * write5Pct / 100);
   const cacheWrite1hTokens = Math.round(cacheMissTokens * write1Pct / 100);
   const freshInputTokens = Math.max(0, inputTokens - cachedReadTokens - cacheWrite5mTokens - cacheWrite1hTokens);
-  return {
-    inputTokens,
-    outputTokens,
-    cacheableInputTokens,
-    cachedReadTokens,
-    cacheMissTokens,
-    dynamicInputTokens,
-    cacheWrite5mTokens,
-    cacheWrite1hTokens,
-    freshInputTokens,
-  };
+  return { inputTokens, outputTokens, cacheableInputTokens, cachedReadTokens, cacheMissTokens, dynamicInputTokens, cacheWrite5mTokens, cacheWrite1hTokens, freshInputTokens };
 }
 
 function componentCost(tokens: number, rate: number | undefined): number | null {
@@ -180,47 +175,45 @@ export function modelForWorkload(modelId: string): ModelCatalogEntry | null {
 }
 
 export function estimateWorkload(model: ModelCatalogEntry, scenario: WorkloadScenario): WorkloadEstimate {
-  const buckets = deriveCacheBuckets(
-    scenario.totalTokens,
-    scenario.inputPercent,
-    scenario.cacheableInputPercent,
-    scenario.cacheHitPercent,
-    scenario.cacheWrite5mPercent,
-    scenario.cacheWrite1hPercent,
-  );
-  const { pricing, tier } = pricingForInput(model, buckets.inputTokens);
+  const buckets = deriveCacheBuckets(scenario.totalTokens, scenario.inputPercent, scenario.cacheableInputPercent, scenario.cacheHitPercent, scenario.cacheWrite5mPercent, scenario.cacheWrite1hPercent);
+  const requestedEndpoint = endpointById(scenario.endpointId);
+  const endpoint = requestedEndpoint?.modelId === model.id ? requestedEndpoint : null;
+  const modelTier = pricingForInput(model, buckets.inputTokens);
+  const pricing = endpoint?.pricing ?? modelTier.pricing;
+  const tier = endpoint ? endpoint.inferenceProvider + " endpoint" : modelTier.tier;
   const freshInputUsd = componentCost(buckets.freshInputTokens, pricing.input);
   const cachedReadUsd = componentCost(buckets.cachedReadTokens, pricing.cachedInput);
-  const cacheWrite5mUsd = componentCost(buckets.cacheWrite5mTokens, pricing.cacheWrite5m);
-  const cacheWrite1hUsd = componentCost(buckets.cacheWrite1hTokens, pricing.cacheWrite1h);
+  const cacheWrite5mUsd = componentCost(buckets.cacheWrite5mTokens, pricing.cacheWrite5m ?? endpoint?.pricing.cacheWrite);
+  const cacheWrite1hUsd = componentCost(buckets.cacheWrite1hTokens, pricing.cacheWrite1h ?? endpoint?.pricing.cacheWrite);
   const outputUsd = componentCost(buckets.outputTokens, pricing.output);
   const totalUsd = sumKnown([freshInputUsd, cachedReadUsd, cacheWrite5mUsd, cacheWrite1hUsd, outputUsd]);
-  const noCacheCostUsd = sumKnown([
-    componentCost(buckets.inputTokens, pricing.input),
-    componentCost(buckets.outputTokens, pricing.output),
-  ]);
+  const noCacheCostUsd = sumKnown([componentCost(buckets.inputTokens, pricing.input), componentCost(buckets.outputTokens, pricing.output)]);
   const cacheSavingsUsd = totalUsd === null || noCacheCostUsd === null ? null : noCacheCostUsd - totalUsd;
-  const cacheSavingsPercent = cacheSavingsUsd === null || noCacheCostUsd === null || noCacheCostUsd === 0
-    ? null
-    : cacheSavingsUsd / noCacheCostUsd * 100;
+  const cacheSavingsPercent = cacheSavingsUsd === null || noCacheCostUsd === null || noCacheCostUsd === 0 ? null : cacheSavingsUsd / noCacheCostUsd * 100;
   const monthlyCostUsd = totalUsd === null ? null : totalUsd * Math.max(0, finite(scenario.requestsPerMonth));
+  const contextWindow = endpoint?.contextWindow ?? model.contextWindow;
   const contextTotal = buckets.inputTokens + buckets.outputTokens;
+  const provenance = endpoint?.provenance;
   return {
     modelId: model.id,
     modelName: model.name,
     provider: model.provider,
+    endpointId: endpoint?.id ?? null,
+    inferenceProvider: endpoint?.inferenceProvider ?? model.provider,
     pricingTier: tier,
     pricing,
-    pricingVerifiedAt: model.verifiedAt,
-    pricingSourceUrl: model.sourceUrl,
+    pricingVerifiedAt: provenance?.verifiedAt ?? model.verifiedAt,
+    pricingSourceUrl: provenance?.sourceUrl ?? model.sourceUrl,
+    pricingSourceLabel: provenance?.sourceLabel ?? model.sourceLabel,
+    pricingStale: provenance ? isPricingStale(provenance) : false,
     buckets,
     cost: { freshInputUsd, cachedReadUsd, cacheWrite5mUsd, cacheWrite1hUsd, outputUsd, totalUsd },
     noCacheCostUsd,
     cacheSavingsUsd,
     cacheSavingsPercent,
     monthlyCostUsd,
-    contextFits: contextTotal <= model.contextWindow,
-    contextUtilizationPercent: model.contextWindow > 0 ? Math.min(999, contextTotal / model.contextWindow * 100) : 0,
+    contextFits: contextWindow === null ? true : contextTotal <= contextWindow,
+    contextUtilizationPercent: contextWindow && contextWindow > 0 ? Math.min(999, contextTotal / contextWindow * 100) : 0,
   };
 }
 
@@ -229,7 +222,6 @@ export function solveTokensForBudget(model: ModelCatalogEntry, scenario: Workloa
   if (budget === 0) return estimateWorkload(model, { ...scenario, totalTokens: 0, mode: "tokens2cost" });
   const probe = estimateWorkload(model, { ...scenario, totalTokens: 1_000_000, mode: "tokens2cost" });
   if (probe.cost.totalUsd === null || probe.cost.totalUsd <= 0) return null;
-
   let low = 0;
   let high = 1_000_000;
   while (high < MAX_PLANNING_TOKENS) {
@@ -240,7 +232,6 @@ export function solveTokensForBudget(model: ModelCatalogEntry, scenario: Workloa
     high = Math.min(MAX_PLANNING_TOKENS, high * 2);
     if (high === MAX_PLANNING_TOKENS) break;
   }
-
   for (let index = 0; index < 64 && low + 1 < high; index += 1) {
     const mid = Math.floor((low + high) / 2);
     const estimate = estimateWorkload(model, { ...scenario, totalTokens: mid, mode: "tokens2cost" });
@@ -257,8 +248,8 @@ export function resolveScenarioEstimate(scenario: WorkloadScenario): WorkloadEst
 }
 
 export function compareWithPinned(baselineModel: ModelCatalogEntry, candidateModel: ModelCatalogEntry, scenario: WorkloadScenario): PinnedComparison {
-  const baseline = estimateWorkload(baselineModel, scenario);
-  const candidate = estimateWorkload(candidateModel, scenario);
+  const baseline = estimateWorkload(baselineModel, { ...scenario, modelId: baselineModel.id, endpointId: baselineModel.id === scenario.modelId ? scenario.endpointId : null });
+  const candidate = estimateWorkload(candidateModel, { ...scenario, modelId: candidateModel.id, endpointId: candidateModel.id === scenario.modelId ? scenario.endpointId : null });
   const baseCost = baseline.cost.totalUsd;
   const candidateCost = candidate.cost.totalUsd;
   const requestCostDeltaUsd = baseCost === null || candidateCost === null ? null : candidateCost - baseCost;
@@ -270,32 +261,20 @@ export function compareWithPinned(baselineModel: ModelCatalogEntry, candidateMod
     requestCostDeltaUsd,
     requestCostDeltaPercent,
     monthlyCostDeltaUsd,
-    classification: baselineModel.id === candidateModel.id
-      ? "same_model"
-      : baselineModel.provider === candidateModel.provider ? "same_provider" : "economic_alternative",
+    classification: baselineModel.id === candidateModel.id ? "same_model" : baselineModel.provider === candidateModel.provider ? "same_provider" : "economic_alternative",
     qualityEquivalent: false,
   };
 }
 
 export function computeCostQualityFrontier(candidates: FrontierCandidate[]): FrontierResult {
-  const evidenced = candidates.filter((candidate) =>
-    candidate.costUsd !== null &&
-    candidate.qualityScore !== null &&
-    candidate.qualityEvidence?.sourceUrl &&
-    Number.isFinite(candidate.costUsd) &&
-    Number.isFinite(candidate.qualityScore),
-  );
+  const evidenced = candidates.filter((candidate) => candidate.costUsd !== null && candidate.qualityScore !== null && candidate.qualityEvidence?.sourceUrl && Number.isFinite(candidate.costUsd) && Number.isFinite(candidate.qualityScore));
   const frontier = evidenced.filter((candidate) => !evidenced.some((other) => {
     if (other.id === candidate.id) return false;
     const noWorse = (other.costUsd as number) <= (candidate.costUsd as number) && (other.qualityScore as number) >= (candidate.qualityScore as number);
     const strictlyBetter = (other.costUsd as number) < (candidate.costUsd as number) || (other.qualityScore as number) > (candidate.qualityScore as number);
     return noWorse && strictlyBetter;
   })).sort((a, b) => (a.costUsd as number) - (b.costUsd as number));
-  return {
-    candidates: evidenced,
-    frontier,
-    omittedWithoutEvidence: candidates.filter((candidate) => !evidenced.includes(candidate)).map((candidate) => candidate.id),
-  };
+  return { candidates: evidenced, frontier, omittedWithoutEvidence: candidates.filter((candidate) => !evidenced.includes(candidate)).map((candidate) => candidate.id) };
 }
 
 function queryNumber(params: URLSearchParams, key: string, fallback: number) {
@@ -306,16 +285,15 @@ function queryNumber(params: URLSearchParams, key: string, fallback: number) {
 }
 
 export function parseWorkloadQuery(input: string | URLSearchParams): WorkloadScenario {
-  const params = typeof input === "string"
-    ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input)
-    : input;
+  const params = typeof input === "string" ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input) : input;
   const mode = params.get("mode") === "cost2tokens" ? "cost2tokens" : "tokens2cost";
   const requestedModel = params.get("model") ?? DEFAULT_WORKLOAD_SCENARIO.modelId;
   const modelId = MODEL_CATALOG.some((model) => model.id === requestedModel) ? requestedModel : DEFAULT_WORKLOAD_SCENARIO.modelId;
+  const endpointId = params.get("endpoint");
   return {
     mode,
     modelId,
-    endpointId: params.get("endpoint"),
+    endpointId: endpointById(endpointId)?.modelId === modelId ? endpointId : null,
     pinnedModelId: params.get("pin"),
     totalTokens: clampPlanningTokens(queryNumber(params, "tokens", DEFAULT_WORKLOAD_SCENARIO.totalTokens)),
     budgetUsd: Math.max(0, queryNumber(params, "budget", DEFAULT_WORKLOAD_SCENARIO.budgetUsd)),

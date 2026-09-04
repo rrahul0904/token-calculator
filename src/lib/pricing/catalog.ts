@@ -43,7 +43,7 @@ const directEndpoints: InferenceEndpointProfile[] = MODEL_CATALOG.map((model) =>
     staleAfterHours: model.provider === "Z.AI" ? 24 : 168,
     promotional: Boolean(model.pricingLabel?.toLowerCase().includes("promo") || model.pricingLabel?.toLowerCase().includes("off")),
   },
-  status: model.status ?? "active",
+  status: model.status === "legacy" ? "legacy" : model.status === "preview" ? "preview" : "active",
 }));
 
 const routedEndpoints: InferenceEndpointProfile[] = [
