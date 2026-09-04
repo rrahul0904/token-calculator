@@ -8,6 +8,10 @@ function numeric(value: string | null) {
   return value === null ? null : Number(value);
 }
 
+function overridden(values: Record<string, number | null>, key: string, fallback: number | null) {
+  return Object.prototype.hasOwnProperty.call(values, key) ? values[key] ?? null : fallback;
+}
+
 export async function effectivePublishedPricing(modelId?: string | null) {
   if (!isDatabaseConfigured()) {
     return {
@@ -75,10 +79,10 @@ export async function effectivePublishedPricing(modelId?: string | null) {
         maxOutputTokens: row.maxOutputTokens,
         status: row.status,
         pricing: {
-          input: values.input ?? numeric(row.input),
-          cachedInput: values.cachedInput ?? numeric(row.cachedInput),
-          cacheWrite: values.cacheWrite ?? numeric(row.cacheWrite),
-          output: values.output ?? numeric(row.output),
+          input: overridden(values, "input", numeric(row.input)),
+          cachedInput: overridden(values, "cachedInput", numeric(row.cachedInput)),
+          cacheWrite: overridden(values, "cacheWrite", numeric(row.cacheWrite)),
+          output: overridden(values, "output", numeric(row.output)),
         },
         provenance: {
           sourceType: "openrouter",
