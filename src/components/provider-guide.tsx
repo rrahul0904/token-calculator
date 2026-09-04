@@ -65,7 +65,7 @@ export function ProviderGuide({ provider, eyebrow, title, description, countingN
                 const resolved = resolvePricing({ model, inputTokens: 0 });
                 return (
                 <tr key={model.id}>
-                  <td><strong>{model.name}</strong><span>{model.pricingLabel ?? model.status ?? "current"}</span></td>
+                  <td><strong>{model.name}</strong><span>{resolved.tier}</span></td>
                   <td>{formatTokens(model.contextWindow)}<span>{model.maxOutput ? formatTokens(model.maxOutput) + " max output" : null}</span></td>
                   <td>{"$" + resolved.pricing.input}</td>
                   <td>{resolved.pricing.cachedInput === undefined ? "Not offered" : "$" + resolved.pricing.cachedInput}</td>
