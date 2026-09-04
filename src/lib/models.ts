@@ -1,6 +1,6 @@
 import type { TokenizerFamily } from "@/types/tokenizer";
 
-export type ProviderName = "OpenAI" | "Anthropic" | "Google" | "DeepSeek" | "xAI";
+export type ProviderName = "OpenAI" | "Anthropic" | "Google" | "DeepSeek" | "xAI" | "Z.AI";
 
 export type ModelPricing = {
   input: number;
@@ -78,9 +78,10 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
   { id: "grok-4.6", name: "Grok 4.6", provider: "xAI", tokenizer: "grok-estimate", tokenizerAccuracy: "estimate", contextWindow: 500_000, maxOutput: null, pricing: { input: 2, cachedInput: 0.5, output: 6 }, sourceUrl: "https://docs.x.ai/developers/models/grok-4.6", sourceLabel: "xAI model docs", verifiedAt: "2026-08-30", note: "xAI publishes higher long-context rates at 200K+ prompt tokens; the catalog keeps the short-context rate until the tier is represented explicitly." },
   { id: "deepseek-v4-flash-offpeak", name: "DeepSeek V4 Flash — Off-peak", provider: "DeepSeek", tokenizer: "deepseek-estimate", tokenizerAccuracy: "estimate", contextWindow: 1_000_000, maxOutput: 384_000, pricing: { input: 0.22, cachedInput: 0.007, output: 0.66 }, pricingLabel: "Off-peak", sourceUrl: "https://api-docs.deepseek.com/quick_start/pricing/", sourceLabel: "DeepSeek pricing docs", verifiedAt: "2026-08-30" },
   { id: "deepseek-v4-flash-peak", name: "DeepSeek V4 Flash — Peak", provider: "DeepSeek", tokenizer: "deepseek-estimate", tokenizerAccuracy: "estimate", contextWindow: 1_000_000, maxOutput: 384_000, pricing: { input: 0.44, cachedInput: 0.014, output: 1.32 }, pricingLabel: "Peak", sourceUrl: "https://api-docs.deepseek.com/quick_start/pricing/", sourceLabel: "DeepSeek pricing docs", verifiedAt: "2026-08-30" },
+  { id: "glm-5.3-flash", name: "GLM 5.3 Flash", provider: "Z.AI", tokenizer: "deepseek-estimate", tokenizerAccuracy: "estimate", contextWindow: 1_310_720, maxOutput: 131_072, pricing: { input: 0.075, cachedInput: 0.015, output: 0.25 }, pricingLabel: "OpenRouter routed pricing observed 2026-09-04", sourceUrl: "https://openrouter.ai/z-ai/glm-5.3-flash", sourceLabel: "OpenRouter model pricing", verifiedAt: "2026-09-04", note: "Canonical Z.AI model with OpenRouter routed pricing. Tokenization remains an estimate until provider-measured usage is available." },
 ];
 
-export const PROVIDERS: ProviderName[] = ["OpenAI", "Anthropic", "Google", "xAI", "DeepSeek"];
+export const PROVIDERS: ProviderName[] = ["OpenAI", "Anthropic", "Google", "xAI", "DeepSeek", "Z.AI"];
 
 export function modelsByProvider(provider: ProviderName) {
   return MODEL_CATALOG.filter((model) => model.provider === provider);
