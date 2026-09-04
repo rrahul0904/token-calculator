@@ -212,3 +212,26 @@ VERIFY
 - do not fake external integrations
 - keep business logic in shared domain modules rather than page components
 - require lint/typecheck/tests/build for each production wave
+
+## Wave 1C.2 — Tokenizer, pricing, calculator and API hardening
+
+Implementation branch: `wave-1c2-tokenizer-pricing-ux-api`
+
+Scope:
+
+- canonical tokenizer registry with `exact | provider_reference | compatible_family | estimated`
+- worker results keyed by tokenizer family instead of provider-specific counter fields
+- bounded token-piece rendering with explicit hidden-count feedback
+- effective-dated pricing versions and source-aware resolver
+- promotion and long-context boundary semantics
+- "cache not offered" billing correctness
+- model-aware context headroom and overflow state
+- privacy-safe shareable workload URLs
+- backward-compatible `/api/v1/tokenize` model and token-piece options
+- canonical site-origin configuration
+- provider canonical/OpenGraph metadata and structured data
+- mobile/accessibility/privacy E2E coverage
+
+Do not merge the separate platform-admin/release-control PR #6 as part of this wave.
+
+Definition of done is the Wave 1C.2 Codex prompt plus fully green repository CI.
