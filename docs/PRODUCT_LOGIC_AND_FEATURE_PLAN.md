@@ -1135,3 +1135,21 @@ P2:
 - verified savings
 
 This extension should make Token Intelligence stronger than either reference individually: Token-Calculator.net informs the tokenization/planning wedge; tokencalc-seven informs the shareable workload-economics wedge; the existing authenticated platform supplies the FinOps control loop.
+
+## Wave 1C.2 domain implementation
+
+The public calculator now treats tokenizer precision, pricing time, and share-state privacy as domain concepts.
+
+Canonical rules:
+
+- tokenizer results are keyed by tokenizer family and always carry precision metadata
+- anonymous tokenization remains browser-local
+- token-piece rendering is bounded and truncation is disclosed
+- shareable URLs contain workload numbers only, never pasted text
+- pricing versions have effective dates and provenance
+- cost calculations may resolve pricing at an explicit execution timestamp
+- unsupported cache discounts do not become zero-cost cached tokens
+- selected-model context headroom is the calculator's context truth
+- the public tokenize API preserves the legacy request while exposing optional model-aware precision/pieces
+
+The pricing decision record is `docs/ADR_VERSIONED_PRICING_ENGINE.md`.
