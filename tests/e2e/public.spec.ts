@@ -74,3 +74,79 @@ test("sitemap exposes the public calculator, tools, and provider guides", async 
   expect(body).toContain("/guides/anthropic");
   expect(body).toContain("/guides/gemini");
 });
+
+
+test("calculator exposes tokenizer precision and bounded token inspection", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Prompt, context, document or code").fill("hello world from the local tokenizer");
+  await expect(page.getByText("Provider reference", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Inspect token boundaries/i)).toBeVisible();
+
+  await page.getByLabel("Planning model").selectOption("claude-sonnet-5");
+  await expect(page.getByText("Planning estimate", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Token-piece inspection is unavailable/i)).toBeVisible();
+});
+
+test("safe shared workload restores numeric state and can surface context overflow", async ({ page }) => {
+  await page.goto("/?mode=tokens&tokens=2000000&outputPct=50&cached=40&requests=100000&model=gpt-5.6-sol", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#token-count")).toHaveValue("2000000");
+  await expect(page.getByLabel("Planning model")).toHaveValue("gpt-5.6-sol");
+  await expect(page.getByLabel("Cached input percentage")).toHaveValue("40");
+  await expect(page.getByLabel("Requests per month")).toHaveValue("100000");
+  await expect(page.locator(".calculator-summary")).toContainText("Overflow");
+});
+
+test("copy scenario link never copies pasted prompt content", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
+  const sentinel = "PRIVATE_SHARE_SENTINEL_3185b6";
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Prompt, context, document or code").fill(sentinel);
+  await page.getByRole("button", { name: "Copy scenario link" }).click();
+  await expect(page.getByRole("status")).toContainText(/without prompt content/i);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("mode=tokens");
+  expect(copied).not.toContain(sentinel);
+  expect(copied).not.toContain("text=");
+  expect(copied).not.toContain("prompt");
+});
+
+test("primary calculator controls have semantic accessible names", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.getByLabel("Prompt, context, document or code")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Planning model" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy scenario link" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Switch to .* theme/i })).toBeVisible();
+});
+
+test("critical public routes avoid page-level horizontal overflow at required mobile widths", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Explicit viewport matrix runs once; the suite also runs under mobile Chromium.");
+  const sizes = [
+    { width: 320, height: 568 },
+    { width: 375, height: 667 },
+    { width: 390, height: 844 },
+    { width: 768, height: 1024 },
+  ];
+  const routes = [
+    "/",
+    "/models",
+    "/guides",
+    "/guides/openai",
+    "/guides/anthropic",
+    "/guides/gemini",
+    "/tools/cost",
+    "/tools/tokens-words",
+    "/tools/memory",
+    "/tools/speed",
+    "/developers",
+  ];
+
+  for (const size of sizes) {
+    await page.setViewportSize(size);
+    for (const route of routes) {
+      const response = await page.goto(route, { waitUntil: "domcontentloaded" });
+      expect(response?.status(), route + " at " + size.width + "px").toBeLessThan(400);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, route + " at " + size.width + "px").toBeLessThanOrEqual(1);
+    }
+  }
+});
