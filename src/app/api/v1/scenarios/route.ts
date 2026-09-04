@@ -21,6 +21,10 @@ function reply(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+function jsonRecord(value: unknown): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
 export async function GET() {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -70,7 +74,7 @@ export async function POST(request: Request) {
         version: 1,
         pricingSnapshotId: latestPricing?.id ?? null,
         assumptions: workload.success ? workload.data : parsed.data.scenario,
-        result: result ?? {},
+        result: result ? jsonRecord(result) : {},
       });
       return created;
     });
