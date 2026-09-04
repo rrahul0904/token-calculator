@@ -5,7 +5,7 @@ import { calculateCost, contextUsage, monthlyProjection } from "@/lib/cost";
 import { formatCompactMoney, formatMoney, formatTokens } from "@/lib/format";
 import type { ModelCatalogEntry, ProviderName } from "@/lib/models";
 
-const providerMark: Record<ProviderName, string> = { OpenAI: "OA", Anthropic: "AN", Google: "G", DeepSeek: "DS", xAI: "X" };
+const providerMark: Record<ProviderName, string> = { OpenAI: "OA", Anthropic: "AN", Google: "G", DeepSeek: "DS", xAI: "X", "Z.AI": "ZA" };
 type ProviderCardProps = { provider: ProviderName; models: ModelCatalogEntry[]; inputTokensFor: (model: ModelCatalogEntry) => number; outputTokens: number; cachedPercent: number; requestsPerMonth: number };
 
 export function ProviderCard({ provider, models, inputTokensFor, outputTokens, cachedPercent, requestsPerMonth }: ProviderCardProps) {
