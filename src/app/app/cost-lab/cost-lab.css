@@ -7,3 +7,5 @@
 .scenario-save { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 9px; align-items: center; }
 .scenario-save span { color: var(--muted); font-size: .72rem; }
 @media (max-width: 800px) { .cost-lab-prompts, .cost-lab-delta { grid-template-columns: 1fr; } .scenario-save { grid-template-columns: 1fr; } }
+
+.scenario-save { margin-top: 12px; }
