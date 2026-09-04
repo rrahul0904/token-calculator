@@ -94,6 +94,8 @@ export interface FrontierResult {
 }
 
 export const MAX_PLANNING_TOKENS = 1_000_000_000_000_000;
+export const MAX_PLANNING_BUDGET_USD = 1_000_000_000;
+export const MAX_REQUESTS_PER_MONTH = 1_000_000_000_000;
 
 export const DEFAULT_WORKLOAD_SCENARIO: WorkloadScenario = {
   mode: "tokens2cost",
@@ -290,19 +292,20 @@ export function parseWorkloadQuery(input: string | URLSearchParams): WorkloadSce
   const requestedModel = params.get("model") ?? DEFAULT_WORKLOAD_SCENARIO.modelId;
   const modelId = MODEL_CATALOG.some((model) => model.id === requestedModel) ? requestedModel : DEFAULT_WORKLOAD_SCENARIO.modelId;
   const endpointId = params.get("endpoint");
+  const requestedPin = params.get("pin");
   return {
     mode,
     modelId,
     endpointId: endpointById(endpointId)?.modelId === modelId ? endpointId : null,
-    pinnedModelId: params.get("pin"),
+    pinnedModelId: requestedPin && MODEL_CATALOG.some((model) => model.id === requestedPin) ? requestedPin : null,
     totalTokens: clampPlanningTokens(queryNumber(params, "tokens", DEFAULT_WORKLOAD_SCENARIO.totalTokens)),
-    budgetUsd: Math.max(0, queryNumber(params, "budget", DEFAULT_WORKLOAD_SCENARIO.budgetUsd)),
+    budgetUsd: Math.min(MAX_PLANNING_BUDGET_USD, Math.max(0, queryNumber(params, "budget", DEFAULT_WORKLOAD_SCENARIO.budgetUsd))),
     inputPercent: clampPercent(queryNumber(params, "input", DEFAULT_WORKLOAD_SCENARIO.inputPercent)),
     cacheHitPercent: clampPercent(queryNumber(params, "cache", DEFAULT_WORKLOAD_SCENARIO.cacheHitPercent)),
     cacheableInputPercent: clampPercent(queryNumber(params, "cacheable", DEFAULT_WORKLOAD_SCENARIO.cacheableInputPercent)),
     cacheWrite5mPercent: clampPercent(queryNumber(params, "write5m", DEFAULT_WORKLOAD_SCENARIO.cacheWrite5mPercent)),
     cacheWrite1hPercent: clampPercent(queryNumber(params, "write1h", DEFAULT_WORKLOAD_SCENARIO.cacheWrite1hPercent)),
-    requestsPerMonth: Math.max(0, Math.round(queryNumber(params, "requests", DEFAULT_WORKLOAD_SCENARIO.requestsPerMonth))),
+    requestsPerMonth: Math.min(MAX_REQUESTS_PER_MONTH, Math.max(0, Math.round(queryNumber(params, "requests", DEFAULT_WORKLOAD_SCENARIO.requestsPerMonth)))),
   };
 }
 
@@ -314,16 +317,16 @@ function stableNumber(value: number) {
 export function serializeWorkloadQuery(scenario: WorkloadScenario) {
   const params = new URLSearchParams();
   params.set("model", scenario.modelId);
-  if (scenario.endpointId) params.set("endpoint", scenario.endpointId);
+  if (scenario.endpointId && endpointById(scenario.endpointId)?.modelId === scenario.modelId) params.set("endpoint", scenario.endpointId);
   params.set("mode", scenario.mode);
   params.set("tokens", stableNumber(clampPlanningTokens(scenario.totalTokens)));
-  params.set("budget", stableNumber(Math.max(0, finite(scenario.budgetUsd))));
+  params.set("budget", stableNumber(Math.min(MAX_PLANNING_BUDGET_USD, Math.max(0, finite(scenario.budgetUsd)))));
   params.set("input", stableNumber(clampPercent(scenario.inputPercent)));
   params.set("cache", stableNumber(clampPercent(scenario.cacheHitPercent)));
   params.set("cacheable", stableNumber(clampPercent(scenario.cacheableInputPercent)));
   params.set("write5m", stableNumber(clampPercent(scenario.cacheWrite5mPercent)));
   params.set("write1h", stableNumber(clampPercent(scenario.cacheWrite1hPercent)));
-  params.set("requests", stableNumber(Math.max(0, Math.round(finite(scenario.requestsPerMonth)))));
-  if (scenario.pinnedModelId) params.set("pin", scenario.pinnedModelId);
+  params.set("requests", stableNumber(Math.min(MAX_REQUESTS_PER_MONTH, Math.max(0, Math.round(finite(scenario.requestsPerMonth))))));
+  if (scenario.pinnedModelId && MODEL_CATALOG.some((model) => model.id === scenario.pinnedModelId)) params.set("pin", scenario.pinnedModelId);
   return params.toString();
 }
