@@ -181,12 +181,15 @@ export function estimateWorkload(model: ModelCatalogEntry, scenario: WorkloadSce
   const requestedEndpoint = endpointById(scenario.endpointId);
   const endpoint = requestedEndpoint?.modelId === model.id ? requestedEndpoint : null;
   const modelTier = pricingForInput(model, buckets.inputTokens);
-  const pricing = endpoint?.pricing ?? modelTier.pricing;
-  const tier = endpoint ? endpoint.inferenceProvider + " endpoint" : modelTier.tier;
+  const routedEndpoint = endpoint && endpoint.provenance.sourceType !== "official_provider" ? endpoint : null;
+  const pricing = routedEndpoint?.pricing ?? modelTier.pricing;
+  const tier = routedEndpoint
+    ? routedEndpoint.inferenceProvider + " endpoint"
+    : endpoint ? endpoint.inferenceProvider + " · " + modelTier.tier : modelTier.tier;
   const freshInputUsd = componentCost(buckets.freshInputTokens, pricing.input);
   const cachedReadUsd = componentCost(buckets.cachedReadTokens, pricing.cachedInput);
-  const cacheWrite5mUsd = componentCost(buckets.cacheWrite5mTokens, pricing.cacheWrite5m ?? endpoint?.pricing.cacheWrite);
-  const cacheWrite1hUsd = componentCost(buckets.cacheWrite1hTokens, pricing.cacheWrite1h ?? endpoint?.pricing.cacheWrite);
+  const cacheWrite5mUsd = componentCost(buckets.cacheWrite5mTokens, pricing.cacheWrite5m ?? routedEndpoint?.pricing.cacheWrite);
+  const cacheWrite1hUsd = componentCost(buckets.cacheWrite1hTokens, pricing.cacheWrite1h ?? routedEndpoint?.pricing.cacheWrite);
   const outputUsd = componentCost(buckets.outputTokens, pricing.output);
   const totalUsd = sumKnown([freshInputUsd, cachedReadUsd, cacheWrite5mUsd, cacheWrite1hUsd, outputUsd]);
   const noCacheCostUsd = sumKnown([componentCost(buckets.inputTokens, pricing.input), componentCost(buckets.outputTokens, pricing.output)]);
@@ -195,7 +198,8 @@ export function estimateWorkload(model: ModelCatalogEntry, scenario: WorkloadSce
   const monthlyCostUsd = totalUsd === null ? null : totalUsd * Math.max(0, finite(scenario.requestsPerMonth));
   const contextWindow = endpoint?.contextWindow ?? model.contextWindow;
   const contextTotal = buckets.inputTokens + buckets.outputTokens;
-  const provenance = endpoint?.provenance;
+  const provenance = routedEndpoint?.provenance;
+  const directResolved = !routedEndpoint ? modelTier.resolved : null;
   return {
     modelId: model.id,
     modelName: model.name,
@@ -204,8 +208,8 @@ export function estimateWorkload(model: ModelCatalogEntry, scenario: WorkloadSce
     inferenceProvider: endpoint?.inferenceProvider ?? model.provider,
     pricingTier: tier,
     pricing,
-    pricingVerifiedAt: provenance?.verifiedAt ?? model.verifiedAt,
-    pricingSourceUrl: provenance?.sourceUrl ?? model.sourceUrl,
+    pricingVerifiedAt: provenance?.verifiedAt ?? directResolved?.verifiedAt ?? model.verifiedAt,
+    pricingSourceUrl: provenance?.sourceUrl ?? directResolved?.sourceUrl ?? model.sourceUrl,
     pricingSourceLabel: provenance?.sourceLabel ?? model.sourceLabel,
     pricingStale: provenance ? isPricingStale(provenance) : false,
     buckets,
