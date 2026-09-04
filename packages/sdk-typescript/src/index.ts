@@ -1,7 +1,7 @@
 export type UsageSource = "provider_measured" | "agent_measured" | "local_tokenizer_reference" | "estimated" | "reconciled";
 
 export interface TokenIntelligenceClientOptions {
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
@@ -74,11 +74,10 @@ type RequestOptions = { method?: string; body?: unknown; signal?: AbortSignal; h
 export class TokenIntelligenceClient {
   readonly baseUrl: string;
   readonly timeoutMs: number;
-  private readonly apiKey: string;
+  private readonly apiKey?: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: TokenIntelligenceClientOptions) {
-    if (!options.apiKey) throw new Error("Token Intelligence API key is required");
     this.apiKey = options.apiKey;
     this.baseUrl = (options.baseUrl ?? "https://token-intelligence-eight.vercel.app").replace(/\/$/, "");
     this.timeoutMs = options.timeoutMs ?? 30_000;
@@ -92,7 +91,7 @@ export class TokenIntelligenceClient {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method: options.method ?? (options.body === undefined ? "GET" : "POST"),
-        headers: { "authorization": `Bearer ${this.apiKey}`, "accept": "application/json", ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...(options.headers ?? {}) },
+        headers: { ...(this.apiKey ? { "authorization": `Bearer ${this.apiKey}` } : {}), "accept": "application/json", ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...(options.headers ?? {}) },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         signal: combined,
         cache: "no-store",
@@ -110,7 +109,12 @@ export class TokenIntelligenceClient {
     }
   }
 
-  models = { list: (signal?: AbortSignal) => this.request<unknown>("/api/v1/models", { signal }) };
+  tokenize = (input: { text: string; model?: string; includePieces?: boolean; maxPieces?: number }, signal?: AbortSignal) => this.request<unknown>("/api/v1/tokenize", { body: input, signal });
+  models = {
+    list: (signal?: AbortSignal) => this.request<unknown>("/api/v1/models", { signal }),
+    get: (id: string, signal?: AbortSignal) => this.request<unknown>(`/api/v1/models/${encodeURIComponent(id)}`, { signal }),
+    pricingHistory: (id: string, signal?: AbortSignal) => this.request<unknown>(`/api/v1/models/${encodeURIComponent(id)}/pricing-history`, { signal }),
+  };
   estimate = (input: EstimateInput, signal?: AbortSignal) => this.request<unknown>("/api/v1/estimate", { body: input, signal });
   compare = (input: Record<string, unknown>, signal?: AbortSignal) => this.request<unknown>("/api/v1/compare", { body: input, signal });
   recommend = (input: Record<string, unknown>, signal?: AbortSignal) => this.request<unknown>("/api/v1/recommend", { body: input, signal });
@@ -136,7 +140,7 @@ export class TokenIntelligenceClient {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}/api/gateway/${provider}`, {
         method: "POST",
-        headers: { "authorization": `Bearer ${this.apiKey}`, "content-type": "application/json" },
+        headers: { ...(this.apiKey ? { "authorization": `Bearer ${this.apiKey}` } : {}), "content-type": "application/json" },
         body: JSON.stringify(input),
         signal: combined,
         cache: "no-store",
