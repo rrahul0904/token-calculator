@@ -49,7 +49,7 @@ export function diffPricingCatalog(current: NormalizedPricingModel[], candidate:
     const beforeValues = values(before);
     const afterValues = values(after);
     const changes: PricingFieldChange[] = [];
-    for (const field of Object.keys(beforeValues)) {
+    for (const field of Object.keys(beforeValues) as Array<keyof typeof beforeValues>) {
       const previous = beforeValues[field];
       const next = afterValues[field];
       if (previous !== next) changes.push({ field, previous, next, material: MATERIAL_FIELDS.has(field) });
