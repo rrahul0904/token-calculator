@@ -1,7 +1,7 @@
 # Competitive parity wave — Token-Calculator.net
 
 Reference reviewed: https://token-calculator.net/
-Review date: 2026-08-31
+Review date: 2026-09-04
 
 This implementation reproduces useful observable product behaviors independently. It does not copy proprietary source, visual assets, branding, copywriting, or undisclosed implementation details.
 
@@ -103,3 +103,31 @@ These require durable identity/billing infrastructure and should not be simulate
 - SSO / SCIM
 - audit logs / SIEM exports
 - AI gateway enforcement and provider routing
+
+
+## 2026-09-04 live refresh
+
+The latest clean-room audit is recorded in [`docs/LIVE_REFERENCE_AUDIT_2026-09-04.md`](./docs/LIVE_REFERENCE_AUDIT_2026-09-04.md).
+
+### Newly implemented
+
+| Capability | Reference | Token Intelligence | Decision |
+| --- | --- | --- | --- |
+| Provider-specific OpenAI guide | Yes | `/guides/openai` | Added independently |
+| Provider-specific Anthropic guide | Yes | `/guides/anthropic` | Added independently |
+| Provider-specific Gemini guide | Yes | `/guides/gemini` | Added independently |
+| Interactive provider workload/monthly estimate | Yes | Yes | Added using shared cost engine |
+| Public sitemap for calculator/tools/guides | Public discovery surface | `/sitemap.xml` | Added |
+| Prompt network-leak regression | Not observable | Playwright test | Improvement |
+| GPT-5.5 Pro | Yes | Yes | Added from official OpenAI docs |
+| Claude Fable/Mythos 5.1 | Not in audited main table | Yes | Deliberate freshness improvement |
+| Gemini 3.7 Flash | Not in audited main table | Yes | Deliberate freshness improvement |
+
+### Deliberate pricing differences
+
+The reference product is not used as the final pricing authority. Where its table differs from current official provider documentation, Token Intelligence uses the official source.
+
+- GPT-5.6 Sol remains $4 input / $0.40 cached input / $20 output per 1M from OpenAI documentation, even though the audited reference table displayed $5 / $0.50 / $30.
+- Gemini 3.6/3.7 Flash use Google's currently effective introductory $0.75 input / $0.075 cached input / $3.75 output rate through 2026-12-31 rather than the later $1.50 / $0.15 / $7.50 list rate.
+
+This is an intentional product-quality improvement, not a parity defect.
