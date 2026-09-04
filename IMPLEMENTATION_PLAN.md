@@ -69,6 +69,49 @@ Definition of done:
 - docs describe any intentionally different behavior
 - no working Wave 1 / 1B functionality is regressed
 
+
+## Wave 1D — tokencalc-seven workload economics benchmark
+
+Execution artifacts:
+
+- `docs/TOKENCALC_SEVEN_REVERSE_ENGINEERING.md`
+- `docs/TOKENCALC_SEVEN_PRODUCT_LOGIC_FEATURE_PLAN.md`
+- `docs/CODEX_TOKENCALC_SEVEN_VIBE_REVERSE_ENGINEERING_PROMPT.md`
+
+Goal:
+
+Fold the useful observable behavior of the public tokencalc-seven workload calculator into the existing Token Intelligence Cost Lab, then improve it.
+
+Scope:
+
+- reference-compatible shareable query state
+- tokens → cost and cost → tokens
+- total-token + input/output percentage modeling
+- cache-hit-first simple UX
+- advanced cacheable-vs-hit/cache-write economics
+- pinned/reference-model comparison
+- pricing provenance and immutable versions
+- OpenRouter/direct-provider source adapters
+- canonical model vs inference-endpoint pricing
+- workload presets
+- model-efficiency/Pareto frontier when evidence exists
+- save scenario + estimate-vs-actual FinOps connection
+
+Do not create a second standalone calculator. Reuse `src/lib/cost.ts`, `src/lib/economics/**`, current authenticated Cost Lab, usage, runs, budgets, policy, and gateway foundations wherever they are already correct.
+
+Definition of done:
+
+- reference-style URL round-trips deterministically
+- bidirectional calculation passes unit/E2E tests
+- cache assumptions are transparent
+- unknown price is never silently zero
+- pricing provenance/freshness is visible
+- pinned comparison works
+- existing public/tokenizer features are not regressed
+- advanced scenarios can connect to existing FinOps workflows
+- lint/typecheck/tests/build pass
+
+
 ## Wave 2 — SaaS foundation
 
 - authentication
