@@ -27,7 +27,7 @@ function providerSlug(provider: string) {
   return provider.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
-const directEndpoints: InferenceEndpointProfile[] = MODEL_CATALOG.map((model) => ({
+const directEndpoints: InferenceEndpointProfile[] = MODEL_CATALOG.filter((model) => model.provider !== "Z.AI").map((model) => ({
   id: `direct:${providerSlug(model.provider)}:${model.id}`,
   modelId: model.id,
   inferenceProvider: model.provider,
@@ -36,11 +36,11 @@ const directEndpoints: InferenceEndpointProfile[] = MODEL_CATALOG.map((model) =>
   maxOutputTokens: model.maxOutput,
   pricing: model.pricing,
   provenance: {
-    sourceType: model.provider === "Z.AI" ? "openrouter" : "official_provider",
+    sourceType: "official_provider",
     sourceUrl: model.sourceUrl,
     sourceLabel: model.sourceLabel,
     verifiedAt: model.verifiedAt,
-    staleAfterHours: model.provider === "Z.AI" ? 24 : 168,
+    staleAfterHours: 168,
     promotional: Boolean(model.pricingLabel?.toLowerCase().includes("promo") || model.pricingLabel?.toLowerCase().includes("off")),
   },
   status: model.status === "legacy" ? "legacy" : model.status === "preview" ? "preview" : "active",
