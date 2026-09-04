@@ -4,6 +4,8 @@ import { ProviderGuide } from "@/components/provider-guide";
 export const metadata: Metadata = {
   title: "Gemini token and API cost guide",
   description: "Compare current Gemini text pricing, context windows, promotional rates, cached input, and monthly workload cost.",
+  alternates: { canonical: "/guides/gemini" },
+  openGraph: { title: "Gemini token and API cost guide", description: "Plan Gemini token, context, cached-input, and promotional API cost.", url: "/guides/gemini" },
 };
 
 export default function GeminiGuidePage() {

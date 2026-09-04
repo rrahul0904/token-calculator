@@ -1,19 +1,25 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { getPublicSiteUrl } from "@/lib/site-url";
 
-export const metadata: Metadata = { title: "Developers — Token Intelligence" };
+export const metadata: Metadata = {
+  title: "Developers — Token Intelligence",
+  description: "Token Intelligence REST, MCP, SDK, and governed gateway integration documentation.",
+  alternates: { canonical: "/developers" },
+};
 
 const tools = ["estimate_cost", "compare_models", "check_context", "recommend_model", "check_budget", "record_usage", "get_usage", "get_project_spend", "get_run", "find_savings", "explain_cost"];
 
 export default function DevelopersPage() {
+  const siteUrl = getPublicSiteUrl();
   return <main className="page-shell shell">
     <section className="page-hero"><p className="eyebrow">Developer platform</p><h1>Put AI economics inside your tools.</h1><p>Use the REST API for applications, Streamable HTTP MCP for coding agents, local collectors for run receipts, and the governed gateway when you need hard budget enforcement.</p><div className="form-actions"><Link className="button button--primary" href="/openapi.json">OpenAPI 3.1</Link><Link className="button button--ghost" href="/pricing">Plans</Link></div></section>
 
     <div className="docs-grid">
-      <section className="tool-card"><p className="eyebrow">REST</p><h2>Preflight + telemetry</h2><pre><code>{`curl https://token-intelligence-eight.vercel.app/api/v1/estimate \\
+      <section className="tool-card"><p className="eyebrow">REST</p><h2>Preflight + telemetry</h2><pre><code>{`curl ${siteUrl}/api/v1/estimate \\
   -H "Content-Type: application/json" \\
   -d '{"inputTokens":12000,"outputTokens":1200}'`}</code></pre><p className="muted">Public economics endpoints stay usable for acquisition workflows. Tenant data endpoints require a scoped Token Intelligence API key or an authenticated workspace session as documented in OpenAPI.</p></section>
-      <section className="tool-card"><p className="eyebrow">MCP</p><h2>Remote agent tools</h2><pre><code>{`Endpoint: https://token-intelligence-eight.vercel.app/mcp
+      <section className="tool-card"><p className="eyebrow">MCP</p><h2>Remote agent tools</h2><pre><code>{`Endpoint: ${siteUrl}/mcp
 Authorization: Bearer ti_live_...`}</code></pre><p className="muted">MCP is advisory unless the model call itself passes through the governed gateway. It does not magically observe unrelated Codex, Claude Code, Cursor, or Antigravity traffic.</p></section>
       <section className="tool-card"><p className="eyebrow">Gateway</p><h2>Enforce before spend</h2><pre><code>{`POST /api/gateway/openai
 POST /api/gateway/anthropic
@@ -22,6 +28,8 @@ POST /api/gateway/gemini`}</code></pre><p className="muted">Gateway requests eva
 await ti.budgets.check(...);
 await ti.runs.get(runId);`}</code></pre><p className="muted">SDK sources live under <code>packages/sdk-typescript</code> and <code>packages/sdk-python</code>. Secrets are sent only in Authorization headers and are never logged by the client.</p></section>
     </div>
+
+    <section className="tool-card docs-section"><p className="eyebrow">Tokenize API</p><h2>Count with optional model-aware precision metadata.</h2><pre><code>{`curl ${siteUrl}/api/v1/tokenize \\\n  -H "Content-Type: application/json" \\\n  -d '{"text":"hello world","model":"gpt-5.6-sol","includePieces":true,"maxPieces":100}'`}</code></pre><p className="muted">The legacy <code>{"{ \"text\": \"...\" }"}</code> request remains valid. Piece output is bounded, and non-reference tokenizer families are explicitly labeled as estimates.</p></section>
 
     <section className="tool-card docs-section"><p className="eyebrow">MCP tool surface</p><h2>Economics and control without another dashboard tab.</h2><p className="muted">{tools.join(" · ")}</p></section>
 

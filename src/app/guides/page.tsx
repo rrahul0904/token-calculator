@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "LLM pricing guides",
   description: "Provider-specific token, context, and API cost planning guides backed by the same verified pricing catalog as Token Intelligence.",
+  alternates: { canonical: "/guides" },
+  openGraph: { title: "LLM pricing guides", description: "Provider-specific token, context, and API cost planning guides.", url: "/guides" },
 };
 
 const guides = [

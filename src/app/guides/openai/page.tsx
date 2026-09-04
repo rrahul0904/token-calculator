@@ -4,6 +4,8 @@ import { ProviderGuide } from "@/components/provider-guide";
 export const metadata: Metadata = {
   title: "OpenAI token and API cost guide",
   description: "Compare current OpenAI model token pricing, context windows, cache-read rates, long-context tiers, and monthly workload cost.",
+  alternates: { canonical: "/guides/openai" },
+  openGraph: { title: "OpenAI token and API cost guide", description: "Plan OpenAI token, context, cache, and API cost with current sourced pricing.", url: "/guides/openai" },
 };
 
 export default function OpenAiGuidePage() {

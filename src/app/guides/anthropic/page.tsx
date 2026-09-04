@@ -4,6 +4,8 @@ import { ProviderGuide } from "@/components/provider-guide";
 export const metadata: Metadata = {
   title: "Claude token and API cost guide",
   description: "Compare current Claude input, cache, output, context, and monthly workload pricing with explicit tokenizer-estimate labeling.",
+  alternates: { canonical: "/guides/anthropic" },
+  openGraph: { title: "Claude token and API cost guide", description: "Plan Claude token, cache, context, and API cost with explicit estimate labeling.", url: "/guides/anthropic" },
 };
 
 export default function AnthropicGuidePage() {

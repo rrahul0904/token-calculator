@@ -97,3 +97,17 @@ The next wave turns the toolkit into a real SaaS / enterprise AI FinOps product:
 - budgets and alerts
 - RBAC, SSO/SCIM, audit logs
 - provider gateway / routing and policy enforcement
+
+## Wave 1C.2 public-surface hardening
+
+The calculator/developer surface now has:
+
+- a canonical tokenizer registry with explicit `provider_reference` vs `estimated` precision
+- model-aware context headroom and overflow states
+- bounded token-piece inspection
+- privacy-safe share links that never include pasted prompt text
+- effective-dated pricing versions with historical/future resolution
+- a hardened backward-compatible `POST /api/v1/tokenize` request supporting optional `model`, `includePieces`, and bounded `maxPieces`
+- canonical public-site origin configuration, route-specific canonical metadata, provider breadcrumbs, and WebApplication structured data
+
+See `docs/ADR_VERSIONED_PRICING_ENGINE.md` for pricing-version semantics.
