@@ -27,6 +27,28 @@ describe("pricing intelligence", () => {
     expect(() => normalizeOpenRouterPayload({ data: [] })).toThrow("OPENROUTER_EMPTY_CATALOG");
   });
 
+  it("keeps blank, malformed and negative prices unknown instead of zero", () => {
+    const rows = normalizeOpenRouterPayload({
+      data: [{
+        id: "vendor/test",
+        name: "Test",
+        pricing: { prompt: "", completion: "not-a-price", input_cache_read: "-0.01" },
+      }],
+    });
+    expect(rows[0].pricing.input).toBeNull();
+    expect(rows[0].pricing.output).toBeNull();
+    expect(rows[0].pricing.cachedInput).toBeNull();
+  });
+
+  it("rejects duplicate upstream model ids deterministically", () => {
+    expect(() => normalizeOpenRouterPayload({
+      data: [
+        { id: "vendor/test", name: "A", pricing: { prompt: "0.000001", completion: "0.000002" } },
+        { id: "vendor/test", name: "B", pricing: { prompt: "0.000001", completion: "0.000002" } },
+      ],
+    })).toThrow("OPENROUTER_DUPLICATE_MODEL_ID");
+  });
+
   it("keeps canonical model and routed endpoint identity separate", () => {
     expect(endpointsForModel("glm-5.3-flash").length).toBeGreaterThanOrEqual(2);
     const routed = endpointById("openrouter:z-ai/glm-5.3-flash");
