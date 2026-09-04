@@ -33,7 +33,7 @@ Status values:
 | 18 | Estimated vs actual | Run receipts existed separately | Tenant-scoped scenario/run reconciliation | COMPLETE | variance engine/API |
 | 19 | Variance attribution | Missing | Token/count and total-cost drivers without invented dollar causality | COMPLETE | `src/lib/economics/variance.ts` |
 | 20 | Budget/policy/gateway connection | Existing control plane disconnected from planner | Advisory payload maps scenario to existing control concepts | PARTIAL | advisory-only by design; no automatic/apply workflow in this wave |
-| 21 | Test coverage | Existing calculator tests | Unit, pricing, rate-limit, integration and Playwright coverage added | PARTIAL | code added; status becomes fully certified only after final GitHub Actions run passes |
+| 21 | Test coverage | Existing calculator tests | Unit, pricing, rate-limit, integration and Playwright coverage added and release-gated in CI | COMPLETE | CI run #287 / 33916070740 passed secret scan, lint, typecheck, unit, db check/migrate/verify, integration, SDKs, CLI, build and Playwright |
 | 22 | OpenAPI/SDK/docs/runbook | Existing API/SDK contracts | New economics/pricing endpoints in OpenAPI and TS/Python SDKs; operations docs added | COMPLETE | OpenAPI, SDKs, this document, operations runbook |
 
 ## Additional release findings
@@ -80,4 +80,24 @@ Authenticated scenario/run workflows additionally require the repository's exist
 
 ## Final certification
 
-Do not change this document to say the release is fully certified until the latest PR #12 head passes the complete GitHub Actions workflow.
+The implementation code at commit `cc0c03cef11177d2d501e3fc47db34ac2f542f13` passed GitHub Actions CI run `33916070740` (run #287) on 2026-09-04.
+
+Certified gates:
+
+- full-history secret scan — PASS
+- lint — PASS
+- typecheck — PASS
+- unit tests — PASS
+- Drizzle schema check — PASS
+- disposable-PostgreSQL migrations — PASS
+- migrated schema verification — PASS
+- database integration tests — PASS
+- TypeScript SDK build — PASS
+- Python SDK import — PASS
+- CLI help smoke — PASS
+- production build — PASS
+- production server startup — PASS
+- local CLI estimate API smoke — PASS
+- Playwright production smoke — PASS
+
+This documentation-only certification update creates a new branch head; PR readiness still requires GitHub Actions to pass again on that final head before the PR is marked ready for review.
