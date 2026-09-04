@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   if (value.includePieces !== undefined && typeof value.includePieces !== "boolean") {
     return error("invalid_include_pieces", "Field 'includePieces' must be boolean when provided.", 400);
   }
-  if (value.maxPieces !== undefined && (!Number.isInteger(value.maxPieces) || Number(value.maxPieces) < 1 || Number(value.maxPieces) > MAX_PIECES)) {
+  if (value.maxPieces !== undefined && (typeof value.maxPieces !== "number" || !Number.isInteger(value.maxPieces) || value.maxPieces < 1 || value.maxPieces > MAX_PIECES)) {
     return error("invalid_max_pieces", "Field 'maxPieces' must be an integer from 1 to 500.", 400, { maxPieces: MAX_PIECES });
   }
 
