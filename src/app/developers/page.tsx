@@ -29,6 +29,8 @@ await ti.budgets.check(...);
 await ti.runs.get(runId);`}</code></pre><p className="muted">SDK sources live under <code>packages/sdk-typescript</code> and <code>packages/sdk-python</code>. Secrets are sent only in Authorization headers and are never logged by the client.</p></section>
     </div>
 
+    <section className="tool-card docs-section"><p className="eyebrow">Tokenize API</p><h2>Count with optional model-aware precision metadata.</h2><pre><code>{`curl ${siteUrl}/api/v1/tokenize \\\n  -H "Content-Type: application/json" \\\n  -d '{"text":"hello world","model":"gpt-5.6-sol","includePieces":true,"maxPieces":100}'`}</code></pre><p className="muted">The legacy <code>{"{ \"text\": \"...\" }"}</code> request remains valid. Piece output is bounded, and non-reference tokenizer families are explicitly labeled as estimates.</p></section>
+
     <section className="tool-card docs-section"><p className="eyebrow">MCP tool surface</p><h2>Economics and control without another dashboard tab.</h2><p className="muted">{tools.join(" · ")}</p></section>
 
     <section className="tool-card docs-section"><p className="eyebrow">Collection precision</p><h2>Measured and estimated data never get silently mixed.</h2><div className="trust-grid"><div><strong>Codex</strong><h3>Agent measured</h3><p>Local session usage is normalized when observable token counters are available.</p></div><div><strong>Claude Code</strong><h3>Agent measured</h3><p>Cache read/write and model usage are preserved when present in local session records.</p></div><div><strong>Cursor</strong><h3>Estimated</h3><p>Cursor remains explicitly estimated where provider-billed token values are not available.</p></div></div></section>
