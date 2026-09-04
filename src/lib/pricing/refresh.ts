@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { inferenceEndpoints, pricingRates, pricingSnapshots } from "@/db/schema";
 import { fetchOpenRouterCatalog, type OpenRouterNormalizedEndpoint } from "@/lib/pricing/openrouter";
@@ -11,10 +11,9 @@ function decimal(value: number | null) {
 export async function latestPublishedPricingSnapshot(source = "openrouter") {
   if (!isDatabaseConfigured()) return null;
   return (await getDb().select().from(pricingSnapshots)
-    .where(eq(pricingSnapshots.source, source))
+    .where(and(eq(pricingSnapshots.source, source), eq(pricingSnapshots.status, "published")))
     .orderBy(desc(pricingSnapshots.publishedAt))
-    .limit(1))
-    .find((row) => row.status === "published") ?? null;
+    .limit(1))[0] ?? null;
 }
 
 async function persistOpenRouterSnapshot(rows: OpenRouterNormalizedEndpoint[]) {
