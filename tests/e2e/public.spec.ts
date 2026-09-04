@@ -5,6 +5,10 @@ const publicPages = [
   { path: "/models", marker: /model/i },
   { path: "/pricing", marker: /pricing|plan/i },
   { path: "/developers", marker: /developer|API/i },
+  { path: "/guides", marker: /provider guides|pricing/i },
+  { path: "/guides/openai", marker: /OpenAI token cost/i },
+  { path: "/guides/anthropic", marker: /Claude token cost/i },
+  { path: "/guides/gemini", marker: /Gemini token cost/i },
 ];
 
 for (const pageCase of publicPages) {
@@ -40,4 +44,33 @@ test("workspace does not produce a server error when auth is intentionally absen
   const response = await page.goto("/app/overview", { waitUntil: "domcontentloaded" });
   expect(response?.status()).toBeLessThan(500);
   await expect(page.locator("body")).toContainText(/workspace|configuration|sign in/i);
+});
+
+
+test("anonymous calculator does not send pasted text in network request bodies", async ({ page }) => {
+  const sentinel = "PRIVATE_PROMPT_SENTINEL_9f1c7d2a";
+  const leakedRequests: string[] = [];
+
+  page.on("request", (request) => {
+    const body = request.postData();
+    if (body?.includes(sentinel)) leakedRequests.push(request.url());
+  });
+
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Prompt, context, document or code").fill(sentinel);
+  await expect(page.locator(".metrics-strip")).toContainText(/Tokens/i);
+  await page.waitForTimeout(250);
+
+  expect(leakedRequests).toEqual([]);
+});
+
+test("sitemap exposes the public calculator, tools, and provider guides", async ({ request }) => {
+  const response = await request.get("/sitemap.xml");
+  expect(response.status()).toBe(200);
+  const body = await response.text();
+  expect(body).toContain("/models");
+  expect(body).toContain("/tools/cost");
+  expect(body).toContain("/guides/openai");
+  expect(body).toContain("/guides/anthropic");
+  expect(body).toContain("/guides/gemini");
 });
