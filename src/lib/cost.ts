@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry, ModelPricing } from "@/lib/models";
+import { resolvePricing } from "@/lib/pricing";
 
 export type CostInputs = {
   inputTokens: number;
@@ -6,6 +7,7 @@ export type CostInputs = {
   cachedInputTokens?: number;
   cacheWrite5mTokens?: number;
   cacheWrite1hTokens?: number;
+  at?: Date;
 };
 
 export type CostBreakdown = {
@@ -17,6 +19,9 @@ export type CostBreakdown = {
   total: number;
   pricingTier: string;
   effectivePricing: ModelPricing;
+  pricingVersionId: string | null;
+  pricingSourceUrl: string;
+  pricingVerifiedAt: string;
 };
 
 const PER_MILLION = 1_000_000;
@@ -26,24 +31,34 @@ function tokenCost(tokens: number, rate?: number) {
   return (tokens / PER_MILLION) * rate;
 }
 
-export function pricingForInput(model: ModelCatalogEntry, inputTokens: number) {
-  if (model.longContext && inputTokens > model.longContext.threshold) {
-    return { pricing: model.longContext.pricing, tier: model.longContext.label };
-  }
-  return { pricing: model.pricing, tier: model.pricingLabel ?? "Standard" };
+export function pricingForInput(model: ModelCatalogEntry, inputTokens: number, at = new Date()) {
+  const resolved = resolvePricing({ model, inputTokens, at });
+  return { pricing: resolved.pricing, tier: resolved.tier, resolved };
 }
 
 export function calculateCost(model: ModelCatalogEntry, inputs: CostInputs): CostBreakdown {
   const cachedInputTokens = Math.min(Math.max(inputs.cachedInputTokens ?? 0, 0), inputs.inputTokens);
   const uncachedInputTokens = Math.max(inputs.inputTokens - cachedInputTokens, 0);
-  const { pricing, tier } = pricingForInput(model, inputs.inputTokens);
+  const { pricing, tier, resolved } = pricingForInput(model, inputs.inputTokens, inputs.at);
   const input = tokenCost(uncachedInputTokens, pricing.input);
-  const cachedInput = tokenCost(cachedInputTokens, pricing.cachedInput ?? pricing.input);
+  const cachedInput = pricing.cachedInput === undefined ? 0 : tokenCost(cachedInputTokens, pricing.cachedInput);
   const cacheWrite5m = tokenCost(inputs.cacheWrite5mTokens ?? 0, pricing.cacheWrite5m);
   const cacheWrite1h = tokenCost(inputs.cacheWrite1hTokens ?? 0, pricing.cacheWrite1h);
   const output = tokenCost(inputs.outputTokens, pricing.output);
   const total = input + cachedInput + cacheWrite5m + cacheWrite1h + output;
-  return { input, cachedInput, cacheWrite5m, cacheWrite1h, output, total, pricingTier: tier, effectivePricing: pricing };
+  return {
+    input,
+    cachedInput,
+    cacheWrite5m,
+    cacheWrite1h,
+    output,
+    total,
+    pricingTier: tier,
+    effectivePricing: pricing,
+    pricingVersionId: resolved.version?.id ?? null,
+    pricingSourceUrl: resolved.sourceUrl,
+    pricingVerifiedAt: resolved.verifiedAt,
+  };
 }
 
 export function contextUsage(inputTokens: number, outputTokens: number, contextWindow: number) {
