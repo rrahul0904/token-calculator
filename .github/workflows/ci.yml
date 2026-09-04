@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, implementation-v1, observability-control-research, production-wave-2-agent-economics, production-wave-3-full-connectivity, production-wave-4-release-candidate]
+    branches: [main, production-wave-4-release-candidate, reverse-engineering-gap-closure]
   pull_request:
   workflow_dispatch:
 
@@ -23,6 +23,15 @@ jobs:
       TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       APP_BASE_URL: http://127.0.0.1:3000
       NEXT_TELEMETRY_DISABLED: "1"
+      TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED: "1"
+      TOKEN_INTELLIGENCE_E2E_AUTH_SECRET: ci-only-e2e-auth-secret-not-production
+      TOKEN_INTELLIGENCE_E2E_USER_ID: user_e2e_owner
+      TOKEN_INTELLIGENCE_E2E_USER_EMAIL: e2e-owner@token-intelligence.invalid
+      TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID: org_e2e
+      TOKEN_INTELLIGENCE_E2E_PLATFORM_ADMIN: "1"
+      TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_ID: user_e2e_org_admin
+      TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_EMAIL: e2e-org-admin@token-intelligence.invalid
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     services:
       postgres:
         image: postgres:18
@@ -70,6 +79,14 @@ jobs:
         env:
           TOKEN_INTELLIGENCE_INTEGRATION_TESTS: "1"
         run: npm run test:integration
+      - name: Seed authenticated E2E tenant
+        env:
+          TOKEN_INTELLIGENCE_E2E_SEED: "1"
+        run: npx tsx scripts/seed-e2e.ts
+      - name: Daily admin rollup is idempotent
+        run: |
+          npm run admin:rollup
+          npm run admin:rollup
       - name: TypeScript SDK build
         run: npm run sdk:build
       - name: Python SDK import
@@ -80,8 +97,8 @@ jobs:
         run: npm run ti -- --help
       - name: Production build
         run: npm run build
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browser matrix
+        run: npx playwright install --with-deps chromium webkit
       - name: Start production server
         run: |
           npm start > /tmp/token-intelligence-next.log 2>&1 &
@@ -99,3 +116,6 @@ jobs:
         run: npm run ti -- estimate --base-url http://127.0.0.1:3000 --input 1000 --output 200 --cached 100 --requests 10
       - name: Playwright production smoke
         run: npm run test:e2e
+      - name: Vercel output build (no deployment)
+        if: ${{ env.VERCEL_TOKEN != '' }}
+        run: vercel build --yes --scope rrahul0904-5013s-projects

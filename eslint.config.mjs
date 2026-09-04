@@ -19,5 +19,5 @@ export default defineConfig([
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "packages/sdk-typescript/dist/**"]),
+  globalIgnores([".next/**", ".vercel/**", "out/**", "build/**", "coverage/**", "packages/sdk-typescript/dist/**"]),
 ]);

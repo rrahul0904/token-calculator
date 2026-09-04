@@ -36,8 +36,9 @@ test("OpenAPI document is valid 3.1 metadata and served as JSON", async ({ reque
   expect(document.paths).toBeTruthy();
 });
 
-test("workspace does not produce a server error when auth is intentionally absent", async ({ page }) => {
+test("workspace redirects unauthenticated traffic to the explicit auth configuration state", async ({ page }) => {
   const response = await page.goto("/app/overview", { waitUntil: "domcontentloaded" });
-  expect(response?.status()).toBeLessThan(500);
-  await expect(page.locator("body")).toContainText(/workspace|configuration|sign in/i);
+  expect(page.url()).toContain("/sign-in");
+  expect(response?.status()).toBe(503);
+  await expect(page.locator("body")).toContainText(/auth_not_configured|authkit is code-complete but configuration-blocked/i);
 });

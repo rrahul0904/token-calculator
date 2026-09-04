@@ -1,0 +1,14 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    { "idx": 0, "version": "7", "when": 1788146000000, "tag": "0000_agent_economics_foundation", "breakpoints": true },
+    { "idx": 1, "version": "7", "when": 1788146100000, "tag": "0001_full_connectivity_controls", "breakpoints": true },
+    { "idx": 2, "version": "7", "when": 1788146200000, "tag": "0002_tenant_reference_guards", "breakpoints": true },
+    { "idx": 3, "version": "7", "when": 1788146300000, "tag": "0003_gap_closure_foundations", "breakpoints": true },
+    { "idx": 4, "version": "7", "when": 1788146400000, "tag": "0004_provider_usage_import_rows", "breakpoints": true },
+    { "idx": 5, "version": "7", "when": 1788146500000, "tag": "0005_enterprise_directory_lifecycle", "breakpoints": true },
+    { "idx": 6, "version": "7", "when": 1788146600000, "tag": "0006_data_controls", "breakpoints": true },
+    { "idx": 7, "version": "7", "when": 1788448300000, "tag": "0007_platform_admin_operations", "breakpoints": true }
+  ]
+}

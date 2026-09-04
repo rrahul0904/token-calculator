@@ -5,8 +5,10 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { stdin as input, stdout as output } from "node:process";
+import { commitCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
 import { collectorCapabilities, getCollector } from "@/lib/collectors/registry";
 import type { CollectorName } from "@/lib/collectors/types";
+import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
 
 interface CliConfig { baseUrl?: string; apiKey?: string; projectId?: string; environment?: string }
 const CONFIG_PATH = resolve(homedir(), ".config", "token-intelligence", "config.json");
@@ -32,6 +34,19 @@ function numberArg(args: string[], name: string, fallback?: number) {
   const value = Number(raw);
   if (!Number.isFinite(value)) throw new Error(`${name} must be numeric`);
   return value;
+}
+function sinceCutoff(raw?: string) {
+  if (!raw) return null;
+  const match = /^(\d+)(m|h|d|w)$/.exec(raw.trim());
+  if (!match) throw new Error("--since must use a duration such as 30m, 12h, 7d, or 2w");
+  const amount = Number(match[1]);
+  const unit = match[2];
+  const milliseconds = amount * (unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : unit === "d" ? 86_400_000 : 604_800_000);
+  return new Date(Date.now() - milliseconds);
+}
+function filterSince(events: TelemetryEventInput[], cutoff: Date | null) {
+  if (!cutoff) return events;
+  return events.filter((event) => new Date(event.occurredAt).getTime() >= cutoff.getTime());
 }
 
 async function auth(args: string[]) {
@@ -90,21 +105,44 @@ async function collect(name: CollectorName, file: string, args: string[], upload
   const current = await auth(args);
   const text = await readFile(resolve(file), "utf8");
   const parsed = collector.parseJsonLines(text.split(/\r?\n/), { projectId: current.projectId, environment: current.environment });
-  const summary = { collector: parsed.collector, sessionId: parsed.sessionId, usageClassification: parsed.usageClassification, eventCount: parsed.events.length, warnings: parsed.warnings, measuredFields: parsed.measuredFields, estimatedFields: parsed.estimatedFields, missingFields: parsed.missingFields };
-  if (!upload || has(args, "--dry-run")) { print({ dryRun: true, ...summary, events: parsed.events }); return; }
+  const events = filterSince(parsed.events, sinceCutoff(argValue(args, "--since")));
+  const summary = { collector: parsed.collector, sessionId: parsed.sessionId, usageClassification: parsed.usageClassification, eventCount: events.length, warnings: parsed.warnings, measuredFields: parsed.measuredFields, estimatedFields: parsed.estimatedFields, missingFields: parsed.missingFields };
+  if (!upload || has(args, "--dry-run")) { print({ dryRun: true, ...summary, events }); return; }
   if (!current.apiKey) throw new Error("TOKEN_INTELLIGENCE_API_KEY is required to sync telemetry");
-  const result = await requestJson("/api/v1/events/batch", args, { events: parsed.events });
+  const result = events.length ? await requestJson("/api/v1/events/batch", args, { events }) : { inserted: 0, reason: "NO_EVENTS_IN_WINDOW" };
   print({ dryRun: false, ...summary, result });
 }
 
+async function sync(name: CollectorName, file: string, args: string[]) {
+  const collector = getCollector(name);
+  if (!collector) throw new Error(`Unknown collector ${name}`);
+  const current = await auth(args);
+  const absolute = resolve(file);
+  if (has(args, "--reset-checkpoint")) await resetCheckpoint(name, absolute);
+  const chunk = await readIncrementalJsonLines(name, absolute);
+  if (!chunk.lines.length) {
+    print({ collector: name, eventCount: 0, uploaded: false, checkpointOffset: chunk.startOffset, fileSize: chunk.fileSize, reason: "NO_COMPLETE_NEW_RECORDS" });
+    return;
+  }
+  const parsed = collector.parseJsonLines(chunk.lines, { projectId: current.projectId, environment: current.environment });
+  const events = filterSince(parsed.events, sinceCutoff(argValue(args, "--since")));
+  const summary = { collector: parsed.collector, sessionId: parsed.sessionId, usageClassification: parsed.usageClassification, eventCount: events.length, warnings: parsed.warnings, measuredFields: parsed.measuredFields, estimatedFields: parsed.estimatedFields, missingFields: parsed.missingFields, startOffset: chunk.startOffset, nextOffset: chunk.nextOffset };
+  if (has(args, "--dry-run")) { print({ dryRun: true, ...summary, events }); return; }
+  if (!current.apiKey) throw new Error("TOKEN_INTELLIGENCE_API_KEY is required to sync telemetry");
+  const result = events.length ? await requestJson("/api/v1/events/batch", args, { events }) : { inserted: 0, reason: "NO_EVENTS_IN_WINDOW" };
+  const checkpoint = await commitCheckpoint({ collector: name, filePath: absolute, fileIdentity: chunk.fileIdentity, nextOffset: chunk.nextOffset });
+  print({ dryRun: false, ...summary, result, checkpoint });
+}
+
 async function watch(name: CollectorName, file: string, args: string[]) {
-  console.log(`Watching ${resolve(file)} with ${name}; only normalized metadata is uploaded.`);
-  let lastSize = 0;
+  if (name === "cursor") throw new Error("Cursor live watch is not advertised because its available local telemetry remains estimated. Use `collect cursor FILE --dry-run` or `sync cursor FILE`.");
+  console.log(`Watching ${resolve(file)} with ${name}; only normalized metadata is uploaded. Durable checkpoints prevent duplicate re-upload after restart.`);
+  let lastSize = -1;
   while (true) {
     try {
       const info = await stat(resolve(file));
       if (info.size !== lastSize) {
-        await collect(name, file, args, true);
+        await sync(name, file, args);
         lastSize = info.size;
       }
     } catch (error) { console.error(error instanceof Error ? error.message : error); }
@@ -113,7 +151,7 @@ async function watch(name: CollectorName, file: string, args: string[]) {
 }
 
 function help() {
-  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--provider P] [--model M]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID]\n  sync <collector> FILE [--project ID] [--dry-run]\n  gateway status\n\nAPI key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
+  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--provider P] [--model M]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nSync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
 }
 
 async function main() {
@@ -130,11 +168,9 @@ async function main() {
     const rest = args.slice(2); const current = await auth(rest);
     return print(await requestJson("/api/v1/budgets/check", rest, { projectId: current.projectId, observedCostUsd: numberArg(rest, "--observed-cost", 0), projectedNextCallCostUsd: numberArg(rest, "--projected-cost"), tokens: numberArg(rest, "--tokens", 0), turns: numberArg(rest, "--turns", 0), retries: numberArg(rest, "--retries", 0), failedToolCalls: 0, toolCalls: numberArg(rest, "--tools", 0), provider: argValue(rest, "--provider"), model: argValue(rest, "--model") }));
   }
-  if ((command === "collect" || command === "sync") && args[1] && args[2]) return collect(args[1] as CollectorName, args[2], args.slice(3), command === "sync" || !has(args, "--dry-run"));
-  if (command === "watch" && args[1] && args[2]) {
-    if (args[1] === "cursor") throw new Error("Cursor live watch is not advertised because its available local telemetry remains estimated. Use `collect cursor FILE --dry-run` or `sync cursor FILE`.");
-    return watch(args[1] as CollectorName, args[2], args.slice(3));
-  }
+  if (command === "collect" && args[1] && args[2]) return collect(args[1] as CollectorName, args[2], args.slice(3), !has(args, "--dry-run"));
+  if (command === "sync" && args[1] && args[2]) return sync(args[1] as CollectorName, args[2], args.slice(3));
+  if (command === "watch" && args[1] && args[2]) return watch(args[1] as CollectorName, args[2], args.slice(3));
   if (command === "gateway" && args[1] === "status") return status(args.slice(2));
   help(); process.exitCode = 2;
 }

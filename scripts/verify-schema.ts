@@ -7,6 +7,11 @@ const requiredTables = [
   "usage_counters", "api_keys", "api_key_quotas", "integration_installations", "provider_connections",
   "runs", "turns", "llm_calls", "tool_calls", "usage_events", "budget_decisions", "outcomes", "findings",
   "budgets", "policies", "approvals", "audit_events", "alert_endpoints", "alert_deliveries",
+  "teams", "team_members", "project_teams", "cost_center_assignments", "pricing_snapshots",
+  "provider_usage_imports", "provider_usage_import_rows", "anomalies", "prompt_config_versions", "run_config_attributions",
+  "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results",
+  "workos_directory_events", "workos_directory_users", "workos_directory_groups", "organization_data_controls",
+  "platform_admins", "platform_admin_audit_events", "platform_cost_entries", "platform_daily_metrics",
   "_token_intelligence_migrations",
 ];
 
@@ -14,6 +19,36 @@ const requiredMigrations = [
   "0000_agent_economics_foundation.sql",
   "0001_full_connectivity_controls.sql",
   "0002_tenant_reference_guards.sql",
+  "0003_gap_closure_foundations.sql",
+  "0004_provider_usage_import_rows.sql",
+  "0005_enterprise_directory_lifecycle.sql",
+  "0006_data_controls.sql",
+  "0007_platform_admin_operations.sql",
+];
+
+const requiredTriggers = [
+  "token_intelligence_meter_api_key_usage_trigger",
+  "ti_team_members_team_tenant",
+  "ti_project_teams_project_tenant",
+  "ti_project_teams_team_tenant",
+  "ti_prompt_config_versions_project_tenant",
+  "ti_run_config_attributions_run_tenant",
+  "ti_run_config_attributions_version_tenant",
+  "ti_evaluation_datasets_project_tenant",
+  "ti_evaluation_cases_dataset_tenant",
+  "ti_experiments_project_tenant",
+  "ti_experiments_dataset_tenant",
+  "ti_experiment_results_experiment_tenant",
+  "ti_experiment_results_run_tenant",
+  "ti_provider_usage_import_rows_import_tenant",
+];
+
+const requiredIndexes = [
+  "platform_admins_workos_user_uq", "platform_admins_active_idx",
+  "platform_admin_audit_time_idx", "platform_admin_audit_actor_idx",
+  "platform_cost_entries_time_idx", "platform_cost_entries_service_idx",
+  "users_created_at_idx", "organizations_created_at_idx",
+  "subscriptions_status_created_idx", "llm_calls_started_at_idx",
 ];
 
 async function main() {
@@ -43,12 +78,19 @@ async function main() {
     }
 
     const triggerRows = await sql<{ trigger_name: string }[]>`
-      select trigger_name from information_schema.triggers
-      where event_object_schema = 'public' and event_object_table = 'llm_calls'
+      select distinct trigger_name from information_schema.triggers
+      where trigger_schema = 'public'
     `;
-    if (!triggerRows.some((row) => row.trigger_name === "token_intelligence_meter_api_key_usage_trigger")) {
-      throw new Error("MISSING_QUOTA_METER_TRIGGER");
-    }
+    const triggerNames = new Set(triggerRows.map((row) => row.trigger_name));
+    const missingTriggers = requiredTriggers.filter((name) => !triggerNames.has(name));
+    if (missingTriggers.length) throw new Error(`MISSING_REQUIRED_TRIGGERS:${missingTriggers.join(",")}`);
+
+    const indexRows = await sql<{ indexname: string }[]>`
+      select indexname from pg_indexes where schemaname = 'public'
+    `;
+    const indexNames = new Set(indexRows.map((row) => row.indexname));
+    const missingIndexes = requiredIndexes.filter((name) => !indexNames.has(name));
+    if (missingIndexes.length) throw new Error(`MISSING_REQUIRED_INDEXES:${missingIndexes.join(",")}`);
 
     const foreignKeyRows = await sql<{ count: string }[]>`
       select count(*)::text as count
@@ -60,7 +102,8 @@ async function main() {
       ok: true,
       tables: requiredTables.length,
       migrations: migrationRows.map((row) => ({ name: row.name, checksum: row.checksum })),
-      llmCallTriggers: triggerRows.map((row) => row.trigger_name),
+      requiredTriggers: requiredTriggers.length,
+      requiredIndexes: requiredIndexes.length,
       foreignKeys: Number(foreignKeyRows[0]?.count ?? 0),
     }, null, 2));
   } finally {
