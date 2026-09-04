@@ -15,6 +15,20 @@ describe("pricing catalog", () => {
     }
   });
 
+  it("tracks current provider models and point-in-time official rates", () => {
+    const sol = MODEL_CATALOG.find((model) => model.id === "gpt-5.6-sol");
+    const gpt55Pro = MODEL_CATALOG.find((model) => model.id === "gpt-5.5-pro");
+    const fable51 = MODEL_CATALOG.find((model) => model.id === "claude-fable-5.1");
+    const gemini37 = MODEL_CATALOG.find((model) => model.id === "gemini-3.7-flash");
+
+    expect(sol?.pricing).toMatchObject({ input: 4, cachedInput: 0.4, output: 20 });
+    expect(gpt55Pro?.pricing).toMatchObject({ input: 30, output: 180 });
+    expect(gpt55Pro?.pricing.cachedInput).toBeUndefined();
+    expect(fable51?.pricing).toMatchObject({ input: 10, cachedInput: 0.25, output: 50 });
+    expect(gemini37?.pricing).toMatchObject({ input: 0.75, cachedInput: 0.075, output: 3.75 });
+    expect(gemini37?.pricingLabel).toContain("2026-12-31");
+  });
+
   it("labels tokenizer precision conservatively", () => {
     for (const model of MODEL_CATALOG) {
       if (model.provider === "OpenAI") expect(model.tokenizerAccuracy).toBe("reference");
