@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { calculateCost, monthlyProjection } from "@/lib/cost";
 import { serializeComparisonState, type ComparisonWorkloadState } from "@/lib/comparison-state";
@@ -52,7 +53,7 @@ export function ModelComparisonWorkload({
       <label>Requests / month<input aria-label="Comparison requests per month" type="number" min="0" value={state.requestsPerMonth} onChange={(event) => setState((current) => ({ ...current, requestsPerMonth: Math.max(0, Number(event.target.value) || 0) }))} /></label>
     </div>
     <div className="pricing-table-wrap docs-section"><table className="pricing-table"><thead><tr><th>Model</th><th>Request</th><th>Monthly</th><th>Input / 1M</th><th>Cache / 1M</th><th>Output / 1M</th><th>Tokenizer</th></tr></thead><tbody>
-      {results.map(({ model, cost, monthly }) => <tr key={model.id}><td><strong>{model.name}</strong><span>{model.provider}</span></td><td><strong>{formatMoney(cost.total)}</strong></td><td>{formatMoney(monthly)}</td><td>{"$" + cost.effectivePricing.input}</td><td>{cost.effectivePricing.cachedInput === undefined ? "Not offered" : "$" + cost.effectivePricing.cachedInput}</td><td>{"$" + cost.effectivePricing.output}</td><td>{tokenizerPrecisionLabel(getTokenizerSpec(model.tokenizer).precision)}<span>{getTokenizerSpec(model.tokenizer).displayName}</span></td></tr>)}
+      {results.map(({ model, cost, monthly }) => <tr key={model.id}><td><strong><Link href={`/models/${model.id}`}>{model.name}</Link></strong><span>{model.provider}</span></td><td><strong>{formatMoney(cost.total)}</strong></td><td>{formatMoney(monthly)}</td><td>{"$" + cost.effectivePricing.input}</td><td>{cost.effectivePricing.cachedInput === undefined ? "Not offered" : "$" + cost.effectivePricing.cachedInput}</td><td>{"$" + cost.effectivePricing.output}</td><td>{tokenizerPrecisionLabel(getTokenizerSpec(model.tokenizer).precision)}<span>{getTokenizerSpec(model.tokenizer).displayName}</span></td></tr>)}
     </tbody></table></div>
     <div className="form-actions docs-section"><button className="button button--ghost" type="button" onClick={copyLink}>Copy comparison link</button><span role="status" className="muted">{shareStatus}</span></div>
     <p className="table-note">Request cost delta ({right.name} minus {left.name}): {delta >= 0 ? "+" : ""}{formatMoney(delta)}. This is an economics comparison only.</p>
