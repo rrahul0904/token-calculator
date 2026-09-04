@@ -148,6 +148,8 @@ export function TokenCalculator() {
     }).sort((a, b) => a.cost - b.cost)[0] ?? null;
   }, [baseInputTokens, cachedPercent, currentModels, inputTokensFor, outputTokens]);
 
+  const precisionDisplay = mode === "text" ? tokenizerPrecisionLabel(selectedTokenizerResult.precision) : "User supplied";
+  const tokenizerDisplay = mode === "text" ? getTokenizerSpec(selectedTokenizerResult.family).displayName : "Manual workload input";
   const selectedContext = selectedModel
     ? contextHeadroom(baseInputTokens, outputTokens, selectedModel.contextWindow)
     : contextHeadroom(0, 0, 0);
@@ -188,7 +190,7 @@ export function TokenCalculator() {
       <section id="calculator" className="calculator-shell shell" aria-label="Token calculator">
         <div className="calculator-shell__top">
           <div className="mode-tabs" role="tablist" aria-label="Input mode">
-            {(["text", "words", "tokens"] as CalculatorInputMode[]).map((item) => <button key={item} className={mode === item ? "mode-tab mode-tab--active" : "mode-tab"} type="button" onClick={() => setMode(item)}>{item === "text" ? "Paste text" : item === "words" ? "Known words" : "Known tokens"}</button>)}
+            {(["text", "words", "tokens"] as CalculatorInputMode[]).map((item) => <button key={item} role="tab" aria-selected={mode === item} className={mode === item ? "mode-tab mode-tab--active" : "mode-tab"} type="button" onClick={() => setMode(item)}>{item === "text" ? "Paste text" : item === "words" ? "Known words" : "Known tokens"}</button>)}
           </div>
           <span className="privacy-inline"><span className="status-dot" />Text stays in this browser</span>
         </div>
@@ -204,8 +206,8 @@ export function TokenCalculator() {
             <span className="app-kicker">Workload snapshot</span>
             <div className="summary-number"><strong>{mode === "text" && selectedTokenizerResult.precision === "estimated" ? "≈" : ""}{formatTokens(baseInputTokens)}</strong><span>input tokens</span></div>
             <div className="summary-list">
-              <div><span>Tokenizer</span><strong>{getTokenizerSpec(selectedTokenizerResult.family).displayName}</strong></div>
-              <div><span>Precision</span><strong>{tokenizerPrecisionLabel(selectedTokenizerResult.precision)}</strong></div>
+              <div><span>Tokenizer</span><strong>{tokenizerDisplay}</strong></div>
+              <div><span>Precision</span><strong>{precisionDisplay}</strong></div>
               <div><span>Context used</span><strong>{selectedContext.utilization.toFixed(2)}%</strong></div>
               <div><span>Headroom</span><strong>{selectedContext.remaining >= 0 ? formatTokens(selectedContext.remaining) : "-" + formatTokens(Math.abs(selectedContext.remaining))}</strong></div>
               <div><span>Context state</span><strong>{contextStateLabel(selectedContext.state)}</strong></div>
@@ -216,7 +218,7 @@ export function TokenCalculator() {
         </div>
 
         <div className="metrics-strip metrics-strip--5">
-          <div><span>Tokens</span><strong>{mode === "text" && selectedTokenizerResult.precision === "estimated" ? "≈" : ""}{formatTokens(baseInputTokens)}</strong><small>{tokenizerPrecisionLabel(selectedTokenizerResult.precision)}</small></div>
+          <div><span>Tokens</span><strong>{mode === "text" && selectedTokenizerResult.precision === "estimated" ? "≈" : ""}{formatTokens(baseInputTokens)}</strong><small>{precisionDisplay}</small></div>
           <div><span>Words</span><strong>{mode === "text" ? formatTokens(metrics.words) : mode === "words" ? formatTokens(manualWords) : "—"}</strong></div>
           <div><span>No-space chars</span><strong>{mode === "text" ? formatTokens(metrics.charactersWithoutSpaces) : "—"}</strong></div>
           <div><span>Characters</span><strong>{mode === "text" ? formatTokens(metrics.characters) : "—"}</strong></div>
