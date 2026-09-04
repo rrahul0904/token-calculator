@@ -49,8 +49,9 @@ describe("pricing intelligence", () => {
     })).toThrow("OPENROUTER_DUPLICATE_MODEL_ID");
   });
 
-  it("keeps canonical model and routed endpoint identity separate", () => {
-    expect(endpointsForModel("glm-5.3-flash").length).toBeGreaterThanOrEqual(2);
+  it("keeps canonical model and evidenced routed endpoint identity separate", () => {
+    const endpoints = endpointsForModel("glm-5.3-flash");
+    expect(endpoints.map((endpoint) => endpoint.id)).toEqual(["openrouter:z-ai/glm-5.3-flash"]);
     const routed = endpointById("openrouter:z-ai/glm-5.3-flash");
     expect(routed?.modelId).toBe("glm-5.3-flash");
     expect(routed?.inferenceProvider).toBe("OpenRouter");
