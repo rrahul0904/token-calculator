@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { afterAll, describe, expect, it } from "vitest";
 import { closeDb } from "@/db/client";
 import { latestPublishedPricingSnapshot, refreshOpenRouterPricing } from "@/lib/pricing/refresh";
+import { effectivePublishedPricing } from "@/lib/pricing/store";
 
 const integrationEnabled = process.env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS === "1";
 const describeIntegration = integrationEnabled ? describe : describe.skip;
@@ -55,5 +56,29 @@ describeIntegration("pricing refresh release invariants", () => {
     const after = await latestPublishedPricingSnapshot();
     expect(after?.id).toBe(published.snapshotId);
     expect(after?.status).toBe("published");
+
+    const effective = await effectivePublishedPricing("vendor-model-0");
+    expect(effective.source).toBe("published_snapshot");
+    expect(effective.snapshot?.id).toBe(published.snapshotId);
+    expect(effective.data).toHaveLength(1);
+  });
+
+  it("applies active reviewed overrides, including explicit unknown values, and ignores expired overrides", async () => {
+    const latest = await latestPublishedPricingSnapshot();
+    expect(latest).toBeTruthy();
+    const endpointId = "openrouter:integration/vendor-model-0";
+    const activeId = "override_active_" + Date.now();
+    await sql`insert into pricing_overrides (id, endpoint_id, values, reason, expires_at)
+      values (${activeId}, ${endpointId}, ${sql.json({ input: null, output: 9.5 })}, 'integration reviewed override', now() + interval '1 hour')`;
+    let effective = await effectivePublishedPricing("vendor-model-0");
+    expect(effective.data[0].pricing.input).toBeNull();
+    expect(effective.data[0].pricing.output).toBe(9.5);
+    expect(effective.data[0].override?.id).toBe(activeId);
+
+    await sql`update pricing_overrides set expires_at = now() - interval '1 second' where id = ${activeId}`;
+    effective = await effectivePublishedPricing("vendor-model-0");
+    expect(effective.data[0].pricing.input).toBe(1);
+    expect(effective.data[0].pricing.output).toBe(2);
+    expect(effective.data[0].override).toBeNull();
   });
 });
