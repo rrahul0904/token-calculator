@@ -43,11 +43,26 @@ export default function DevelopersPage() {
     <CodeExampleTabs title="Tokenize text" examples={tokenizeExamples} />
     <CodeExampleTabs title="Fetch current model economics" examples={modelExamples} />
 
+    <section className="tool-card docs-section"><p className="eyebrow">Response shape</p><h2>Model pricing keeps provenance beside the rate.</h2><pre><code>{`{
+  "data": {
+    "id": "gpt-5.6-sol",
+    "provider": "OpenAI",
+    "contextWindow": 1050000,
+    "tokenizer": { "precision": "provider_reference" },
+    "pricing": {
+      "current": { "input": 4, "cachedInput": 0.4, "output": 20 },
+      "tier": "Promotional pricing through at least 2026-11-21",
+      "verifiedAt": "2026-09-04",
+      "sourceUrl": "https://developers.openai.com/..."
+    }
+  }
+}`}</code></pre></section>
+
     <section className="tool-card docs-section">
       <p className="eyebrow">SDK source packages</p><h2>TypeScript + Python</h2>
       <div className="docs-grid">
-        <div><h3>TypeScript</h3><pre><code>npm install @token-intelligence/sdk</code></pre><pre><code>{`import { TokenIntelligenceClient } from "@token-intelligence/sdk";\nconst ti = new TokenIntelligenceClient({});\nawait ti.tokenize({ text: "hello world" });\nawait ti.models.get("gpt-5.6-sol");\nawait ti.estimate({ inputTokens: 12000, outputTokens: 1200 });`}</code></pre></div>
-        <div><h3>Python</h3><pre><code>pip install token-intelligence</code></pre><pre><code>{`from token_intelligence import TokenIntelligenceClient\nti = TokenIntelligenceClient()\nti.tokenize("hello world")\nti.model("gpt-5.6-sol")\nti.estimate(inputTokens=12000, outputTokens=1200)`}</code></pre></div>
+        <div><h3>TypeScript</h3><pre><code>npm install @token-intelligence/sdk</code></pre><pre><code>{`import { TokenIntelligenceClient } from "@token-intelligence/sdk";\nconst ti = new TokenIntelligenceClient({});\nawait ti.tokenize({ text: "hello world" });\nawait ti.models.get("gpt-5.6-sol");\nawait ti.estimate({ inputTokens: 12000, outputTokens: 1200 });\nawait ti.compare({ a: { inputTokens: 12000, outputTokens: 1200 }, b: { inputTokens: 9000, outputTokens: 1200 } });`}</code></pre></div>
+        <div><h3>Python</h3><pre><code>pip install token-intelligence</code></pre><pre><code>{`from token_intelligence import TokenIntelligenceClient\nti = TokenIntelligenceClient()\nti.tokenize("hello world")\nti.model("gpt-5.6-sol")\nti.estimate(inputTokens=12000, outputTokens=1200)\nti.compare({"a":{"inputTokens":12000,"outputTokens":1200},"b":{"inputTokens":9000,"outputTokens":1200}})`}</code></pre></div>
       </div>
       <p className="table-note">These are the package names declared by the repository source. This page does not claim registry publication status; use the repository packages directly until a release pipeline publishes them.</p>
     </section>
