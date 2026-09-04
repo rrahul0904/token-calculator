@@ -72,7 +72,8 @@ export function ProviderGuide({ provider, eyebrow, title, description, countingN
                   <td>{"$" + resolved.pricing.output}</td>
                   <td><a href={resolved.sourceUrl} target="_blank" rel="noreferrer">Official ↗</a><span>{resolved.verifiedAt}</span></td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
