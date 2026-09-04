@@ -38,6 +38,37 @@ Improvements over the reference:
 - TTFT separated from decode speed
 - explicit browser-vs-server privacy boundary
 
+## Wave 1C — Live vibe reverse-engineering refresh
+
+Execution artifacts:
+
+- `docs/PRODUCT_LOGIC_AND_FEATURE_PLAN.md`
+- `docs/CODEX_VIBE_REVERSE_ENGINEERING_PROMPT.md`
+
+This wave is the clean-room product-quality audit before deeper SaaS expansion.
+
+Goals:
+
+- re-audit the current public Token-Calculator.net route and feature surface
+- refresh `COMPETITIVE_PARITY.md` with live evidence
+- validate the main calculator against empty/plain-text/Unicode/JSON/code/large-input cases
+- verify token visualization, text metrics, pricing, long-context tiers, and context planning
+- verify Cost Lab, token↔word, GPU-memory, and token-speed workflows
+- verify responsive/mobile/accessibility behavior
+- verify that anonymous prompt text remains browser-local
+- verify API docs and public `POST /api/v1/tokenize` compatibility
+- verify technical SEO, sitemap, metadata, internal linking, and provider/model discovery pages
+- preserve deliberate improvements instead of pixel-copying the reference
+
+Definition of done:
+
+- parity matrix is current
+- public tool regression suite passes
+- privacy boundary has regression coverage
+- production build passes
+- docs describe any intentionally different behavior
+- no working Wave 1 / 1B functionality is regressed
+
 ## Wave 2 — SaaS foundation
 
 - authentication
@@ -51,6 +82,14 @@ Improvements over the reference:
 - hashed API keys
 - quotas and usage records
 - Cost Lab workspace redesign
+
+SaaS constraints:
+
+- anonymous free tools remain usable without sign-in
+- API keys are shown once and stored as hashes, not reversible plaintext
+- billing entitlement is server-authoritative
+- API usage stores safe metadata/counts, not raw prompt text by default
+- no fake payment/account success states when external configuration is absent
 
 ## Wave 3 — Developer and coding-agent integrations
 
@@ -89,6 +128,24 @@ Core MCP/API capabilities:
 - fallbacks
 - estimated-vs-actual spend
 
+The canonical FinOps loop is:
+
+```text
+ESTIMATE
+   ↓
+OBSERVE
+   ↓
+RECONCILE
+   ↓
+ATTRIBUTE
+   ↓
+OPTIMIZE
+   ↓
+CONTROL
+   ↓
+VERIFY
+```
+
 ## Wave 5 — Enterprise
 
 - SSO
@@ -101,3 +158,14 @@ Core MCP/API capabilities:
 - dedicated deployments
 - enterprise onboarding
 - SLA and security documentation
+
+## Cross-wave product rules
+
+- keep the free calculator as the acquisition surface
+- keep public prompt tokenization local-first
+- label tokenizer precision honestly
+- keep pricing versioned and sourced from official providers
+- treat unknown prices as unknown, never zero
+- do not fake external integrations
+- keep business logic in shared domain modules rather than page components
+- require lint/typecheck/tests/build for each production wave
