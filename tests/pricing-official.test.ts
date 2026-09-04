@@ -10,9 +10,9 @@ describe("direct provider pricing adapters", () => {
     expect(endpoints.every((endpoint) => endpoint.provenance.sourceUrl.startsWith("https://"))).toBe(true);
   });
 
-  it("keeps routed and direct endpoint identity separate for GLM", () => {
+  it("does not fabricate a direct GLM endpoint when only routed pricing is evidenced", () => {
     const endpoints = endpointsForModel("glm-5.3-flash");
-    expect(endpoints.some((endpoint) => endpoint.id === "openrouter:z-ai/glm-5.3-flash")).toBe(true);
-    expect(endpoints.some((endpoint) => endpoint.id.startsWith("direct:"))).toBe(true);
+    expect(endpoints.map((endpoint) => endpoint.id)).toEqual(["openrouter:z-ai/glm-5.3-flash"]);
+    expect(endpoints.some((endpoint) => endpoint.id.startsWith("direct:"))).toBe(false);
   });
 });
