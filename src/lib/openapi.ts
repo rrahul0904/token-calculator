@@ -1,3 +1,4 @@
+import { getPublicSiteUrl } from "@/lib/site-url";
 const json = { "application/json": { schema: { type: "object" } } };
 const noContent = { description: "Success" };
 const bearer = [{ bearerAuth: [] }];
@@ -20,7 +21,7 @@ export const OPENAPI_DOCUMENT = {
     version: "1.0.0",
     description: "AI economics, agent-run telemetry, budgets, model economics, MCP-adjacent data and governed provider gateway APIs. Measurement provenance is preserved as provider_measured, agent_measured, local_tokenizer_reference, estimated, or reconciled. Prompt/code content is not persisted by default.",
   },
-  servers: [{ url: process.env.APP_BASE_URL ?? "https://token-intelligence-eight.vercel.app" }],
+  servers: [{ url: getPublicSiteUrl() }],
   components: {
     securitySchemes: {
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "Token Intelligence API key" },
@@ -29,7 +30,7 @@ export const OPENAPI_DOCUMENT = {
     schemas: {
       Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
       UsageSource: { type: "string", enum: ["provider_measured", "agent_measured", "local_tokenizer_reference", "estimated", "reconciled"] },
-      TokenizeRequest: { type: "object", properties: { text: { type: "string", maxLength: 500000 } }, required: ["text"] },
+      TokenizeRequest: { type: "object", properties: { text: { type: "string", maxLength: 500000 }, model: { type: "string", description: "Optional Token Intelligence model ID used to select a tokenizer family." }, includePieces: { type: "boolean", default: false }, maxPieces: { type: "integer", minimum: 1, maximum: 500, default: 100 } }, required: ["text"] },
       EstimateRequest: { type: "object", properties: { inputTokens: { type: "integer", minimum: 0 }, outputTokens: { type: "integer", minimum: 0 }, cachedInputTokens: { type: "integer", minimum: 0 }, requestsPerMonth: { type: "integer", minimum: 1 } }, required: ["inputTokens", "outputTokens"] },
       GatewayRequest: { type: "object", properties: { providerConnectionId: { type: "string" }, projectId: { type: ["string", "null"] }, runId: { type: "string" }, agentName: { type: "string" }, workflowName: { type: ["string", "null"] }, environment: { type: "string" }, model: { type: "string" }, fallbackModel: { type: "string" }, input: {}, maxOutputTokens: { type: "integer" }, stream: { type: "boolean" } }, required: ["providerConnectionId", "model", "input"] },
     },
