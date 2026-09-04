@@ -922,3 +922,216 @@ to:
 > **What will this AI workload cost, what did it actually cost, why, and what should we change or enforce next?**
 
 The free calculator remains the wedge. The durable business is developer infrastructure plus AI cost intelligence, observability, optimization, and control.
+
+
+## 17. tokencalc-seven workload-economics extension
+
+A second public reference reviewed on 2026-09-04 is:
+
+`https://tokencalc-seven.vercel.app/?model=glm-5.3-flash&mode=tokens2cost&tokens=1000000000&input=99&cache=98`
+
+This reference is complementary to Token-Calculator.net. Token-Calculator.net is strongest as a tokenizer/planning reference; tokencalc-seven is useful as a **shareable model-workload economics reference**.
+
+Detailed clean-room artifacts:
+
+- `docs/TOKENCALC_SEVEN_REVERSE_ENGINEERING.md`
+- `docs/TOKENCALC_SEVEN_PRODUCT_LOGIC_FEATURE_PLAN.md`
+- `docs/CODEX_TOKENCALC_SEVEN_VIBE_REVERSE_ENGINEERING_PROMPT.md`
+
+### 17.1 Product behaviors to add
+
+Integrate these behaviors into the existing Cost Lab rather than creating a disconnected clone:
+
+- URL-native calculator state
+- tokens → cost mode
+- cost → tokens reverse mode
+- total-token workload input
+- input/output percentage split
+- cache-hit percentage
+- transparent fresh-input / cached-read / output breakdown
+- cache savings versus no-cache baseline
+- pinned/reference-model comparison
+- deterministic share/copy link
+- very-large-token-volume support
+- calculation-method transparency
+
+### 17.2 Canonical share-state contract
+
+Support a compact public state model:
+
+```
+model=
+endpoint=
+mode=
+tokens=
+budget=
+input=
+cache=
+cacheable=
+requests=
+pin=
+```
+
+The supplied reference-style URL must round-trip safely without including prompt text.
+
+### 17.3 Cache logic improvement
+
+Keep a simple compatibility mode:
+
+```
+cached_input = input_tokens × cache_hit
+fresh_input = input_tokens - cached_input
+```
+
+But advanced production modeling must separate:
+
+```
+cacheable_input = input_tokens × cacheable_percent
+cached_read = cacheable_input × cache_hit
+cache_miss = cacheable_input - cached_read
+dynamic_input = input_tokens - cacheable_input
+fresh_input = dynamic_input + cache_miss
+```
+
+Then price:
+- fresh input
+- cached read
+- cache creation/write where applicable
+- output
+- supported reasoning/multimodal units
+
+### 17.4 Pricing intelligence extension
+
+Move from only a static model-price view toward:
+
+```
+Canonical Model
+    ↓
+Inference Endpoint
+    ↓
+Immutable Pricing Snapshot
+```
+
+Support:
+- official provider sources
+- OpenRouter/routed pricing
+- source provenance
+- verified/observed timestamps
+- stale-data labels
+- approximately six-hour background refresh where source terms allow
+- last-known-good publication
+- auditable manual overrides
+
+A failed refresh must never erase the last valid published catalog.
+
+### 17.5 Model/endpoint comparison
+
+Pinned comparisons should distinguish:
+
+- same model, different inference endpoint
+- same model family
+- evidence-backed capability-comparable model
+- cheaper alternative with no equivalence claim
+
+Never call two models equivalent merely because their prices or context sizes are similar.
+
+### 17.6 Model Efficiency Frontier
+
+When quality/performance evidence exists, compute Pareto-efficient candidates across dimensions such as:
+
+- cost
+- quality
+- latency
+- throughput
+- context
+- reliability
+
+Initial high-value view:
+**cost vs quality** with:
+- pinned baseline
+- minimum quality threshold
+- maximum budget
+- cheapest qualifying option
+- Pareto frontier
+
+If quality evidence is missing, omit that dimension rather than inventing a score.
+
+### 17.7 Workload presets
+
+Extend Cost Lab presets for:
+
+- Chatbot
+- RAG
+- Coding Agent
+- Research Agent
+- Data/SQL Agent
+- Document Extraction
+- Batch Classification
+
+Presets are editable assumptions, not benchmark truth.
+
+### 17.8 FinOps connection
+
+A public workload scenario should be able to become an authenticated saved scenario and flow into:
+
+```
+PLAN
+  ↓
+SAVE
+  ↓
+OBSERVE ACTUAL
+  ↓
+EXPLAIN VARIANCE
+  ↓
+OPTIMIZE
+  ↓
+BUDGET / POLICY / GATEWAY
+  ↓
+VERIFY
+```
+
+Variance attribution should support:
+- token volume
+- input/output mix
+- cache hit
+- cache writes
+- retries
+- extra turns
+- model changes
+- endpoint changes
+- long-context tiers
+- output expansion
+- fallbacks
+
+### 17.9 Priority
+
+P0:
+- deep-link state
+- tokens → cost
+- cost → tokens
+- input %
+- cache hit %
+- transparent breakdown
+- share URL
+- pinned comparison
+- pricing provenance
+
+P1:
+- cacheable % vs hit %
+- cache-write economics
+- OpenRouter/direct-provider normalized pricing
+- inference endpoints
+- immutable pricing versions
+- workload presets
+- saved scenario versions
+- estimate vs actual
+
+P2:
+- provider performance evidence
+- model quality evidence
+- Pareto frontier
+- recommendation engine
+- pricing history
+- verified savings
+
+This extension should make Token Intelligence stronger than either reference individually: Token-Calculator.net informs the tokenization/planning wedge; tokencalc-seven informs the shareable workload-economics wedge; the existing authenticated platform supplies the FinOps control loop.
