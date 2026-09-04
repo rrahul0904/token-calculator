@@ -67,10 +67,10 @@ export function ProviderGuide({ provider, eyebrow, title, description, countingN
                 <tr key={model.id}>
                   <td><strong>{model.name}</strong><span>{model.pricingLabel ?? model.status ?? "current"}</span></td>
                   <td>{formatTokens(model.contextWindow)}<span>{model.maxOutput ? formatTokens(model.maxOutput) + " max output" : null}</span></td>
-                  <td>{"$" + model.pricing.input}</td>
-                  <td>{model.pricing.cachedInput === undefined ? "Not offered" : "$" + model.pricing.cachedInput}</td>
-                  <td>{"$" + model.pricing.output}</td>
-                  <td><a href={model.sourceUrl} target="_blank" rel="noreferrer">Official ↗</a><span>{model.verifiedAt}</span></td>
+                  <td>{"$" + resolved.pricing.input}</td>
+                  <td>{resolved.pricing.cachedInput === undefined ? "Not offered" : "$" + resolved.pricing.cachedInput}</td>
+                  <td>{"$" + resolved.pricing.output}</td>
+                  <td><a href={resolved.sourceUrl} target="_blank" rel="noreferrer">Official ↗</a><span>{resolved.verifiedAt}</span></td>
                 </tr>
               ))}
             </tbody>
