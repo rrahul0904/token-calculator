@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseComparisonState, serializeComparisonState } from "@/lib/comparison-state";
+import { calculateCost } from "@/lib/cost";
 import {
   getCanonicalComparison,
   getComparableModels,
@@ -45,6 +46,21 @@ describe("model discovery", () => {
 
     const claude = getModel("claude-sonnet-5")!;
     expect(getModelPricingHistory(claude, new Date("2026-09-04"))[0].effectiveFrom).toBeNull();
+  });
+
+  it("compares model workload economics at an explicit pricing timestamp", () => {
+    const gemini = getModel("gemini-3.7-flash")!;
+    const claude = getModel("claude-sonnet-5")!;
+    const workload = { inputTokens: 1_000_000, cachedInputTokens: 0, outputTokens: 100_000 };
+
+    const promoGemini = calculateCost(gemini, { ...workload, at: new Date("2026-12-31T12:00:00Z") });
+    const standardGemini = calculateCost(gemini, { ...workload, at: new Date("2027-01-01T00:00:00Z") });
+    const claudeAtSameTime = calculateCost(claude, { ...workload, at: new Date("2027-01-01T00:00:00Z") });
+
+    expect(promoGemini.total).toBeLessThan(standardGemini.total);
+    expect(standardGemini.total).not.toBe(claudeAtSameTime.total);
+    expect(promoGemini.pricingVersionId).toContain("intro");
+    expect(standardGemini.pricingVersionId).toBeNull();
   });
 
   it("serializes tokenizer certainty and effective pricing provenance", () => {
