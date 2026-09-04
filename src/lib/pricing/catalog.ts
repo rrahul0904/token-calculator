@@ -1,4 +1,5 @@
 import { MODEL_CATALOG, type ModelPricing } from "@/lib/models";
+import { resolvePricing } from "@/lib/pricing";
 
 export type PricingSourceType = "official_provider" | "openrouter" | "manual_reviewed";
 
@@ -27,24 +28,27 @@ function providerSlug(provider: string) {
   return provider.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
-const directEndpoints: InferenceEndpointProfile[] = MODEL_CATALOG.filter((model) => model.provider !== "Z.AI").map((model) => ({
-  id: `direct:${providerSlug(model.provider)}:${model.id}`,
-  modelId: model.id,
-  inferenceProvider: model.provider,
-  externalModelId: model.id,
-  contextWindow: model.contextWindow,
-  maxOutputTokens: model.maxOutput,
-  pricing: model.pricing,
-  provenance: {
-    sourceType: "official_provider",
-    sourceUrl: model.sourceUrl,
-    sourceLabel: model.sourceLabel,
-    verifiedAt: model.verifiedAt,
-    staleAfterHours: 168,
-    promotional: Boolean(model.pricingLabel?.toLowerCase().includes("promo") || model.pricingLabel?.toLowerCase().includes("off")),
-  },
-  status: model.status === "legacy" ? "legacy" : model.status === "preview" ? "preview" : "active",
-}));
+const directEndpoints: InferenceEndpointProfile[] = MODEL_CATALOG.filter((model) => model.provider !== "Z.AI").map((model) => {
+  const resolved = resolvePricing({ model, inputTokens: 0 });
+  return {
+    id: `direct:${providerSlug(model.provider)}:${model.id}`,
+    modelId: model.id,
+    inferenceProvider: model.provider,
+    externalModelId: model.id,
+    contextWindow: model.contextWindow,
+    maxOutputTokens: model.maxOutput,
+    pricing: resolved.pricing,
+    provenance: {
+      sourceType: "official_provider" as const,
+      sourceUrl: resolved.sourceUrl,
+      sourceLabel: model.sourceLabel,
+      verifiedAt: resolved.verifiedAt,
+      staleAfterHours: 168,
+      promotional: Boolean(resolved.version?.label?.toLowerCase().includes("intro") || model.pricingLabel?.toLowerCase().includes("promo") || model.pricingLabel?.toLowerCase().includes("off")),
+    },
+    status: model.status === "legacy" ? "legacy" as const : model.status === "preview" ? "preview" as const : "active" as const,
+  };
+});
 
 const routedEndpoints: InferenceEndpointProfile[] = [
   {
