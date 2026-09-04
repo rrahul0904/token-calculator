@@ -23,6 +23,14 @@ describe("OpenAPI implementation contract", () => {
     ]);
   });
 
+  it("documents the workload economics and endpoint-pricing surfaces", () => {
+    expect(OPENAPI_DOCUMENT.paths["/api/v1/economics/estimate"]).toBeTruthy();
+    expect(OPENAPI_DOCUMENT.paths["/api/v1/economics/reverse"]).toBeTruthy();
+    expect(OPENAPI_DOCUMENT.paths["/api/v1/economics/frontier"]).toBeTruthy();
+    expect(OPENAPI_DOCUMENT.paths["/api/v1/pricing"]).toBeTruthy();
+    expect(OPENAPI_DOCUMENT.paths["/api/v1/models/{id}/endpoints"]).toBeTruthy();
+  });
+
   it("does not document API paths that have no route implementation", () => {
     const missing = Object.keys(OPENAPI_DOCUMENT.paths).filter((path) => !existsSync(routeFileForPath(path)));
     expect(missing).toEqual([]);

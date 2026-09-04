@@ -75,7 +75,19 @@ jobs:
       - name: Python SDK import
         env:
           PYTHONPATH: packages/sdk-python
-        run: python3 -c "from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError; assert TokenIntelligenceClient and TokenIntelligenceError"
+        run: |
+          python3 - <<'PY'
+          from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError
+          client = TokenIntelligenceClient("ti_test", base_url="http://127.0.0.1:3000")
+          required = [
+              "pricing", "model_endpoints", "workload_estimate", "workload_reverse",
+              "workload_compare", "workload_frontier",
+          ]
+          assert TokenIntelligenceError
+          for name in required:
+              assert callable(getattr(client, name, None)), name
+          print("python sdk surface ok")
+          PY
       - name: CLI help smoke
         run: npm run ti -- --help
       - name: Production build

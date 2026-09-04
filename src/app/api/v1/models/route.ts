@@ -1,4 +1,5 @@
 import { MODEL_CATALOG } from "@/lib/models";
+import { endpointsForModel, isPricingStale } from "@/lib/pricing/catalog";
 
 export async function GET() {
   return Response.json({
@@ -16,6 +17,14 @@ export async function GET() {
       pricingSourceLabel: model.sourceLabel,
       verifiedAt: model.verifiedAt,
       status: model.status ?? "current",
+      endpoints: endpointsForModel(model.id).map((endpoint) => ({
+        id: endpoint.id,
+        inferenceProvider: endpoint.inferenceProvider,
+        externalModelId: endpoint.externalModelId,
+        pricing: endpoint.pricing,
+        provenance: endpoint.provenance,
+        stale: isPricingStale(endpoint.provenance),
+      })),
     })),
     precision: {
       openai: "Local o200k reference; provider billing may differ by model/request framing.",

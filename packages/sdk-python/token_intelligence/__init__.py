@@ -51,6 +51,25 @@ class TokenIntelligenceClient:
     def estimate(self, **payload: Any) -> Any:
         return self._request("/api/v1/estimate", "POST", payload)
 
+    def pricing(self) -> Any:
+        return self._request("/api/v1/pricing")
+
+    def model_endpoints(self, model_id: str) -> Any:
+        from urllib.parse import quote
+        return self._request(f"/api/v1/models/{quote(model_id, safe='')}/endpoints")
+
+    def workload_estimate(self, payload: Mapping[str, Any]) -> Any:
+        return self._request("/api/v1/economics/estimate", "POST", dict(payload))
+
+    def workload_reverse(self, payload: Mapping[str, Any]) -> Any:
+        return self._request("/api/v1/economics/reverse", "POST", dict(payload))
+
+    def workload_compare(self, payload: Mapping[str, Any]) -> Any:
+        return self._request("/api/v1/economics/compare", "POST", dict(payload))
+
+    def workload_frontier(self, payload: Mapping[str, Any]) -> Any:
+        return self._request("/api/v1/economics/frontier", "POST", dict(payload))
+
     def compare(self, payload: Mapping[str, Any]) -> Any:
         return self._request("/api/v1/compare", "POST", dict(payload))
 

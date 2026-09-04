@@ -150,3 +150,46 @@ test("critical public routes avoid page-level horizontal overflow at required mo
     }
   }
 });
+
+
+test("reference-style workload deep link round-trips and supports reverse mode", async ({ page, request }) => {
+  const path = "/tools/cost?model=glm-5.3-flash&mode=tokens2cost&tokens=1000000000&input=99&cache=98";
+  const response = await page.goto(path, { waitUntil: "domcontentloaded" });
+  expect(response?.status()).toBeLessThan(400);
+  await expect(page.getByLabel("Total tokens")).toHaveValue("1000000000");
+  await expect(page.getByLabel("Input percent")).toHaveValue("99");
+  await expect(page.getByLabel("Cache hit percent")).toHaveValue("98");
+  await expect(page.getByTestId("workload-cost-lab")).toContainText("$18.54");
+  expect(page.url()).toContain("model=glm-5.3-flash");
+  expect(page.url()).toContain("cache=98");
+
+  await page.getByRole("button", { name: "Cost → tokens" }).click();
+  await expect(page.getByLabel("Budget (USD)")).toBeVisible();
+  expect(page.url()).toContain("mode=cost2tokens");
+
+  const api = await request.post("/api/v1/economics/estimate", {
+    data: {
+      mode: "tokens2cost",
+      modelId: "glm-5.3-flash",
+      totalTokens: 1000000000,
+      budgetUsd: 100,
+      inputPercent: 99,
+      cacheHitPercent: 98,
+      cacheableInputPercent: 100,
+      cacheWrite5mPercent: 0,
+      cacheWrite1hPercent: 0,
+      requestsPerMonth: 1
+    }
+  });
+  expect(api.status()).toBe(200);
+  const body = await api.json();
+  expect(body.data.cost.totalUsd).toBeCloseTo(18.538);
+});
+
+test("workload cost lab remains usable at mobile width", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tools/cost?model=glm-5.3-flash&tokens=1000000&input=90&cache=50", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("workload-cost-lab")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(2);
+});
