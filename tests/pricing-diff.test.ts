@@ -25,6 +25,9 @@ describe("pricing snapshot diff engine", () => {
     const claude = candidate.find((model) => model.modelId === "claude-sonnet-5")!;
     claude.pricing.cacheWrite1h = null;
 
+    const gptPro = candidate.find((model) => model.modelId === "gpt-5.5-pro")!;
+    gptPro.pricing.cachedInput = 0.3;
+
     const diffs = diffPricingCatalog(current, candidate);
     const solDiff = diffs.find((diff) => diff.modelId === sol.modelId)!;
     expect(solDiff.changes.map((change) => change.field)).toEqual(expect.arrayContaining([
@@ -35,6 +38,9 @@ describe("pricing snapshot diff engine", () => {
       "verifiedAt",
     ]));
     expect(solDiff.changes.find((change) => change.field === "verifiedAt")?.material).toBe(false);
+    expect(diffs.find((diff) => diff.modelId === "gpt-5.5-pro")?.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "pricing.cachedInput", previous: null, next: 0.3 }),
+    ]));
     expect(hasMaterialPricingChanges(diffs)).toBe(true);
   });
 
