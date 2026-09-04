@@ -3,7 +3,8 @@ import postgres from "postgres";
 
 const requiredTables = [
   "users", "organizations", "organization_members", "service_accounts", "projects",
-  "saved_scenarios", "prompt_comparisons", "billing_customers", "subscriptions", "entitlement_overrides",
+  "inference_endpoints", "pricing_snapshots", "pricing_rates", "pricing_overrides",
+  "saved_scenarios", "scenario_versions", "prompt_comparisons", "billing_customers", "subscriptions", "entitlement_overrides",
   "usage_counters", "api_keys", "api_key_quotas", "integration_installations", "provider_connections",
   "runs", "turns", "llm_calls", "tool_calls", "usage_events", "budget_decisions", "outcomes", "findings",
   "budgets", "policies", "approvals", "audit_events", "alert_endpoints", "alert_deliveries",
@@ -14,6 +15,7 @@ const requiredMigrations = [
   "0000_agent_economics_foundation.sql",
   "0001_full_connectivity_controls.sql",
   "0002_tenant_reference_guards.sql",
+  "0003_workload_pricing_intelligence.sql",
 ];
 
 async function main() {
