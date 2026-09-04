@@ -1,29 +1,16 @@
-import { isDatabaseConfigured } from "@/db/client";
-import { INFERENCE_ENDPOINTS, isPricingStale } from "@/lib/pricing/catalog";
-import { latestPublishedPricingSnapshot } from "@/lib/pricing/refresh";
+import { effectivePublishedPricing } from "@/lib/pricing/store";
 
 export async function GET(request: Request) {
   const modelId = new URL(request.url).searchParams.get("modelId");
-  const endpoints = INFERENCE_ENDPOINTS
-    .filter((endpoint) => !modelId || endpoint.modelId === modelId)
-    .map((endpoint) => ({
-      ...endpoint,
-      stale: isPricingStale(endpoint.provenance),
-    }));
-  const latestPublished = isDatabaseConfigured() ? await latestPublishedPricingSnapshot().catch(() => null) : null;
+  const result = await effectivePublishedPricing(modelId).catch(() => null);
+  if (!result) return Response.json({ error: "PRICING_READ_FAILED" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   return Response.json({
-    data: endpoints,
-    latestPublishedSnapshot: latestPublished ? {
-      id: latestPublished.id,
-      source: latestPublished.source,
-      modelCount: latestPublished.modelCount,
-      fetchedAt: latestPublished.fetchedAt,
-      publishedAt: latestPublished.publishedAt,
-      payloadHash: latestPublished.payloadHash,
-    } : null,
-    fallback: latestPublished ? false : true,
-    note: latestPublished
-      ? "A persisted pricing snapshot exists; public bundled endpoints remain the deterministic browser fallback."
-      : "No persisted refresh snapshot is configured, so the reviewed bundled pricing catalog is the current fallback.",
+    data: result.data,
+    latestPublishedSnapshot: result.snapshot,
+    fallback: result.source === "bundled",
+    source: result.source,
+    note: result.source === "published_snapshot"
+      ? "Prices come from the latest successfully published immutable snapshot; active reviewed overrides are labeled."
+      : "No published database snapshot is available, so the reviewed bundled catalog is used as a deterministic fallback.",
   }, { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=3600" } });
 }
