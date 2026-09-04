@@ -8,7 +8,6 @@ import "./commercial.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(getPublicSiteUrl()),
-  alternates: { canonical: "/" },
   title: { default: "Token Intelligence — AI Workload Economics", template: "%s · Token Intelligence" },
   description: "Estimate AI workload cost before a run, trace agent economics during execution, reconcile actual usage, and control budgets without storing prompts by default.",
   applicationName: "Token Intelligence",
