@@ -37,11 +37,12 @@ export function pricingForInput(model: ModelCatalogEntry, inputTokens: number, a
 }
 
 export function calculateCost(model: ModelCatalogEntry, inputs: CostInputs): CostBreakdown {
-  const cachedInputTokens = Math.min(Math.max(inputs.cachedInputTokens ?? 0, 0), inputs.inputTokens);
-  const uncachedInputTokens = Math.max(inputs.inputTokens - cachedInputTokens, 0);
+  const requestedCachedInputTokens = Math.min(Math.max(inputs.cachedInputTokens ?? 0, 0), inputs.inputTokens);
   const { pricing, tier, resolved } = pricingForInput(model, inputs.inputTokens, inputs.at);
+  const cachedInputTokens = pricing.cachedInput === undefined ? 0 : requestedCachedInputTokens;
+  const uncachedInputTokens = Math.max(inputs.inputTokens - cachedInputTokens, 0);
   const input = tokenCost(uncachedInputTokens, pricing.input);
-  const cachedInput = pricing.cachedInput === undefined ? 0 : tokenCost(cachedInputTokens, pricing.cachedInput);
+  const cachedInput = tokenCost(cachedInputTokens, pricing.cachedInput);
   const cacheWrite5m = tokenCost(inputs.cacheWrite5mTokens ?? 0, pricing.cacheWrite5m);
   const cacheWrite1h = tokenCost(inputs.cacheWrite1hTokens ?? 0, pricing.cacheWrite1h);
   const output = tokenCost(inputs.outputTokens, pricing.output);
