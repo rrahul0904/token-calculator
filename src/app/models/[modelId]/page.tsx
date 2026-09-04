@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ModelCostEstimator } from "@/components/model-cost-estimator";
 import { formatTokens } from "@/lib/format";
-import { getComparableModels, getCurrentModels, getModel, getRelatedModels } from "@/lib/model-discovery";
+import { getCanonicalComparison, getComparableModels, getCurrentModels, getModel, getRelatedModels } from "@/lib/model-discovery";
 import { resolvePricing } from "@/lib/pricing";
 import { publicUrl } from "@/lib/site-url";
 import { getTokenizerSpec, tokenizerPrecisionLabel } from "@/lib/tokenizers/registry";
@@ -100,9 +100,8 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ mo
       <h2>Related economics comparisons</h2>
       <div className="tool-link-grid">
         {comparable.slice(0, 4).map((candidate) => {
-          const href = model.provider === candidate.provider || model.provider === "OpenAI"
-            ? `/compare/${model.id}/vs/${candidate.id}`
-            : `/compare/${candidate.id}/vs/${model.id}`;
+          const comparison = getCanonicalComparison(model.id, candidate.id);
+          const href = comparison?.path ?? "/models";
           return <Link key={candidate.id} className="tool-link" href={href}><p className="eyebrow">{candidate.provider}</p><h3>{model.name} vs {candidate.name}</h3><p>Compare text rates, context, tokenizer certainty and the same workload assumptions.</p><span>Compare →</span></Link>;
         })}
       </div>
