@@ -9,6 +9,9 @@ const publicPages = [
   { path: "/guides/openai", marker: /OpenAI token cost/i },
   { path: "/guides/anthropic", marker: /Claude token cost/i },
   { path: "/guides/gemini", marker: /Gemini token cost/i },
+  { path: "/models/gpt-5.6-sol", marker: /GPT-5\.6 Sol pricing/i },
+  { path: "/models/gemini-3.7-flash/pricing-history", marker: /Gemini 3\.7 Flash pricing history/i },
+  { path: "/compare/gpt-5.6-sol/vs/claude-sonnet-5", marker: /GPT-5\.6 Sol vs Claude Sonnet 5/i },
 ];
 
 for (const pageCase of publicPages) {
@@ -73,6 +76,9 @@ test("sitemap exposes the public calculator, tools, and provider guides", async 
   expect(body).toContain("/guides/openai");
   expect(body).toContain("/guides/anthropic");
   expect(body).toContain("/guides/gemini");
+  expect(body).toContain("/models/gpt-5.6-sol");
+  expect(body).toContain("/models/gemini-3.7-flash/pricing-history");
+  expect(body).toContain("/compare/gpt-5.6-sol/vs/claude-sonnet-5");
 });
 
 
@@ -129,6 +135,9 @@ test("critical public routes avoid page-level horizontal overflow at required mo
   const routes = [
     "/",
     "/models",
+    "/models/gpt-5.6-sol",
+    "/models/gemini-3.7-flash/pricing-history",
+    "/compare/gpt-5.6-sol/vs/claude-sonnet-5",
     "/guides",
     "/guides/openai",
     "/guides/anthropic",
@@ -149,4 +158,52 @@ test("critical public routes avoid page-level horizontal overflow at required mo
       expect(overflow, route + " at " + size.width + "px").toBeLessThanOrEqual(1);
     }
   }
+});
+
+
+test("model detail exposes provenance, tokenizer certainty, canonical metadata and structured data", async ({ page }) => {
+  await page.goto("/models/gpt-5.6-sol", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("GPT-5.6 Sol");
+  await expect(page.getByText("Provider reference", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Official source/i)).toBeVisible();
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/models\/gpt-5\.6-sol$/);
+  const structured = await page.locator('script[type="application/ld+json"]').allTextContents();
+  expect(structured.join("\n")).toContain("BreadcrumbList");
+});
+
+test("pricing history shows represented promotion and scheduled standard rate", async ({ page }) => {
+  await page.goto("/models/gemini-3.7-flash/pricing-history", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("body")).toContainText("2026-12-31");
+  await expect(page.locator("body")).toContainText("2027-01-01");
+  await expect(page.locator("body")).toContainText(/future scheduled|current/i);
+});
+
+test("comparison query restores safe workload and canonical reverse routes redirect", async ({ page }) => {
+  await page.goto("/compare/gpt-5.6-sol/vs/claude-sonnet-5?input=123456&output=7890&cached=40&requests=50000", { waitUntil: "domcontentloaded" });
+  await expect(page.getByLabel("Comparison input tokens")).toHaveValue("123456");
+  await expect(page.getByLabel("Comparison output tokens")).toHaveValue("7890");
+  await expect(page.getByLabel("Comparison cached percent")).toHaveValue("40");
+  await expect(page.getByLabel("Comparison requests per month")).toHaveValue("50000");
+  await expect(page.locator("body")).toContainText("Lower price does not imply equivalent quality");
+
+  await page.goto("/compare/claude-sonnet-5/vs/gpt-5.6-sol", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/compare\/gpt-5\.6-sol\/vs\/claude-sonnet-5$/);
+});
+
+test("comparison share link contains workload numbers only", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
+  await page.goto("/compare/gpt-5.6-sol/vs/claude-sonnet-5?input=111&output=22&cached=33&requests=44", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Copy comparison link" }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("input=111");
+  expect(copied).toContain("output=22");
+  expect(copied).not.toMatch(/prompt|text=|api[_-]?key|bearer/i);
+});
+
+test("developer page exposes public API quickstarts and package-source caveat", async ({ page }) => {
+  await page.goto("/developers", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("body")).toContainText("/api/v1/models/:id");
+  await expect(page.locator("body")).toContainText("npm install @token-intelligence/sdk");
+  await expect(page.locator("body")).toContainText("pip install token-intelligence");
+  await expect(page.locator("body")).toContainText(/does not claim registry publication status/i);
 });

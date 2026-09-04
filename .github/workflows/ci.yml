@@ -60,6 +60,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      - name: Pricing catalog self-check
+        run: npm run pricing:diff
       - name: Drizzle schema check
         run: npm run db:check
       - name: Apply migrations on disposable PostgreSQL

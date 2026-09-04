@@ -39,6 +39,8 @@ export const OPENAPI_DOCUMENT = {
     "/api/health": { get: operation("Deployment health", { tags: ["Operations"] }) },
     "/api/v1/tokenize": { post: operation("Tokenize text without persistence", { request: { $ref: "#/components/schemas/TokenizeRequest" }, tags: ["Economics"] }) },
     "/api/v1/models": { get: operation("List model catalog and pricing provenance", { tags: ["Economics"] }) },
+    "/api/v1/models/{id}": { get: operation("Get normalized model pricing, context and tokenizer metadata", { tags: ["Economics"] }) },
+    "/api/v1/models/{id}/pricing-history": { get: operation("Get represented effective pricing history for a model", { tags: ["Economics"] }) },
     "/api/v1/estimate": { post: operation("Estimate model costs", { request: { $ref: "#/components/schemas/EstimateRequest" }, tags: ["Economics"] }) },
     "/api/v1/compare": { post: operation("Compare model economics", { tags: ["Economics"] }) },
     "/api/v1/recommend": { post: operation("Recommend economically compatible models", { tags: ["Economics"] }) },

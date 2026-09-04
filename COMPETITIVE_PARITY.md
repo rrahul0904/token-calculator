@@ -146,3 +146,18 @@ Token Intelligence intentionally goes beyond the observed reference in several a
 - browser tests enforce mobile overflow, semantic labels, share-link privacy, and prompt network isolation
 
 The pricing-version decision is documented in `docs/ADR_VERSIONED_PRICING_ENGINE.md`.
+
+## Wave 1C.3 deliberate differentiation
+
+The public acquisition layer now goes beyond calculator parity:
+
+- canonical model pages generated from one sourced catalog
+- effective pricing history without fabricated historical periods
+- deterministic pairwise comparison canonicalization
+- safe workload-only comparison URLs
+- normalized model metadata APIs
+- source-package SDK onboarding
+- pricing snapshot/diff maintenance tooling
+- curated programmatic SEO rather than indiscriminate pair generation
+
+These are product-quality and acquisition improvements, not attempts to copy source code or branding from the reference product.
