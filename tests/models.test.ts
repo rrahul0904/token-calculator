@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MODEL_CATALOG, PROVIDERS, modelsByProvider } from "@/lib/models";
+import { resolvePricing } from "@/lib/pricing";
 
 describe("pricing catalog", () => {
   it("has at least one model for every supported provider", () => {
@@ -25,8 +26,8 @@ describe("pricing catalog", () => {
     expect(gpt55Pro?.pricing).toMatchObject({ input: 30, output: 180 });
     expect(gpt55Pro?.pricing.cachedInput).toBeUndefined();
     expect(fable51?.pricing).toMatchObject({ input: 10, cachedInput: 0.25, output: 50 });
-    expect(gemini37?.pricing).toMatchObject({ input: 0.75, cachedInput: 0.075, output: 3.75 });
-    expect(gemini37?.pricingLabel).toContain("2026-12-31");
+    expect(resolvePricing({ model: gemini37!, inputTokens: 1000, at: new Date("2026-09-04") }).pricing).toMatchObject({ input: 0.75, cachedInput: 0.075, output: 3.75 });
+    expect(gemini37?.pricingVersions?.[0]?.effectiveTo).toBe("2026-12-31");
   });
 
   it("labels tokenizer precision conservatively", () => {

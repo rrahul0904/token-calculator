@@ -1,3 +1,4 @@
+import { getPublicSiteUrl } from "@/lib/site-url";
 const json = { "application/json": { schema: { type: "object" } } };
 const noContent = { description: "Success" };
 const bearer = [{ bearerAuth: [] }];
@@ -20,16 +21,16 @@ export const OPENAPI_DOCUMENT = {
     version: "1.0.0",
     description: "AI economics, agent-run telemetry, budgets, model economics, MCP-adjacent data and governed provider gateway APIs. Measurement provenance is preserved as provider_measured, agent_measured, local_tokenizer_reference, estimated, or reconciled. Prompt/code content is not persisted by default.",
   },
-  servers: [{ url: process.env.APP_BASE_URL ?? "https://token-intelligence-eight.vercel.app" }],
+  servers: [{ url: getPublicSiteUrl() }],
   components: {
     securitySchemes: {
       bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "Token Intelligence API key" },
       cookieAuth: { type: "apiKey", in: "cookie", name: "wos-session", description: "WorkOS AuthKit session cookie for browser/session routes." },
     },
     schemas: {
-      Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
+      Error: { type: "object", properties: { error: { type: "string" }, errorDetail: { type: "object", properties: { code: { type: "string" }, message: { type: "string" } }, required: ["code", "message"] } }, required: ["error"] },
       UsageSource: { type: "string", enum: ["provider_measured", "agent_measured", "local_tokenizer_reference", "estimated", "reconciled"] },
-      TokenizeRequest: { type: "object", properties: { text: { type: "string", maxLength: 500000 } }, required: ["text"] },
+      TokenizeRequest: { type: "object", properties: { text: { type: "string", maxLength: 500000, description: "Text is processed for the response only; the UTF-8 request text must not exceed 500,000 bytes." }, model: { type: "string", description: "Optional Token Intelligence model ID used to select a tokenizer family." }, includePieces: { type: "boolean", default: false }, maxPieces: { type: "integer", minimum: 1, maximum: 500, default: 100 } }, required: ["text"] },
       EstimateRequest: { type: "object", properties: { inputTokens: { type: "integer", minimum: 0 }, outputTokens: { type: "integer", minimum: 0 }, cachedInputTokens: { type: "integer", minimum: 0 }, requestsPerMonth: { type: "integer", minimum: 1 } }, required: ["inputTokens", "outputTokens"] },
       WorkloadScenario: { type: "object", properties: { mode: { type: "string", enum: ["tokens2cost", "cost2tokens"] }, modelId: { type: "string" }, endpointId: { type: ["string", "null"] }, pinnedModelId: { type: ["string", "null"] }, totalTokens: { type: "integer", minimum: 0 }, budgetUsd: { type: "number", minimum: 0 }, inputPercent: { type: "number", minimum: 0, maximum: 100 }, cacheHitPercent: { type: "number", minimum: 0, maximum: 100 }, cacheableInputPercent: { type: "number", minimum: 0, maximum: 100 }, cacheWrite5mPercent: { type: "number", minimum: 0, maximum: 100 }, cacheWrite1hPercent: { type: "number", minimum: 0, maximum: 100 }, requestsPerMonth: { type: "integer", minimum: 0 } }, required: ["mode", "modelId", "totalTokens", "budgetUsd", "inputPercent", "cacheHitPercent", "cacheableInputPercent", "requestsPerMonth"] },
       GatewayRequest: { type: "object", properties: { providerConnectionId: { type: "string" }, projectId: { type: ["string", "null"] }, runId: { type: "string" }, agentName: { type: "string" }, workflowName: { type: ["string", "null"] }, environment: { type: "string" }, model: { type: "string" }, fallbackModel: { type: "string" }, input: {}, maxOutputTokens: { type: "integer" }, stream: { type: "boolean" } }, required: ["providerConnectionId", "model", "input"] },

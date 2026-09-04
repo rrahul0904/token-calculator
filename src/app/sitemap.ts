@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { getPublicSiteUrl } from "@/lib/site-url";
 
 const publicRoutes = [
   "",
@@ -16,7 +17,7 @@ const publicRoutes = [
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://token-intelligence-eight.vercel.app").replace(/\/$/, "");
+  const baseUrl = getPublicSiteUrl();
   return publicRoutes.map((route) => ({
     url: baseUrl + route,
     lastModified: new Date("2026-09-04T00:00:00.000Z"),

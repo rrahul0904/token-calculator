@@ -157,3 +157,19 @@ The next implementation slice should focus on:
 4. provider/model programmatic metadata and canonical URLs
 5. API compatibility hardening and request-size/auth/error tests
 6. mobile and accessibility checks for the new guide and calculator surfaces
+
+## Wave 1C.2 implementation evidence
+
+The follow-on hardening wave converts the first parity slice into reusable domain architecture:
+
+- provider-specific token-count fields replaced by a tokenizer-family result registry
+- precision vocabulary made explicit
+- effective-dated pricing versions added for temporary Gemini 3.6/3.7 Flash rates
+- long-context threshold boundary documented and tested
+- unsupported cache pricing corrected so input is never silently free
+- context headroom and overflow made model-aware
+- workload sharing made prompt-safe
+- tokenize API extended without breaking the original `{ "text": ... }` request
+- canonical metadata/structured data and mobile/privacy browser tests expanded
+
+These changes are deliberate improvements over the observable reference rather than pixel or source-code cloning.

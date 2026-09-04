@@ -45,9 +45,9 @@ button { cursor: pointer; }
 .text-button:hover { color: var(--mint); }
 textarea { width: 100%; min-height: 240px; resize: vertical; border: 1px solid var(--line); border-radius: 16px; padding: 20px; background: #07110f; color: var(--text); line-height: 1.65; outline: none; }
 textarea:focus, input:focus, select:focus { border-color: #4b8a72; box-shadow: 0 0 0 3px rgba(69,220,146,.08); outline: none; }
-.number-input-block { display: grid; gap: 12px; max-width: 620px; margin: 24px auto 36px; }
+.number-input-block { display: grid; gap: 12px; width: 100%; max-width: 620px; min-width: 0; margin: 24px auto 36px; }
 .number-input-block > span { font-size: 1rem; font-weight: 650; }
-.number-input-block input { font-size: 2.4rem; }
+.number-input-block input { width: 100%; min-width: 0; max-width: 100%; font-size: 2.4rem; }
 small { color: #7f958b; line-height: 1.45; }
 input, select { border: 1px solid var(--line); border-radius: 11px; background: #091410; color: var(--text); padding: 11px 12px; }
 .metrics-strip { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); margin-top: 24px; padding-top: 20px; }

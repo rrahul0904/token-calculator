@@ -3,24 +3,40 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompactModelComparison } from "@/components/compact-model-comparison";
+import { contextHeadroom, parseCalculatorState, serializeCalculatorState, type CalculatorInputMode } from "@/lib/calculator-state";
 import { calculateCost } from "@/lib/cost";
 import { formatTokens } from "@/lib/format";
 import { MODEL_CATALOG, type ModelCatalogEntry } from "@/lib/models";
-import type { TokenMetrics } from "@/types/tokenizer";
+import { getTokenizerSpec, tokenizerPrecisionLabel } from "@/lib/tokenizers/registry";
+import type { TokenMetrics, TokenizerFamily, TokenizerResult } from "@/types/tokenizer";
 
-type InputMode = "text" | "words" | "tokens";
+const TOKENIZER_FAMILIES: TokenizerFamily[] = [
+  "openai-o200k",
+  "anthropic-estimate",
+  "gemini-estimate",
+  "deepseek-estimate",
+  "grok-estimate",
+];
+
+function emptyTokenizerResult(family: TokenizerFamily): TokenizerResult {
+  const spec = getTokenizerSpec(family);
+  return {
+    count: 0,
+    pieces: [],
+    family,
+    precision: spec.precision,
+    source: spec.source,
+    caveat: spec.caveat,
+    piecesTruncated: false,
+  };
+}
 
 const EMPTY_METRICS: TokenMetrics = {
   requestId: 0,
   characters: 0,
   charactersWithoutSpaces: 0,
   words: 0,
-  openaiExact: 0,
-  anthropicEstimate: 0,
-  geminiEstimate: 0,
-  deepseekEstimate: 0,
-  grokEstimate: 0,
-  pieces: [],
+  results: Object.fromEntries(TOKENIZER_FAMILIES.map((family) => [family, emptyTokenizerResult(family)])) as Record<TokenizerFamily, TokenizerResult>,
 };
 
 const OUTPUT_PRESETS = [
@@ -42,8 +58,18 @@ function estimatedTokensFromWords(words: number) {
   return Math.max(0, Math.ceil(words / 0.75));
 }
 
+function contextStateLabel(state: ReturnType<typeof contextHeadroom>["state"]) {
+  if (state === "overflow") return "Overflow";
+  if (state === "near_limit") return "Near limit";
+  if (state === "tight") return "Getting tight";
+  return "Comfortable";
+}
+
 export function TokenCalculator() {
-  const [mode, setMode] = useState<InputMode>("text");
+  const currentModels = useMemo(() => MODEL_CATALOG.filter((model) => model.status !== "legacy"), []);
+  const defaultModelId = currentModels.find((model) => model.id === "gpt-5.6-sol")?.id ?? currentModels[0]?.id ?? "";
+
+  const [mode, setMode] = useState<CalculatorInputMode>("text");
   const [text, setText] = useState("");
   const [manualWords, setManualWords] = useState(500);
   const [manualTokens, setManualTokens] = useState(1000);
@@ -51,8 +77,32 @@ export function TokenCalculator() {
   const [outputPercent, setOutputPercent] = useState(35);
   const [cachedPercent, setCachedPercent] = useState(0);
   const [requestsPerMonth, setRequestsPerMonth] = useState(10_000);
+  const [selectedModelId, setSelectedModelId] = useState(defaultModelId);
+  const [pieceLimit, setPieceLimit] = useState(120);
+  const [shareStatus, setShareStatus] = useState("");
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+
+  const selectedModel = currentModels.find((model) => model.id === selectedModelId) ?? currentModels[0];
+
+  useEffect(() => {
+    const parsed = parseCalculatorState(window.location.search, {
+      mode: "text",
+      words: 500,
+      tokens: 1000,
+      outputPercent: 35,
+      cachedPercent: 0,
+      requestsPerMonth: 10_000,
+      modelId: defaultModelId,
+    });
+    setMode(parsed.mode);
+    setManualWords(parsed.words);
+    setManualTokens(parsed.tokens);
+    setOutputPercent(parsed.outputPercent);
+    setCachedPercent(parsed.cachedPercent);
+    setRequestsPerMonth(parsed.requestsPerMonth);
+    if (currentModels.some((model) => model.id === parsed.modelId)) setSelectedModelId(parsed.modelId);
+  }, [currentModels, defaultModelId]);
 
   useEffect(() => {
     const worker = new Worker(new URL("../workers/tokenizer.worker.ts", import.meta.url));
@@ -72,21 +122,23 @@ export function TokenCalculator() {
     return () => window.clearTimeout(timer);
   }, [text, mode]);
 
-  const baseInputTokens = mode === "text" ? metrics.openaiExact : mode === "words" ? estimatedTokensFromWords(manualWords) : manualTokens;
+  useEffect(() => {
+    setPieceLimit(120);
+  }, [text, selectedModelId]);
+
+  const selectedTokenizerResult = selectedModel ? metrics.results[selectedModel.tokenizer] : metrics.results["openai-o200k"];
+  const baseInputTokens = mode === "text"
+    ? selectedTokenizerResult.count
+    : mode === "words"
+      ? estimatedTokensFromWords(manualWords)
+      : manualTokens;
   const outputTokens = Math.max(0, Math.round(baseInputTokens * (outputPercent / 100)));
+
   const inputTokensFor = useCallback((model: ModelCatalogEntry) => {
     if (mode !== "text") return baseInputTokens;
-    switch (model.tokenizer) {
-      case "openai-o200k": return metrics.openaiExact;
-      case "anthropic-estimate": return metrics.anthropicEstimate;
-      case "gemini-estimate": return metrics.geminiEstimate;
-      case "deepseek-estimate": return metrics.deepseekEstimate;
-      case "grok-estimate": return metrics.grokEstimate;
-      default: return metrics.openaiExact;
-    }
+    return metrics.results[model.tokenizer]?.count ?? metrics.results["openai-o200k"].count;
   }, [mode, baseInputTokens, metrics]);
 
-  const currentModels = useMemo(() => MODEL_CATALOG.filter((model) => model.status !== "legacy"), []);
   const lowest = useMemo(() => {
     if (!baseInputTokens) return null;
     return currentModels.map((model) => {
@@ -96,8 +148,28 @@ export function TokenCalculator() {
     }).sort((a, b) => a.cost - b.cost)[0] ?? null;
   }, [baseInputTokens, cachedPercent, currentModels, inputTokensFor, outputTokens]);
 
-  const tokenPieces = metrics.pieces.slice(0, 120);
-  const contextPct = baseInputTokens ? ((baseInputTokens + outputTokens) / 1_000_000) * 100 : 0;
+  const precisionDisplay = mode === "text" ? tokenizerPrecisionLabel(selectedTokenizerResult.precision) : "User supplied";
+  const tokenizerDisplay = mode === "text" ? getTokenizerSpec(selectedTokenizerResult.family).displayName : "Manual workload input";
+  const selectedContext = selectedModel
+    ? contextHeadroom(baseInputTokens, outputTokens, selectedModel.contextWindow)
+    : contextHeadroom(0, 0, 0);
+  const visiblePieces = selectedTokenizerResult.pieces.slice(0, pieceLimit);
+  const hiddenPieceCount = Math.max(selectedTokenizerResult.count - visiblePieces.length, 0);
+
+  async function copyScenarioLink() {
+    const query = serializeCalculatorState({
+      mode,
+      words: manualWords,
+      tokens: manualTokens,
+      outputPercent,
+      cachedPercent,
+      requestsPerMonth,
+      modelId: selectedModel?.id ?? "",
+    }, { textModeTokenCount: baseInputTokens });
+    const url = window.location.origin + "/?" + query;
+    await navigator.clipboard.writeText(url);
+    setShareStatus(mode === "text" ? "Scenario link copied without prompt content." : "Scenario link copied.");
+  }
 
   return (
     <main>
@@ -118,7 +190,7 @@ export function TokenCalculator() {
       <section id="calculator" className="calculator-shell shell" aria-label="Token calculator">
         <div className="calculator-shell__top">
           <div className="mode-tabs" role="tablist" aria-label="Input mode">
-            {(["text", "words", "tokens"] as InputMode[]).map((item) => <button key={item} className={mode === item ? "mode-tab mode-tab--active" : "mode-tab"} type="button" onClick={() => setMode(item)}>{item === "text" ? "Paste text" : item === "words" ? "Known words" : "Known tokens"}</button>)}
+            {(["text", "words", "tokens"] as CalculatorInputMode[]).map((item) => <button key={item} role="tab" aria-selected={mode === item} className={mode === item ? "mode-tab mode-tab--active" : "mode-tab"} type="button" onClick={() => setMode(item)}>{item === "text" ? "Paste text" : item === "words" ? "Known words" : "Known tokens"}</button>)}
           </div>
           <span className="privacy-inline"><span className="status-dot" />Text stays in this browser</span>
         </div>
@@ -132,32 +204,41 @@ export function TokenCalculator() {
 
           <aside className="calculator-summary">
             <span className="app-kicker">Workload snapshot</span>
-            <div className="summary-number"><strong>{formatTokens(baseInputTokens)}</strong><span>input tokens</span></div>
+            <div className="summary-number"><strong>{mode === "text" && selectedTokenizerResult.precision === "estimated" ? "≈" : ""}{formatTokens(baseInputTokens)}</strong><span>input tokens</span></div>
             <div className="summary-list">
-              <div><span>Planned output</span><strong>{formatTokens(outputTokens)}</strong></div>
-              <div><span>Reference context</span><strong>{contextPct.toFixed(2)}%</strong></div>
-              <div><span>Lowest current estimate</span><strong>{lowest ? `$${lowest.cost < .01 ? lowest.cost.toFixed(4) : lowest.cost.toFixed(3)}` : "—"}</strong></div>
-              <div><span>Lowest model</span><strong>{lowest?.model.name ?? "—"}</strong></div>
+              <div><span>Tokenizer</span><strong>{tokenizerDisplay}</strong></div>
+              <div><span>Precision</span><strong>{precisionDisplay}</strong></div>
+              <div><span>Context used</span><strong>{selectedContext.utilization.toFixed(2)}%</strong></div>
+              <div><span>Headroom</span><strong>{selectedContext.remaining >= 0 ? formatTokens(selectedContext.remaining) : "-" + formatTokens(Math.abs(selectedContext.remaining))}</strong></div>
+              <div><span>Context state</span><strong>{contextStateLabel(selectedContext.state)}</strong></div>
+              <div><span>Lowest current estimate</span><strong>{lowest ? "$" + (lowest.cost < .01 ? lowest.cost.toFixed(4) : lowest.cost.toFixed(3)) : "—"}</strong></div>
             </div>
-            <small>“Lowest” compares economics for declared workload assumptions. It does not claim equal model quality.</small>
+            <small>{selectedTokenizerResult.caveat}</small>
           </aside>
         </div>
 
         <div className="metrics-strip metrics-strip--5">
-          <div><span>Tokens</span><strong>{formatTokens(baseInputTokens)}</strong><small>{mode === "text" ? "o200k reference" : "planning input"}</small></div>
+          <div><span>Tokens</span><strong>{mode === "text" && selectedTokenizerResult.precision === "estimated" ? "≈" : ""}{formatTokens(baseInputTokens)}</strong><small>{precisionDisplay}</small></div>
           <div><span>Words</span><strong>{mode === "text" ? formatTokens(metrics.words) : mode === "words" ? formatTokens(manualWords) : "—"}</strong></div>
           <div><span>No-space chars</span><strong>{mode === "text" ? formatTokens(metrics.charactersWithoutSpaces) : "—"}</strong></div>
           <div><span>Characters</span><strong>{mode === "text" ? formatTokens(metrics.characters) : "—"}</strong></div>
-          <div><span>Output</span><strong>{formatTokens(outputTokens)}</strong><small>{outputPercent}% assumption</small></div>
+          <div><span>Reserved output</span><strong>{formatTokens(outputTokens)}</strong><small>{outputPercent}% assumption</small></div>
         </div>
 
         <div className="planning-bar">
+          <label><span className="field-label">Planning model</span><select aria-label="Planning model" value={selectedModel?.id ?? ""} onChange={(event) => setSelectedModelId(event.target.value)}>{currentModels.map((model) => <option key={model.id} value={model.id}>{model.provider} · {model.name}</option>)}</select></label>
           <div className="planning-bar__output"><div><span className="field-label">Expected response</span><strong>{outputPercent}% of input</strong></div><div className="preset-row">{OUTPUT_PRESETS.map((preset) => <button key={preset.value} type="button" className={outputPercent === preset.value ? "preset preset--active" : "preset"} onClick={() => setOutputPercent(preset.value)}>{preset.label}</button>)}</div><input aria-label="Output token percentage" className="range" type="range" min="0" max="150" step="5" value={outputPercent} onChange={(event) => setOutputPercent(Number(event.target.value))} /></div>
-          <label><span className="field-label">Cached input</span><div className="inline-number"><input type="number" min="0" max="100" value={cachedPercent} onChange={(event) => setCachedPercent(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} /><span>%</span></div></label>
-          <label><span className="field-label">Requests / month</span><input type="number" min="0" value={requestsPerMonth} onChange={(event) => setRequestsPerMonth(Number(event.target.value) || 0)} /></label>
+          <label><span className="field-label">Cached input</span><div className="inline-number"><input aria-label="Cached input percentage" type="number" min="0" max="100" value={cachedPercent} onChange={(event) => setCachedPercent(Math.min(100, Math.max(0, Number(event.target.value) || 0)))} /><span>%</span></div></label>
+          <label><span className="field-label">Requests / month</span><input aria-label="Requests per month" type="number" min="0" value={requestsPerMonth} onChange={(event) => setRequestsPerMonth(Number(event.target.value) || 0)} /></label>
         </div>
 
-        {mode === "text" && tokenPieces.length > 0 && <details className="token-visualizer"><summary>Inspect token boundaries <span>first {tokenPieces.length} o200k reference pieces</span></summary><div className="token-cloud">{tokenPieces.map((piece, index) => <span key={`${piece.id}-${index}`} title={`Token ${piece.id}`} className={`token-chip token-chip--${index % 5}`}>{piece.text.replace(/ /g, "·").replace(/\n/g, "↵") || "∅"}</span>)}</div></details>}
+        <div className="form-actions">
+          <button type="button" className="button button--ghost" onClick={copyScenarioLink}>Copy scenario link</button>
+          {shareStatus ? <span role="status" className="muted">{shareStatus}</span> : null}
+        </div>
+
+        {mode === "text" && selectedTokenizerResult.pieces.length > 0 && <details className="token-visualizer"><summary>Inspect token boundaries <span>showing {visiblePieces.length} of {formatTokens(selectedTokenizerResult.count)}</span></summary><div className="token-cloud">{visiblePieces.map((piece, index) => <span key={String(piece.id ?? "piece") + "-" + index} title={piece.id === undefined ? "Token piece" : "Token " + piece.id} className={"token-chip token-chip--" + (index % 5)}>{piece.text.replace(/ /g, "·").replace(/\n/g, "↵") || "∅"}</span>)}</div>{hiddenPieceCount > 0 ? <div className="form-actions"><span className="muted">{hiddenPieceCount.toLocaleString()} token pieces are not rendered to keep the page responsive.</span>{pieceLimit < selectedTokenizerResult.pieces.length ? <button className="button button--ghost" type="button" onClick={() => setPieceLimit(300)}>Show up to 300</button> : null}</div> : null}</details>}
+        {mode === "text" && selectedTokenizerResult.pieces.length === 0 && baseInputTokens > 0 ? <p className="table-note">Token-piece inspection is unavailable for this estimated tokenizer. Switch to an OpenAI o200k reference model to inspect local token boundaries.</p> : null}
       </section>
 
       <div className="shell"><CompactModelComparison inputTokensFor={inputTokensFor} outputTokens={outputTokens} cachedPercent={cachedPercent} requestsPerMonth={requestsPerMonth} /></div>

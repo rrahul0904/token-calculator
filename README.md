@@ -20,7 +20,7 @@ This repository is a clean-room implementation inspired by observable behaviors 
 
 ### Model economics
 - searchable full model catalog
-- OpenAI, Anthropic, Google Gemini, xAI/Grok, and DeepSeek profiles
+- OpenAI, Anthropic, Google Gemini, xAI/Grok, DeepSeek, and Z.AI profiles
 - provider pricing-source links
 - data-driven long-context tiers
 - per-request and monthly cost comparison
@@ -108,3 +108,18 @@ Operations:
 ## Next production wave
 
 The recommended next wave is an **Evidence-Calibrated Optimization Loop**: organization-owned evaluations, outcome-linked quality evidence, empirical cost/quality frontiers, verified model-switch recommendations, explicit apply/rollback workflows, and measured savings verification.
+
+
+## Wave 1C.2 public-surface hardening
+
+The calculator/developer surface now has:
+
+- a canonical tokenizer registry with explicit `provider_reference` vs `estimated` precision
+- model-aware context headroom and overflow states
+- bounded token-piece inspection
+- privacy-safe share links that never include pasted prompt text
+- effective-dated pricing versions with historical/future resolution
+- a hardened backward-compatible `POST /api/v1/tokenize` request supporting optional `model`, `includePieces`, and bounded `maxPieces`
+- canonical public-site origin configuration, route-specific canonical metadata, provider breadcrumbs, and WebApplication structured data
+
+See `docs/ADR_VERSIONED_PRICING_ENGINE.md` for pricing-version semantics.

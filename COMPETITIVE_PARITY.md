@@ -131,3 +131,18 @@ The reference product is not used as the final pricing authority. Where its tabl
 - Gemini 3.6/3.7 Flash use Google's currently effective introductory $0.75 input / $0.075 cached input / $3.75 output rate through 2026-12-31 rather than the later $1.50 / $0.15 / $7.50 list rate.
 
 This is an intentional product-quality improvement, not a parity defect.
+
+## Wave 1C.2 hardening differences
+
+Token Intelligence intentionally goes beyond the observed reference in several areas:
+
+- tokenizer certainty is a first-class domain value rather than an implicit provider label
+- share links preserve workload assumptions without including prompt content
+- pricing can be resolved by execution date with explicit version/provenance metadata
+- unavailable cache pricing is not treated as a zero-cost cache bucket
+- token-piece output is explicitly bounded for UI/API responsiveness
+- the tokenize API remains compatible with the basic `{ "text": ... }` contract while optionally accepting a model and bounded piece output
+- context headroom is calculated against the selected model rather than a single fixed reference window
+- browser tests enforce mobile overflow, semantic labels, share-link privacy, and prompt network isolation
+
+The pricing-version decision is documented in `docs/ADR_VERSIONED_PRICING_ENGINE.md`.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { calculateCost, monthlyProjection } from "@/lib/cost";
 import { MODEL_CATALOG, type ModelCatalogEntry } from "@/lib/models";
+import { getTokenizerSpec, tokenizerPrecisionLabel } from "@/lib/tokenizers/registry";
 
 export function CompactModelComparison({
   inputTokensFor,
@@ -42,7 +43,7 @@ export function CompactModelComparison({
             <td className="mono">{((inputTokens + outputTokens) / model.contextWindow * 100).toFixed(1)}%</td>
             <td className="mono">${cost.total < .01 ? cost.total.toFixed(4) : cost.total.toFixed(3)}</td>
             <td className="mono">${monthlyProjection(cost.total, requestsPerMonth).toFixed(2)}</td>
-            <td><span className={model.tokenizerAccuracy === "reference" ? "source-badge" : "source-badge source-badge--estimated"}>{model.tokenizerAccuracy === "reference" ? "reference" : "estimate"}</span></td>
+            <td><span className={getTokenizerSpec(model.tokenizer).precision === "estimated" ? "source-badge source-badge--estimated" : "source-badge"}>{tokenizerPrecisionLabel(getTokenizerSpec(model.tokenizer).precision)}</span></td>
           </tr>)}</tbody>
         </table>
       </div>

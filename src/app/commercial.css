@@ -45,8 +45,9 @@
 .summary-list strong { font: 600 .72rem var(--font-mono); text-align: right; }
 .calculator-summary > small { margin-top: auto; }
 .planning-bar { display: grid; grid-template-columns: minmax(0, 1fr) 150px 180px; gap: 14px; align-items: end; padding: 17px 22px 20px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 45%, var(--panel)); }
+.planning-bar > *, .planning-bar label { min-width: 0; }
 .planning-bar label { display: grid; gap: 6px; }
-.planning-bar label input { width: 100%; }
+.planning-bar label input, .planning-bar label select { width: 100%; min-width: 0; max-width: 100%; }
 .planning-bar__output { display: grid; gap: 10px; }
 .planning-bar__output > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .planning-bar__output strong { font-size: .78rem; }
@@ -105,6 +106,7 @@
   .calculator-shell .metrics-strip > div { padding: 0 12px; }
   .planning-bar { grid-template-columns: 1fr; }
   .planning-bar__output { grid-column: auto; }
+  .planning-bar select { text-overflow: ellipsis; }
   .model-snapshot__header { align-items: flex-start; flex-direction: column; }
   .model-snapshot__footer { flex-direction: column; }
 }

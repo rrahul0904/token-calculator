@@ -37,3 +37,11 @@ Organizations can configure separate retention windows for telemetry, runs, find
 ## OpenTelemetry and SIEM
 
 Default OTLP and audit/alert exports are metadata-only. They must not contain prompts, completions, source code, API keys, provider secrets or raw tool outputs.
+
+## Wave 1C.2 calculator sharing and tokenize API
+
+Shareable calculator links contain numeric workload assumptions only. When the user is in pasted-text mode, the application converts the current result to a numeric token workload before creating the URL. Raw prompt text is never placed in the query string or fragment.
+
+The public `POST /api/v1/tokenize` route is a separate explicit server-side boundary. It processes text supplied by the caller to produce the response, sets `Cache-Control: no-store`, and does not intentionally persist or log the request text. Optional model selection changes tokenizer-family/precision metadata; it does not change the retention boundary.
+
+The browser privacy regression continues to fail if a pasted sentinel appears in any outgoing request body. A separate share-link regression verifies that copied URLs do not contain pasted prompt text.
