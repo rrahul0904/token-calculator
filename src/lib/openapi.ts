@@ -28,9 +28,9 @@ export const OPENAPI_DOCUMENT = {
       cookieAuth: { type: "apiKey", in: "cookie", name: "wos-session", description: "WorkOS AuthKit session cookie for browser/session routes." },
     },
     schemas: {
-      Error: { type: "object", properties: { error: { type: "string" } }, required: ["error"] },
+      Error: { type: "object", properties: { error: { type: "string" }, errorDetail: { type: "object", properties: { code: { type: "string" }, message: { type: "string" } }, required: ["code", "message"] } }, required: ["error"] },
       UsageSource: { type: "string", enum: ["provider_measured", "agent_measured", "local_tokenizer_reference", "estimated", "reconciled"] },
-      TokenizeRequest: { type: "object", properties: { text: { type: "string", maxLength: 500000 }, model: { type: "string", description: "Optional Token Intelligence model ID used to select a tokenizer family." }, includePieces: { type: "boolean", default: false }, maxPieces: { type: "integer", minimum: 1, maximum: 500, default: 100 } }, required: ["text"] },
+      TokenizeRequest: { type: "object", properties: { text: { type: "string", maxLength: 500000, description: "Text is processed for the response only; the UTF-8 request text must not exceed 500,000 bytes." }, model: { type: "string", description: "Optional Token Intelligence model ID used to select a tokenizer family." }, includePieces: { type: "boolean", default: false }, maxPieces: { type: "integer", minimum: 1, maximum: 500, default: 100 } }, required: ["text"] },
       EstimateRequest: { type: "object", properties: { inputTokens: { type: "integer", minimum: 0 }, outputTokens: { type: "integer", minimum: 0 }, cachedInputTokens: { type: "integer", minimum: 0 }, requestsPerMonth: { type: "integer", minimum: 1 } }, required: ["inputTokens", "outputTokens"] },
       GatewayRequest: { type: "object", properties: { providerConnectionId: { type: "string" }, projectId: { type: ["string", "null"] }, runId: { type: "string" }, agentName: { type: "string" }, workflowName: { type: ["string", "null"] }, environment: { type: "string" }, model: { type: "string" }, fallbackModel: { type: "string" }, input: {}, maxOutputTokens: { type: "integer" }, stream: { type: "boolean" } }, required: ["providerConnectionId", "model", "input"] },
     },
