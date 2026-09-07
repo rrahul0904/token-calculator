@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { WorkspaceConfigurationGate, WorkspaceOnboarding } from "@/components/workspace-gates";
 import { getConfigurationStatus } from "@/lib/config";
-import { getExternalAuthSession, getTenantContext } from "@/lib/auth/session";
+import { getExternalAuthSession, getTenantContext, isAuthConfigured } from "@/lib/auth/session";
 import "./app.css";
 import "./premium-app.css";
 
@@ -18,7 +18,15 @@ export default async function ApplicationLayout({ children }: { children: ReactN
   }
 
   const external = await getExternalAuthSession();
-  if (!external) redirect("/sign-in");
+  if (!external) {
+    // The explicit E2E adapter can make configuration.auth report live for
+    // authenticated test requests. Anonymous requests must not fall through to
+    // an unconfigured WorkOS runtime.
+    if (!isAuthConfigured()) {
+      return <WorkspaceConfigurationGate database={configuration.database} auth="code_complete_configuration_blocked" />;
+    }
+    redirect("/sign-in");
+  }
 
   const tenant = await getTenantContext();
   if (!tenant) return <WorkspaceOnboarding />;
