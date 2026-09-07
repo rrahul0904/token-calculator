@@ -6,12 +6,37 @@ function all(...names: string[]): boolean {
   return names.every((name) => Boolean(process.env[name]));
 }
 
+/**
+ * The browser suite has a deliberately explicit, server-only auth adapter so
+ * it can exercise tenant-scoped pages without shipping test credentials or a
+ * WorkOS session.  Treat it as an auth provider only when every part of that
+ * adapter was intentionally configured.  Normal deployments remain fail
+ * closed on missing WorkOS configuration.
+ */
+function hasExplicitE2eAuthAdapter(): boolean {
+  return (
+    process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED === "1" &&
+    all(
+      "TOKEN_INTELLIGENCE_E2E_AUTH_SECRET",
+      "TOKEN_INTELLIGENCE_E2E_USER_ID",
+      "TOKEN_INTELLIGENCE_E2E_USER_EMAIL",
+      "TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID",
+    )
+  );
+}
+
+/** True only when a real WorkOS/AuthKit runtime can be initialized. */
+export function hasWorkosAuthConfiguration(): boolean {
+  return all("WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD") && hasConfiguredWorkosRedirectUri();
+}
+
 export function getConfigurationStatus() {
   return {
     database: all("DATABASE_URL") ? "live" : "code_complete_configuration_blocked",
-    auth: all("WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD") && hasConfiguredWorkosRedirectUri()
-      ? "live"
-      : "code_complete_configuration_blocked",
+    auth:
+      hasWorkosAuthConfiguration() || hasExplicitE2eAuthAdapter()
+        ? "live"
+        : "code_complete_configuration_blocked",
     stripe: all("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM")
       ? "live"
       : "code_complete_configuration_blocked",
