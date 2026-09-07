@@ -12,9 +12,26 @@ export const GET = async (request: NextRequest) => {
       { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
-  const { handleAuth } = await import("@workos-inc/authkit-nextjs");
-  return handleAuth({
-    returnPathname: "/app/overview",
-    baseURL: request.nextUrl.origin,
-  })(request);
+
+  const code = request.nextUrl.searchParams.get("code");
+  const state = request.nextUrl.searchParams.get("state");
+  if (!code || !state) {
+    return Response.json(
+      { error: "INVALID_AUTH_CALLBACK", message: "The authentication callback is missing required OAuth state." },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  try {
+    const { handleAuth } = await import("@workos-inc/authkit-nextjs");
+    return await handleAuth({
+      returnPathname: "/app/overview",
+      baseURL: request.nextUrl.origin,
+    })(request);
+  } catch {
+    return Response.json(
+      { error: "AUTH_CALLBACK_FAILED", message: "The authentication callback could not be verified." },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 };
