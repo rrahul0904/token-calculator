@@ -18,8 +18,13 @@
     "db:check": "drizzle-kit check",
     "sdk:build": "npm --prefix packages/sdk-typescript run build",
     "ti": "tsx scripts/ti.ts",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run pricing:diff && npm run db:check && npm run sdk:build && npm run build",
-    "pricing:diff": "tsx scripts/pricing-diff.ts"
+    "verify": "npm run predeploy",
+    "pricing:diff": "tsx scripts/pricing-diff.ts",
+    "admin:rollup": "tsx scripts/admin-rollup.ts",
+    "admin:grant": "tsx scripts/grant-platform-admin.ts",
+    "release:config": "tsx scripts/release-config.ts",
+    "release:verify": "tsx scripts/release-verify.ts",
+    "predeploy": "npm run lint && npm run typecheck && npm test && npm run pricing:diff && npm run db:check && npm run db:migrate && npm run db:verify && TOKEN_INTELLIGENCE_INTEGRATION_TESTS=1 npm run test:integration && TOKEN_INTELLIGENCE_E2E_SEED=1 npx tsx scripts/seed-e2e.ts && npm run admin:rollup && npm run admin:rollup && npm run sdk:build && PYTHONPATH=packages/sdk-python python3 -c \"from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError; assert TokenIntelligenceClient and TokenIntelligenceError\" && npm run ti -- --help && npm run build && npm run test:e2e"
   },
   "engines": {
     "node": "22.x"
