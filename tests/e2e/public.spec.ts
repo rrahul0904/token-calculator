@@ -155,8 +155,27 @@ test("critical public routes avoid page-level horizontal overflow at required mo
     for (const route of routes) {
       const response = await page.goto(route, { waitUntil: "domcontentloaded" });
       expect(response?.status(), route + " at " + size.width + "px").toBeLessThan(400);
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      expect(overflow, route + " at " + size.width + "px").toBeLessThanOrEqual(1);
+      const layout = await page.evaluate(() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const overflow = document.documentElement.scrollWidth - viewportWidth;
+        const offenders = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              tag: element.tagName.toLowerCase(),
+              id: element.id || null,
+              className: typeof element.className === "string" ? element.className : "",
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              width: Math.round(rect.width),
+            };
+          })
+          .filter((entry) => entry.left < -1 || entry.right > viewportWidth + 1 || entry.width > viewportWidth + 1)
+          .sort((a, b) => Math.max(b.right - viewportWidth, b.width - viewportWidth) - Math.max(a.right - viewportWidth, a.width - viewportWidth))
+          .slice(0, 8);
+        return { overflow, offenders };
+      });
+      expect(layout.overflow, route + " at " + size.width + "px offenders=" + JSON.stringify(layout.offenders)).toBeLessThanOrEqual(1);
     }
   }
 });
