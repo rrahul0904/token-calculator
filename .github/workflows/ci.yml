@@ -55,7 +55,7 @@ jobs:
           docker run --rm
           -v "${{ github.workspace }}:/repo"
           zricethezav/gitleaks:v8.24.3
-          detect --source=/repo --redact --exit-code=2 --log-opts="--all"
+          detect --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=2 --log-opts="--all"
       - uses: actions/setup-node@v7
         with:
           node-version: 22
