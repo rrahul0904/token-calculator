@@ -173,13 +173,52 @@
 
 @media (max-width: 680px) {
   .model-snapshot__table-wrap {
-    width: min(100%, calc(100vw - 24px));
-    max-width: min(100%, calc(100vw - 24px));
-    contain: layout inline-size paint;
-    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    contain: layout paint;
   }
 
   .model-snapshot__table {
-    min-width: 700px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  .model-snapshot__table th,
+  .model-snapshot__table td {
+    min-width: 0;
+    padding: 10px 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .model-snapshot__table th:nth-child(2),
+  .model-snapshot__table td:nth-child(2),
+  .model-snapshot__table th:nth-child(3),
+  .model-snapshot__table td:nth-child(3),
+  .model-snapshot__table th:nth-child(4),
+  .model-snapshot__table td:nth-child(4),
+  .model-snapshot__table th:nth-child(8),
+  .model-snapshot__table td:nth-child(8) {
+    display: none;
+  }
+
+  .model-snapshot__table th:first-child,
+  .model-snapshot__table td:first-child {
+    width: 38%;
+  }
+
+  .model-name-cell {
+    min-width: 0;
+    white-space: normal;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .best-economics {
+    width: max-content;
+    max-width: 100%;
   }
 }
