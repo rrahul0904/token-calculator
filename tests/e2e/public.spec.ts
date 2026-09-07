@@ -102,7 +102,8 @@ test("safe shared workload restores numeric state and can surface context overfl
   await expect(page.locator(".calculator-summary")).toContainText("Overflow");
 });
 
-test("copy scenario link never copies pasted prompt content", async ({ page, context }) => {
+test("copy scenario link never copies pasted prompt content", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Clipboard permission semantics are browser-engine specific; covered in Chromium.");
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
   const sentinel = "PRIVATE_SHARE_SENTINEL_3185b6";
   await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -190,7 +191,8 @@ test("comparison query restores safe workload and canonical reverse routes redir
   await expect(page).toHaveURL(/\/compare\/gpt-5\.6-sol\/vs\/claude-sonnet-5$/);
 });
 
-test("comparison share link contains workload numbers only", async ({ page, context }) => {
+test("comparison share link contains workload numbers only", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Clipboard permission semantics are browser-engine specific; covered in Chromium.");
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
   await page.goto("/compare/gpt-5.6-sol/vs/claude-sonnet-5?input=111&output=22&cached=33&requests=44", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Copy comparison link" }).click();
