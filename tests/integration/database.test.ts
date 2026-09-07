@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb } from "@/db/client";
 import { checkApiKeyQuota } from "@/lib/gateway/quota";
 import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
+import { rollupPlatformDay } from "@/lib/admin/data";
 
 const integrationEnabled = process.env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS === "1";
 const describeIntegration = integrationEnabled ? describe : describe.skip;
@@ -30,6 +31,7 @@ describeIntegration("database release invariants", () => {
   const runA = `it_run_a_${suffix}`;
   const runB = `it_run_b_${suffix}`;
   const turnA = `it_turn_a_${suffix}`;
+  const platformAdmin = `it_platform_admin_${suffix}`;
 
   beforeAll(async () => {
     expect(databaseUrl).toBeTruthy();
@@ -57,6 +59,7 @@ describeIntegration("database release invariants", () => {
 
   afterAll(async () => {
     await closeDb();
+    await sql`delete from platform_admins where id = ${platformAdmin}`;
     await sql`delete from organizations where id in (${orgA}, ${orgB})`;
     await sql.end({ timeout: 3 });
   });
@@ -158,5 +161,23 @@ describeIntegration("database release invariants", () => {
     } catch (error) {
       expectPgCode(error, "23505");
     }
+  });
+
+  it("enforces globally unique platform-admin identities outside organization roles", async () => {
+    await sql`insert into platform_admins (id, workos_user_id, role) values (${platformAdmin}, ${`workos_${suffix}`}, 'read_only')`;
+    try {
+      await sql`insert into platform_admins (id, workos_user_id, role) values (${`${platformAdmin}_duplicate`}, ${`workos_${suffix}`}, 'read_only')`;
+      throw new Error("expected duplicate platform admin rejection");
+    } catch (error) {
+      expectPgCode(error, "23505");
+    }
+  });
+
+  it("writes an idempotent daily platform metrics snapshot", async () => {
+    const first = await rollupPlatformDay(new Date());
+    const second = await rollupPlatformDay(new Date());
+    expect(second.runs).toBe(first.runs);
+    const rows = await sql<{ count: string }[]>`select count(*)::text as count from platform_daily_metrics where day = date_trunc('day', now())`;
+    expect(Number(rows[0]?.count)).toBe(1);
   });
 });
