@@ -1153,3 +1153,28 @@ Canonical rules:
 - the public tokenize API preserves the legacy request while exposing optional model-aware precision/pieces
 
 The pricing decision record is `docs/ADR_VERSIONED_PRICING_ENGINE.md`.
+
+## Wave 1C.3 acquisition loop
+
+The free acquisition loop is now:
+
+```
+search intent
+→ model detail / comparison / provider guide
+→ sourced effective pricing
+→ workload estimate
+→ calculator or Cost Lab
+→ public API / SDK
+→ optional workspace
+```
+
+Domain rules:
+
+- model acquisition pages use `MODEL_CATALOG` and shared pricing/tokenizer logic
+- reverse comparison URLs canonicalize to one deterministic path
+- pricing history contains only represented source-backed windows
+- sitemap generation is curated rather than combinatorial
+- public SDK economics methods may run without credentials
+- authenticated tenant/control methods remain server-enforced
+- pricing candidates are diffed, never auto-applied
+- pricing maintenance runs through `npm run pricing:diff`.

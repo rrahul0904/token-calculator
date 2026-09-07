@@ -111,3 +111,23 @@ The calculator/developer surface now has:
 - canonical public-site origin configuration, route-specific canonical metadata, provider breadcrumbs, and WebApplication structured data
 
 See `docs/ADR_VERSIONED_PRICING_ENGINE.md` for pricing-version semantics.
+
+## Wave 1C.3 — Developer acquisition and pricing intelligence
+
+Wave 1C.2 was certified by CI run #280 and merged as `bfe4e7b3262e66e673accb80f8c7adf5b1cc262f`.
+
+Wave 1C.3 adds:
+
+- canonical model detail pages
+- model pricing-history pages/API
+- canonical pairwise model comparisons with numeric share state
+- normalized model detail API
+- additive model-list discovery metadata
+- curated sitemap expansion
+- official pricing-source registry
+- deterministic pricing snapshot/diff tooling
+- TypeScript/Python public economics SDK onboarding
+- copyable developer API examples
+- SEO/internal-linking/mobile/privacy regression coverage
+
+See `docs/DEVELOPER_ACQUISITION_ENGINE.md` and `docs/PRICING_SOURCE_MAINTENANCE.md`.

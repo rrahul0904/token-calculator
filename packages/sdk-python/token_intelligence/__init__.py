@@ -19,16 +19,16 @@ class TokenIntelligenceError(Exception):
 
 
 class TokenIntelligenceClient:
-    def __init__(self, api_key: str, base_url: str = "https://token-intelligence-eight.vercel.app", timeout: float = 30.0) -> None:
-        if not api_key:
-            raise ValueError("api_key is required")
+    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://token-intelligence-eight.vercel.app", timeout: float = 30.0) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
     def _request(self, path: str, method: str = "GET", body: Any = None) -> Any:
         payload = None if body is None else json.dumps(body).encode("utf-8")
-        headers = {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
+        headers = {"Accept": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         if payload is not None:
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(f"{self.base_url}{path}", data=payload, method=method, headers=headers)
@@ -45,8 +45,24 @@ class TokenIntelligenceClient:
             code = parsed.get("error") if isinstance(parsed, dict) and isinstance(parsed.get("error"), str) else None
             raise TokenIntelligenceError(code or f"Token Intelligence request failed ({exc.code})", exc.code, code, parsed) from exc
 
+    def tokenize(self, text: str, model: Optional[str] = None, include_pieces: bool = False, max_pieces: Optional[int] = None) -> Any:
+        payload: dict[str, Any] = {"text": text, "includePieces": include_pieces}
+        if model is not None:
+            payload["model"] = model
+        if max_pieces is not None:
+            payload["maxPieces"] = max_pieces
+        return self._request("/api/v1/tokenize", "POST", payload)
+
     def models(self) -> Any:
         return self._request("/api/v1/models")
+
+    def model(self, model_id: str) -> Any:
+        from urllib.parse import quote
+        return self._request(f"/api/v1/models/{quote(model_id, safe='')}")
+
+    def pricing_history(self, model_id: str) -> Any:
+        from urllib.parse import quote
+        return self._request(f"/api/v1/models/{quote(model_id, safe='')}/pricing-history")
 
     def estimate(self, **payload: Any) -> Any:
         return self._request("/api/v1/estimate", "POST", payload)

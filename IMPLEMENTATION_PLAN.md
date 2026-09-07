@@ -235,3 +235,32 @@ Scope:
 Do not merge the separate platform-admin/release-control PR #6 as part of this wave.
 
 Definition of done is the Wave 1C.2 Codex prompt plus fully green repository CI.
+
+## Wave 1C.3 — Developer Acquisition Engine
+
+Baseline:
+
+- Wave 1C.2 PR #11 merged
+- merge SHA: `bfe4e7b3262e66e673accb80f8c7adf5b1cc262f`
+- final closeout CI: run #280 (`33914521707`)
+
+Implementation branch:
+
+`wave-1c3-developer-acquisition-engine`
+
+Scope:
+
+- model discovery domain helpers
+- `/models/[modelId]`
+- `/models/[modelId]/pricing-history`
+- `GET /api/v1/models/[id]`
+- `GET /api/v1/models/[id]/pricing-history`
+- canonical `/compare/[left]/vs/[right]`
+- numeric-only shareable comparison state
+- pricing source registry + normalization + deterministic diff
+- `npm run pricing:diff`
+- public SDK methods/onboarding
+- OpenAPI/sitemap/internal-linking expansion
+- mobile/metadata/privacy regression tests
+
+Explicitly excluded: PR #6, enterprise admin, SSO/SCIM, billing-provider migration, new gateway architecture, and automatic untrusted pricing writes.

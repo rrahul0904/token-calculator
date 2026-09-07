@@ -45,3 +45,18 @@ Shareable calculator links contain numeric workload assumptions only. When the u
 The public `POST /api/v1/tokenize` route is a separate explicit server-side boundary. It processes text supplied by the caller to produce the response, sets `Cache-Control: no-store`, and does not intentionally persist or log the request text. Optional model selection changes tokenizer-family/precision metadata; it does not change the retention boundary.
 
 The browser privacy regression continues to fail if a pasted sentinel appears in any outgoing request body. A separate share-link regression verifies that copied URLs do not contain pasted prompt text.
+
+## Wave 1C.3 acquisition-route privacy
+
+Model detail and pricing-history routes contain only public catalog metadata.
+
+Comparison routes may serialize model IDs and numeric workload assumptions:
+
+- input tokens
+- output tokens
+- cached percentage
+- requests per month
+
+They never serialize raw prompts, completions, source code, API keys, provider credentials, or bearer tokens.
+
+Public SDK calls do not require an API key for public economics endpoints. Supplying an API key remains necessary for authenticated tenant/run/control/gateway operations and the client sends it only through the Authorization header.
