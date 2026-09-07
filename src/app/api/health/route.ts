@@ -28,9 +28,12 @@ export async function GET() {
       billing: configuration.stripe,
       credentialVault: configuration.credentialVault,
       github: configuration.github,
+      alerts: configuration.alerts,
+      retention: configuration.retention,
       otel: configuration.otel,
       redis: configuration.redis,
       mcp: "ok",
+      mcpOAuth: process.env.WORKOS_AUTHKIT_DOMAIN && process.env.MCP_RESOURCE_URI ? "live" : "not_enabled",
       timestamp: new Date().toISOString(),
     },
     {
