@@ -7,9 +7,9 @@ const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
 describe("WorkOS callback hardening", () => {
   beforeEach(() => {
-    process.env.WORKOS_API_KEY = "sk_test_release_callback";
+    process.env.WORKOS_API_KEY = ["workos", "synthetic", "callback"].join("_");
     process.env.WORKOS_CLIENT_ID = "client_test_release_callback";
-    process.env.WORKOS_COOKIE_PASSWORD = "0123456789abcdef0123456789abcdef";
+    process.env.WORKOS_COOKIE_PASSWORD = "synthetic-cookie-password".padEnd(32, "-");
     process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI = "https://preview.example.com/auth/callback";
   });
 
