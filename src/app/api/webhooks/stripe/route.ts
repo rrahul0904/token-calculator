@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { auditEvents, billingCustomers, organizations, subscriptions, usageEvents } from "@/db/schema";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { getStripe, isStripeConfigured, isSubscriptionEntitled, planFromStripePrice } from "@/lib/billing/stripe";
@@ -85,9 +85,35 @@ export async function POST(request: Request) {
   }).onConflictDoNothing().returning({ id: usageEvents.id });
   if (inserted.length === 0) return Response.json({ received: true, duplicate: true });
 
-  if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
+  const subscriptionEventTypes = ["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"];
+  if (subscriptionEventTypes.includes(event.type)) {
     const snapshot = subscriptionSnapshot(object);
     if (snapshot.id) {
+      const latest = (await db.select({ occurredAt: usageEvents.occurredAt })
+        .from(usageEvents)
+        .where(and(
+          eq(usageEvents.organizationId, organizationId),
+          eq(usageEvents.source, "stripe"),
+          inArray(usageEvents.eventType, subscriptionEventTypes),
+          sql`${usageEvents.payload} ->> 'stripeObjectId' = ${snapshot.id}`,
+        ))
+        .orderBy(desc(usageEvents.occurredAt))
+        .limit(1))[0];
+      const eventOccurredAt = new Date(event.created * 1000);
+      if (latest?.occurredAt && latest.occurredAt.getTime() > eventOccurredAt.getTime()) {
+        await db.insert(auditEvents).values({
+          id: `aud_${randomUUID()}`,
+          organizationId,
+          actorType: "system",
+          actorId: "stripe",
+          action: "billing.subscription_stale_event_ignored",
+          resourceType: "subscription",
+          resourceId: snapshot.id,
+          details: { eventType: event.type, eventId: event.id },
+        });
+        return Response.json({ received: true, processed: false, stale: true });
+      }
+
       const plan = planFromStripePrice(snapshot.priceId);
       await db.transaction(async (tx) => {
         await tx.insert(subscriptions).values({
