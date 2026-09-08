@@ -3,7 +3,7 @@ type State = "configured" | "missing" | "not_enabled";
 const groups: Record<string, { required: string[]; optional?: boolean }> = {
   core: { required: ["APP_BASE_URL", "DATABASE_URL", "TOKEN_INTELLIGENCE_ENCRYPTION_KEY", "CRON_SECRET"] },
   workos: { required: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD", "NEXT_PUBLIC_WORKOS_REDIRECT_URI", "WORKOS_WEBHOOK_SECRET"] },
-  mcpOAuth: { required: ["WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"], optional: true },
+  mcpOAuth: { required: ["WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"] },
   stripe: { required: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM"] },
   github: { required: ["GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"], optional: true },
   alerts: { required: ["TOKEN_INTELLIGENCE_WEBHOOK_SECRET", "TOKEN_INTELLIGENCE_ENCRYPTION_KEY"], optional: true },
