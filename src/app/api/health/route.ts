@@ -18,10 +18,11 @@ async function databaseHealth(): Promise<"ok" | "not_configured" | "error"> {
 export async function GET() {
   const configuration = getConfigurationStatus();
   const database = await databaseHealth();
-  const mcpOAuth = process.env.WORKOS_AUTHKIT_DOMAIN && process.env.MCP_RESOURCE_URI ? "live" : "not_enabled";
   const releaseChecks = {
     database: database === "ok",
     auth: configuration.auth === "live",
+    workosWebhook: configuration.workosWebhook === "live",
+    mcpOAuth: configuration.mcpOAuth === "live",
     billing: configuration.stripe === "live",
     credentialVault: configuration.credentialVault === "live",
     retention: configuration.retention === "live",
@@ -43,7 +44,8 @@ export async function GET() {
       otel: configuration.otel,
       redis: configuration.redis,
       mcp: "ok",
-      mcpOAuth,
+      workosWebhook: configuration.workosWebhook,
+      mcpOAuth: configuration.mcpOAuth,
       releaseReady,
       releaseChecks,
       timestamp: new Date().toISOString(),
