@@ -143,6 +143,29 @@ describeIntegration("Stripe signed subscription lifecycle", () => {
     expect(subs).toEqual([{ plan: "team", seats: 9 }]);
   });
 
+  it("keeps entitlement while cancellation is scheduled for period end", async () => {
+    const response = await stripeWebhook(signedRequest(subscriptionEvent({
+      id: `evt_cancel_period_end_${suffix}`,
+      type: "customer.subscription.updated",
+      status: "active",
+      priceId: teamPrice,
+      seats: 9,
+      cancelAtPeriodEnd: true,
+      created: Math.floor(Date.now() / 1000) + 90,
+    })));
+    expect(response.status).toBe(200);
+
+    const org = await sql<{ plan: string }[]>`select plan from organizations where id = ${organizationId}`;
+    expect(org[0]?.plan).toBe("team");
+
+    const subs = await sql<{ status: string; cancel_at_period_end: boolean }[]>`
+      select status, cancel_at_period_end
+      from subscriptions
+      where stripe_subscription_id = ${subscriptionId}
+    `;
+    expect(subs).toEqual([{ status: "active", cancel_at_period_end: true }]);
+  });
+
   it("removes entitlement when the subscription is deleted", async () => {
     const response = await stripeWebhook(signedRequest(subscriptionEvent({
       id: `evt_deleted_${suffix}`,
