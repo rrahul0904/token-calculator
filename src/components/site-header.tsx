@@ -15,11 +15,11 @@ const nav = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
 
   useEffect(() => {
     const stored = window.localStorage.getItem("token-intelligence-theme");
-    const nextTheme = stored === "light" ? "light" : "dark";
+    const nextTheme = stored === "dark" ? "dark" : "light";
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
   }, []);
