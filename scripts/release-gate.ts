@@ -10,6 +10,7 @@ type Check = {
 
 const strictProviders = process.argv.includes("--require-production-providers");
 const checks: Check[] = [
+  { name: "secret policy", command: "npm", args: ["run", "secret:policy"] },
   { name: "lint", command: "npm", args: ["run", "lint"] },
   { name: "typecheck", command: "npm", args: ["run", "typecheck"] },
   { name: "unit tests", command: "npm", args: ["test"] },
