@@ -78,7 +78,7 @@ async function main() {
     `;
     const migrationDirectory = resolve(process.cwd(), "drizzle");
     const repositoryMigrationNames = (await readdir(migrationDirectory))
-      .filter((name) => /^\\d+.*\\.sql$/.test(name))
+      .filter((name) => /^\d+.*\.sql$/.test(name))
       .sort();
     const repositoryMigrationSet = new Set(repositoryMigrationNames);
     const ledgerMigrationSet = new Set(migrationRows.map((row) => row.name));
