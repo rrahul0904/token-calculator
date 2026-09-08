@@ -1,4 +1,5 @@
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import { normalizedScope } from "./env-contract";
 
 type ListedRedirect = { id?: string; uri?: string; default?: boolean };
@@ -51,38 +52,50 @@ async function create(path: string, body: Record<string, string>) {
   return "created" as const;
 }
 
-const scope = normalizedScope(argument("scope") ?? process.env.RELEASE_SCOPE ?? "preview");
-const baseUrl = required("base-url", process.env.APP_BASE_URL).replace(/\/$/, "");
-const origin = new URL(baseUrl).origin;
-if (scope === "production" && !origin.startsWith("https://")) {
-  throw new Error("WORKOS_PRODUCTION_REQUIRES_HTTPS");
+export async function configureWorkos() {
+  const scope = normalizedScope(argument("scope") ?? process.env.RELEASE_SCOPE ?? "preview");
+  const baseUrl = required("base-url", process.env.APP_BASE_URL).replace(/\/$/, "");
+  const origin = new URL(baseUrl).origin;
+  if (scope === "production" && !origin.startsWith("https://")) {
+    throw new Error("WORKOS_PRODUCTION_REQUIRES_HTTPS");
+  }
+  const redirectUri = `${origin}/auth/callback`;
+
+  const redirects = await list<ListedRedirect>("/user_management/redirect_uris?limit=100");
+  const redirectCover = redirects.find((item) => typeof item.uri === "string" && wildcardCovers(item.uri, redirectUri));
+  const redirectAction = redirectCover
+    ? "already_allowed"
+    : await create("/user_management/redirect_uris", { uri: redirectUri });
+
+  const origins = await list<ListedOrigin>("/user_management/cors_origins?limit=100");
+  const originCover = origins.find((item) => typeof item.origin === "string" && wildcardCovers(item.origin, origin));
+  const originAction = originCover
+    ? "already_allowed"
+    : await create("/user_management/cors_origins", { origin });
+
+  process.stdout.write(JSON.stringify({
+    provider: "workos",
+    scope,
+    configured: true,
+    redirect: {
+      uri: redirectUri,
+      action: redirectAction,
+      coveredBy: redirectCover?.uri ?? redirectUri,
+    },
+    corsOrigin: {
+      origin,
+      action: originAction,
+      coveredBy: originCover?.origin ?? origin,
+    },
+  }, null, 2) + "\n");
+
 }
-const redirectUri = `${origin}/auth/callback`;
 
-const redirects = await list<ListedRedirect>("/user_management/redirect_uris?limit=100");
-const redirectCover = redirects.find((item) => typeof item.uri === "string" && wildcardCovers(item.uri, redirectUri));
-const redirectAction = redirectCover
-  ? "already_allowed"
-  : await create("/user_management/redirect_uris", { uri: redirectUri });
+function isDirectExecution() {
+  const entry = process.argv[1];
+  return Boolean(entry && import.meta.url === pathToFileURL(entry).href);
+}
 
-const origins = await list<ListedOrigin>("/user_management/cors_origins?limit=100");
-const originCover = origins.find((item) => typeof item.origin === "string" && wildcardCovers(item.origin, origin));
-const originAction = originCover
-  ? "already_allowed"
-  : await create("/user_management/cors_origins", { origin });
-
-process.stdout.write(JSON.stringify({
-  provider: "workos",
-  scope,
-  configured: true,
-  redirect: {
-    uri: redirectUri,
-    action: redirectAction,
-    coveredBy: redirectCover?.uri ?? redirectUri,
-  },
-  corsOrigin: {
-    origin,
-    action: originAction,
-    coveredBy: originCover?.origin ?? origin,
-  },
-}, null, 2) + "\n");
+if (isDirectExecution()) {
+  await configureWorkos();
+}
