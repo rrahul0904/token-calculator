@@ -26,8 +26,8 @@ describe("production release integration readiness", () => {
   });
 
   it("reports WorkOS webhook and MCP OAuth live only when their complete server configuration is present", () => {
-    process.env.WORKOS_API_KEY = "sk_test_release_readiness";
-    process.env.WORKOS_WEBHOOK_SECRET = "whsec_test_release_readiness";
+    process.env.WORKOS_API_KEY = "configured-api-key";
+    process.env.WORKOS_WEBHOOK_SECRET = "configured-webhook-secret";
     process.env.WORKOS_AUTHKIT_DOMAIN = "https://auth.example.test";
     process.env.MCP_RESOURCE_URI = "https://app.example.test/mcp";
 
