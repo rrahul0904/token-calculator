@@ -10,7 +10,8 @@ async function workflow(name: string) {
 describe("release workflow invariants", () => {
   it("deploys an exact-SHA prebuilt Preview to the existing Vercel project", async () => {
     const source = await workflow("release-preview.yml");
-    expect(source).toContain("ref: ${{ inputs.sha }}");
+    expect(source).toContain("ref: ${{ needs.preflight.outputs.sha }}");
+    expect(source).toContain("TARGET_SHA: ${{ needs.preflight.outputs.sha }}");
     expect(source).toContain(projectId);
     expect(source).toContain("deploy --prebuilt");
     expect(source).toContain("release:verify:deployment");
