@@ -18,8 +18,16 @@ Repository or environment secrets required by the release workflows:
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID` — must equal `prj_ADoR3dW8VcpJOaQcagZXOpioyM7l`
 - `VERCEL_AUTOMATION_BYPASS_SECRET` — optional; required only when Preview Deployment Protection blocks release automation.
+- `RELEASE_AUTH_EMAIL` / `RELEASE_AUTH_PASSWORD` — dedicated low-privilege account for repeatable real AuthKit lifecycle certification.
+- `RELEASE_ONBOARDING_AUTH_EMAIL` / `RELEASE_ONBOARDING_AUTH_PASSWORD` — dedicated account used to prove first-user onboarding on Preview.
 
-The token/bypass values are used only by release automation and are never printed.
+GitHub `production` environment variables used as non-secret WorkOS dashboard evidence:
+
+- `WORKOS_PRODUCTION_STATE=active`
+- `WORKOS_BILLING_ADDRESS_CONFIGURED=true`
+- `WORKOS_PAYMENT_METHOD_CONFIGURED=true`
+
+Set those values only after the corresponding WorkOS account state has actually been verified. Tokens/passwords are used only by release automation and are never printed.
 
 ## Runtime environment contract
 
@@ -54,19 +62,16 @@ Optional integrations remain optional and do not silently become launch-critical
 
 Real authentication certification does not use `TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED`.
 
-Store a dedicated low-privilege release-test account in the relevant Vercel environment as server-only values:
+Store dedicated release-test credentials as GitHub Actions secrets, not as application runtime variables:
 
 - `RELEASE_AUTH_EMAIL`
 - `RELEASE_AUTH_PASSWORD`
-
-The release workflows load these only through `vercel env run` and execute `npm run release:verify:auth`. The verifier does not print credentials and checks hosted sign-in, callback/session establishment, workspace access, sign-out, and post-sign-out protection.
-
-For the one-time first-user onboarding certification, use a fresh low-privilege account through:
-
 - `RELEASE_ONBOARDING_AUTH_EMAIL`
 - `RELEASE_ONBOARDING_AUTH_PASSWORD`
 
-Then run `npm run release:verify:onboarding -- --base-url=<certified deployment>`. The command must not be reused with a user that is already onboarded.
+The workflows combine those CI-only credentials with the target environment loaded through `vercel env run`. They are not deployed into the application. The AuthKit verifier checks hosted sign-in, callback/session establishment, workspace access, sign-out, and post-sign-out protection.
+
+The onboarding verifier creates a uniquely named Preview tenant, verifies refresh idempotency, then removes only that generated tenant/user fixture from the Preview validation database. Cleanup requires `RELEASE_ONBOARDING_CLEANUP_ALLOWED=1` and explicitly refuses the stable Production origin. This keeps first-user onboarding certification repeatable without leaving release-test tenants behind.
 
 ## WorkOS public Production values
 
