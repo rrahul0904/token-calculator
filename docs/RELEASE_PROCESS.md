@@ -30,7 +30,10 @@ Run **Release Preview** with an exact 40-character SHA. The workflow:
 5. builds with a trusted build-time SHA;
 6. deploys the prebuilt artifact;
 7. certifies public routes, `/api/build`, fail-closed callback behavior, MCP challenge and `/api/health`;
-8. emits `release-manifest.json` and `release-report.md`.
+8. runs a real WorkOS/AuthKit sign-in → callback → workspace → sign-out lifecycle using CI-only release credentials;
+9. proves true first-user onboarding against Preview and cleans only the generated Preview fixture afterward;
+10. rejects recent Preview 5xx runtime errors;
+11. emits `release-manifest.json` and `release-report.md`.
 
 A Vercel READY state alone is not certification.
 
