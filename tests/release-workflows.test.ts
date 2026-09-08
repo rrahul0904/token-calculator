@@ -39,12 +39,19 @@ describe("release workflow invariants", () => {
     expect(source).not.toContain('promote "${{ steps.manifest.outputs.preview_url }}"');
   });
 
-  it("rolls back by re-promoting an exact prior artifact and never touches the database", async () => {
+  it("rolls back to an exact prior Production deployment through Vercel rollback and never touches the database", async () => {
     const source = await workflow("release-rollback.yml");
-    expect(source).toContain("vercel@59.11.7 promote");
+    expect(source).toContain("/v1/projects/$VERCEL_PROJECT_ID/rollback/");
+    expect(source).toContain("release:vercel:deployment");
+    expect(source).toContain("--expect-id");
     expect(source).toContain("expected_sha");
+    expect(source).not.toContain("vercel@59.11.7 promote");
     expect(source).not.toContain("db:migrate");
     expect(source).not.toContain("DATABASE_URL");
+
+    const production = await workflow("release-production.yml");
+    expect(production).toContain("/v1/projects/$VERCEL_PROJECT_ID/rollback/");
+    expect(production).toContain("steps.previous.outputs.id");
   });
 
   it("creates a GitHub release only after the certified SHA is on main", async () => {
