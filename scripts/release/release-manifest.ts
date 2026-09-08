@@ -27,6 +27,7 @@ const manifest = {
   githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
   vercelDeploymentId: argument("deployment-id") ?? null,
   vercelPreviewUrl: argument("preview-url") ?? null,
+  stagedProductionUrl: argument("staged-production-url") ?? null,
   productionUrl: argument("production-url") ?? null,
   neonProjectId: "restless-queen-06517393",
   neonBranch: argument("neon-branch") ?? (status === "production_certified" ? "main" : "release-validation-full-site"),
