@@ -108,7 +108,10 @@ jobs:
       - name: Verify live Stripe catalog and webhook before promotion
         run: >
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
-          npm run stripe:verify -- --require
+          npm run stripe:verify --
+          --require
+          --mode=live
+          --base-url="$PRODUCTION_URL"
 
       - name: Verify Production Neon branch identity
         run: >
