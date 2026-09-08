@@ -16,12 +16,16 @@ const manifest = JSON.parse(await readFile(path, "utf8")) as {
   gitSha?: string;
   status?: string;
   vercelPreviewUrl?: string | null;
+  productionUrl?: string | null;
+  vercelDeploymentId?: string | null;
 };
 
 const checks = {
   sha: Boolean(expectedSha && manifest.gitSha === expectedSha),
   status: manifest.status === expectedStatus,
-  previewUrl: expectedStatus !== "preview_certified" || Boolean(manifest.vercelPreviewUrl),
+  previewUrl: !["preview_certified", "production_certified"].includes(expectedStatus) || Boolean(manifest.vercelPreviewUrl),
+  productionUrl: expectedStatus !== "production_certified" || Boolean(manifest.productionUrl),
+  deploymentId: !["preview_certified", "production_certified"].includes(expectedStatus) || Boolean(manifest.vercelDeploymentId),
 };
 process.stdout.write(JSON.stringify({
   path,
@@ -30,6 +34,8 @@ process.stdout.write(JSON.stringify({
     gitSha: manifest.gitSha,
     status: manifest.status,
     vercelPreviewUrl: manifest.vercelPreviewUrl,
+    productionUrl: manifest.productionUrl,
+    vercelDeploymentId: manifest.vercelDeploymentId,
   },
 }, null, 2) + "\n");
 if (!Object.values(checks).every(Boolean)) process.exitCode = 2;
