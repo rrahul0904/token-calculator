@@ -105,6 +105,23 @@ jobs:
       - name: Pull Preview project settings
         run: npx --yes vercel@59.11.7 pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
 
+      - name: Verify Preview Neon branch identity
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:database --
+          --expected-project="restless-queen-06517393"
+          --expected-branch="br-small-haze-aeqj7d25"
+
+      - name: Apply migrations only to verified Preview validation branch
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run db:migrate
+
+      - name: Verify actual Preview database schema and migration checksums
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run db:verify
+
       - name: Build exact SHA for Preview
         env:
           NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_SHA: ${{ inputs.sha }}
