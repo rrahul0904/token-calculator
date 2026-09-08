@@ -24,20 +24,7 @@ jobs:
       TARGET_SHA: ${{ inputs.sha }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
-      DATABASE_SSL: disable
-      TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE: "1"
-      TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-      APP_BASE_URL: http://127.0.0.1:3000
       NEXT_TELEMETRY_DISABLED: "1"
-      TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED: "1"
-      TOKEN_INTELLIGENCE_E2E_AUTH_SECRET: ci-only-e2e-auth-secret-not-production
-      TOKEN_INTELLIGENCE_E2E_USER_ID: user_e2e_owner
-      TOKEN_INTELLIGENCE_E2E_USER_EMAIL: e2e-owner@token-intelligence.invalid
-      TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID: org_e2e
-      TOKEN_INTELLIGENCE_E2E_PLATFORM_ADMIN: "1"
-      TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_ID: user_e2e_org_admin
-      TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_EMAIL: e2e-org-admin@token-intelligence.invalid
     services:
       postgres:
         image: postgres:18
@@ -93,6 +80,20 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
 
       - name: Repository release gate
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
+          DATABASE_SSL: disable
+          TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE: "1"
+          TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          APP_BASE_URL: http://127.0.0.1:3000
+          TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED: "1"
+          TOKEN_INTELLIGENCE_E2E_AUTH_SECRET: ci-only-e2e-auth-secret-not-production
+          TOKEN_INTELLIGENCE_E2E_USER_ID: user_e2e_owner
+          TOKEN_INTELLIGENCE_E2E_USER_EMAIL: e2e-owner@token-intelligence.invalid
+          TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID: org_e2e
+          TOKEN_INTELLIGENCE_E2E_PLATFORM_ADMIN: "1"
+          TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_ID: user_e2e_org_admin
+          TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_EMAIL: e2e-org-admin@token-intelligence.invalid
         run: npm run release:gate
 
       - name: Link existing Vercel project
@@ -128,9 +129,21 @@ jobs:
       - name: Certify real WorkOS sign-in callback session and sign-out
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
+          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
         run: >
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
+          --base-url="${{ steps.deploy.outputs.url }}"
+
+      - name: Certify real first-user onboarding
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          RELEASE_ONBOARDING_AUTH_EMAIL: ${{ secrets.RELEASE_ONBOARDING_AUTH_EMAIL }}
+          RELEASE_ONBOARDING_AUTH_PASSWORD: ${{ secrets.RELEASE_ONBOARDING_AUTH_PASSWORD }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:onboarding --
           --base-url="${{ steps.deploy.outputs.url }}"
 
       - name: Read deployment identity
