@@ -147,6 +147,25 @@ jobs:
           npm run release:verify:onboarding --
           --base-url="${{ steps.deploy.outputs.url }}"
 
+      - name: Certify Stripe test checkout, portal, and entitlement lifecycle
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
+          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:billing --
+          --base-url="${{ steps.deploy.outputs.url }}"
+
+      - name: Certify MCP OAuth metadata and issuer
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run mcp:verify --
+          --base-url="${{ steps.deploy.outputs.url }}"
+          --require
+
       - name: Read deployment identity
         id: identity
         shell: bash
