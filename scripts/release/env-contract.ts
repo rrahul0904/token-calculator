@@ -33,6 +33,8 @@ export const RELEASE_ENV_CONTRACT: readonly ReleaseEnvSpec[] = [
   { name: "OTEL_EXPORTER_OTLP_ENDPOINT", description: "Optional OTLP endpoint.", secret: false, requiredIn: [] },
   { name: "OTEL_EXPORTER_OTLP_HEADERS", description: "Optional OTLP authentication headers.", secret: true, requiredIn: [] },
   { name: "REDIS_URL", description: "Optional Redis URL.", secret: true, requiredIn: [] },
+  { name: "RELEASE_AUTH_EMAIL", description: "Server-only dedicated release-test AuthKit account email used by secure live certification.", secret: true, requiredIn: [] },
+  { name: "RELEASE_AUTH_PASSWORD", description: "Server-only dedicated release-test AuthKit account password used by secure live certification.", secret: true, requiredIn: [] },
   { name: "TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED", description: "Local/CI-only E2E auth switch.", secret: false, requiredIn: [] },
   { name: "TOKEN_INTELLIGENCE_E2E_AUTH_SECRET", description: "Local/CI-only E2E auth secret.", secret: true, requiredIn: [] },
 ] as const;
