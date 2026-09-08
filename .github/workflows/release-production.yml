@@ -113,6 +113,12 @@ jobs:
       - name: Certify stable Production runtime
         run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
 
+      - name: Certify real Production WorkOS auth lifecycle
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --
+          npm run release:verify:auth --
+          --base-url="$PRODUCTION_URL"
+
       - name: Read promoted Production deployment identity
         id: production_identity
         shell: bash
