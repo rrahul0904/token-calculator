@@ -22,7 +22,6 @@ describe("release environment contract", () => {
       WORKOS_COOKIE_PASSWORD: "configured-cookie-password",
       WORKOS_WEBHOOK_SECRET: "configured-webhook-secret",
       WORKOS_AUTHKIT_DOMAIN: "https://auth.example.test",
-      MCP_RESOURCE_URI: "https://preview.example.test/mcp",
       STRIPE_SECRET_KEY: "configured-stripe-key",
       STRIPE_WEBHOOK_SECRET: "configured-stripe-webhook",
       STRIPE_PRICE_PRO: "price_pro",
