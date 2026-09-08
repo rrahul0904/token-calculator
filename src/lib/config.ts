@@ -37,6 +37,12 @@ export function getConfigurationStatus() {
       hasWorkosAuthConfiguration() || hasExplicitE2eAuthAdapter()
         ? "live"
         : "code_complete_configuration_blocked",
+    workosWebhook: all("WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET")
+      ? "live"
+      : "code_complete_configuration_blocked",
+    mcpOAuth: all("WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI")
+      ? "live"
+      : "code_complete_configuration_blocked",
     stripe: all("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM")
       ? "live"
       : "code_complete_configuration_blocked",
@@ -55,6 +61,8 @@ export function requiredConfiguration(feature: keyof ReturnType<typeof getConfig
   const map: Record<keyof ReturnType<typeof getConfigurationStatus>, string[]> = {
     database: ["DATABASE_URL"],
     auth: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD", "NEXT_PUBLIC_WORKOS_REDIRECT_URI or Vercel system URL"],
+    workosWebhook: ["WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET"],
+    mcpOAuth: ["WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"],
     stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM"],
     credentialVault: ["TOKEN_INTELLIGENCE_ENCRYPTION_KEY"],
     github: ["GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"],
