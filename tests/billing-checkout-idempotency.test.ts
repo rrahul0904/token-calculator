@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { checkoutIdempotencyKey } from "@/app/api/v1/billing/checkout/route";
+import { checkoutIdempotencyKey, checkoutQuantity } from "@/app/api/v1/billing/checkout/route";
 
 describe("checkout idempotency", () => {
+  it("enforces Pro as single-seat while preserving Team quantity", () => {
+    expect(checkoutQuantity("pro", undefined)).toBe(1);
+    expect(checkoutQuantity("pro", 1)).toBe(1);
+    expect(checkoutQuantity("pro", 2)).toBeNull();
+    expect(checkoutQuantity("team", 7)).toBe(7);
+  });
+
   it("deduplicates repeated checkout clicks inside the five-minute release window", () => {
     const base = {
       organizationId: "org_release_test",
