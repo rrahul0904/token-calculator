@@ -3,6 +3,10 @@ name: Finalize Certified Release
 on:
   workflow_dispatch:
     inputs:
+      production_run_id:
+        description: "GitHub Actions run ID that produced the Production certification manifest"
+        required: true
+        type: string
       sha:
         description: "Production-certified SHA that must already be on main"
         required: true
@@ -14,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   finalize:
@@ -31,6 +36,16 @@ jobs:
           cache: npm
 
       - run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: token-intelligence-production-certification
+          path: release-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.production_run_id }}
+
+      - name: Require Production certification manifest for this SHA
+        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="${{ inputs.sha }}" --status=production_certified
 
       - name: Require certified SHA on main
         run: |
