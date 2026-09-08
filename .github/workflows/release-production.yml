@@ -279,6 +279,7 @@ jobs:
           --run-id="${{ github.run_id }}"
           --deployment-id="${{ steps.production_identity.outputs.deployment_id }}"
           --preview-url="${{ steps.manifest.outputs.preview_url }}"
+          --staged-production-url="${{ steps.staged.outputs.url }}"
           --production-url="$PRODUCTION_URL"
           --neon-branch="main"
           --status="production_certified"
