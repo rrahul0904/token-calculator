@@ -3,6 +3,26 @@ import { normalizedScope } from "./env-contract";
 
 type CheckState = "PASS" | "FAIL" | "BLOCKED_EXTERNAL";
 
+const REQUIRED_DIRECTORY_EVENTS = [
+  "dsync.deleted",
+  "dsync.group.created",
+  "dsync.group.deleted",
+  "dsync.group.updated",
+  "dsync.group.user_added",
+  "dsync.group.user_removed",
+  "dsync.user.created",
+  "dsync.user.deleted",
+  "dsync.user.updated",
+] as const;
+
+type WorkosWebhookEndpoint = {
+  id?: string;
+  endpoint_url?: string;
+  secret?: string;
+  status?: string;
+  events?: string[];
+};
+
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
   const inline = process.argv.find((value) => value.startsWith(prefix));
@@ -77,7 +97,62 @@ const runtime = {
   redirectUri: Boolean(redirect),
 };
 
-const runtimeReady = Object.values(runtime).every(Boolean) && issuerReachable;
+let productionWebhook = {
+  checked: false,
+  configured: false,
+  endpointId: null as string | null,
+  enabled: false,
+  exactEventSet: false,
+  secretMatches: false,
+  error: null as string | null,
+};
+
+if (scope === "production" && origin && process.env.WORKOS_API_KEY) {
+  productionWebhook.checked = true;
+  try {
+    const response = await fetch("https://api.workos.com/webhook_endpoints?limit=100", {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${process.env.WORKOS_API_KEY}`,
+      },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!response.ok) {
+      productionWebhook.error = `WEBHOOK_LIST_HTTP_${response.status}`;
+    } else {
+      const body = await response.json() as { data?: WorkosWebhookEndpoint[] };
+      const expectedUrl = `${origin}/api/webhooks/workos`;
+      const endpoint = (body.data ?? []).find((item) => item.endpoint_url === expectedUrl);
+      const actualEvents = [...(endpoint?.events ?? [])].sort();
+      const requiredEvents = [...REQUIRED_DIRECTORY_EVENTS].sort();
+      productionWebhook = {
+        checked: true,
+        configured: Boolean(endpoint),
+        endpointId: endpoint?.id ?? null,
+        enabled: endpoint?.status === "enabled",
+        exactEventSet: JSON.stringify(actualEvents) === JSON.stringify(requiredEvents),
+        secretMatches: Boolean(
+          endpoint?.secret
+          && process.env.WORKOS_WEBHOOK_SECRET
+          && endpoint.secret === process.env.WORKOS_WEBHOOK_SECRET
+        ),
+        error: null,
+      };
+    }
+  } catch {
+    productionWebhook.error = "WEBHOOK_LIST_UNAVAILABLE";
+  }
+}
+
+const webhookProviderReady = scope !== "production"
+  || (
+    productionWebhook.checked
+    && productionWebhook.configured
+    && productionWebhook.enabled
+    && productionWebhook.exactEventSet
+    && productionWebhook.secretMatches
+  );
+const runtimeReady = Object.values(runtime).every(Boolean) && issuerReachable && webhookProviderReady;
 const redirectMatches = Boolean(expected && redirect === expected.redirectUri);
 const mcpResourceMatches = scope === "preview"
   ? Boolean(expected)
@@ -104,6 +179,11 @@ const result = {
   paymentMethodConfigured: paymentMethod,
   expected,
   runtime,
+  productionWebhook: {
+    ...productionWebhook,
+    requiredEvents: [...REQUIRED_DIRECTORY_EVENTS],
+    secretComparedWithoutDisclosure: true,
+  },
   issuerReachable,
   issuerError,
   redirectMatches,
