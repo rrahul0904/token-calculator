@@ -9,6 +9,19 @@ type Check = {
 };
 
 const strictProviders = process.argv.includes("--require-production-providers");
+
+function databaseIsExplicitlyDisposable() {
+  if (process.env.TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE === "1") return true;
+  const raw = process.env.DATABASE_URL;
+  if (!raw) return false;
+  try {
+    const host = new URL(raw).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 const checks: Check[] = [
   { name: "secret policy", command: "npm", args: ["run", "secret:policy"] },
   { name: "lint", command: "npm", args: ["run", "lint"] },
@@ -38,6 +51,11 @@ const checks: Check[] = [
 let failed = false;
 for (const check of checks) {
   process.stdout.write(`\n== release gate: ${check.name} ==\n`);
+  if (check.name === "migrations" && !databaseIsExplicitlyDisposable()) {
+    process.stderr.write("FAILED: migration application requires TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE=1 or a loopback DATABASE_URL.\n");
+    failed = true;
+    break;
+  }
   const env = { ...process.env };
   if (check.name === "database integration") env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS = "1";
   if (check.name === "authenticated E2E seed") env.TOKEN_INTELLIGENCE_E2E_SEED = "1";
