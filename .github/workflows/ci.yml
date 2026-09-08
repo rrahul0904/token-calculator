@@ -56,6 +56,8 @@ jobs:
           -v "${{ github.workspace }}:/repo"
           zricethezav/gitleaks:v8.24.3
           detect --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=2 --log-opts="--all"
+      - name: Repository secret policy
+        run: npx --yes tsx@4.20.0 scripts/release/secret-policy.ts
       - uses: actions/setup-node@v7
         with:
           node-version: 22
