@@ -48,7 +48,7 @@ Run **Release Production** only with the Preview workflow run ID and the same ex
 
 The workflow downloads the certified Preview manifest and re-certifies that exact source SHA. It then validates the actual Vercel Production environment and WorkOS/Stripe prerequisites, proves the Production database is Neon branch `br-muddy-sun-aeyodc4h`, and applies/validates forward-only migrations there.
 
-Next it pulls the Production Vercel settings, builds the exact SHA with `vercel build --prod`, deploys it as a **staged Production deployment** with `vercel deploy --prebuilt --prod --skip-domain`, configures the staged WorkOS redirect/CORS origin, and certifies the staged deployment's build identity, health, MCP OAuth, real AuthKit sign-in/callback/sign-out and recent 5xx logs **before traffic is moved**. Only then does it promote the staged Production URL. After promotion it verifies the stable domain and requires its Vercel deployment ID to equal the staged deployment ID. If any post-promotion certification step fails, the workflow re-promotes the captured previous Production artifact and verifies the rollback deployment ID.
+Next it pulls the Production Vercel settings, builds the exact SHA with `vercel build --prod`, deploys it as a **staged Production deployment** with `vercel deploy --prebuilt --prod --skip-domain`, configures the staged WorkOS redirect/CORS origin, and certifies the staged deployment's build identity, health, MCP OAuth, real AuthKit sign-in/callback/sign-out and recent 5xx logs **before traffic is moved**. Only then does it promote the staged Production URL. After promotion it verifies the stable domain and requires its Vercel deployment ID to equal the staged deployment ID. If any post-promotion certification step fails, the workflow requests Vercel rollback to the captured previous Production deployment ID and verifies the stable domain points back to that exact ID.
 
 PR #14 remains draft until this gate passes plus real provider/account checks have been completed.
 
@@ -58,6 +58,6 @@ After the certified SHA is merged into `main`, **Finalize Certified Release** ve
 
 ## Rollback
 
-**Release Rollback** requires an exact prior deployment URL and its expected Git SHA. It verifies the target before promotion and verifies the stable Production domain afterward. It does not roll back the database. The canonical release gate also refuses to run migrations against a non-loopback database unless `TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE=1` is explicitly set.
+**Release Rollback** requires an exact prior Production deployment URL and its expected Git SHA. It verifies the target, resolves its Vercel deployment ID, requests Vercel rollback to that ID, and verifies the stable Production deployment ID and SHA afterward. It does not roll back the database. The canonical release gate also refuses to run migrations against a non-loopback database unless `TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE=1` is explicitly set.
 
 See `docs/ROLLBACK.md` for database/provider incident procedures.
