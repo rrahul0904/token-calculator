@@ -82,6 +82,8 @@ jobs:
           echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
 
       - name: Re-certify Preview immediately before promotion
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run release:verify:deployment -- --mode=preview --url="${{ steps.manifest.outputs.preview_url }}" --sha="$TARGET_SHA"
 
       - name: Link existing Vercel project
@@ -133,6 +135,9 @@ jobs:
         run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
 
       - name: Certify real Production WorkOS auth lifecycle
+        env:
+          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
+          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
         run: >
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
