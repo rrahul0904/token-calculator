@@ -6,6 +6,7 @@ import "./globals.css";
 import "./features.css";
 import "./commercial.css";
 import "./premium.css";
+import "./professional.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(getPublicSiteUrl()),
