@@ -1,4 +1,5 @@
 import { chromium } from "@playwright/test";
+import postgres from "postgres";
 import process from "node:process";
 
 function argument(name: string): string | undefined {
@@ -21,6 +22,46 @@ const password = required("password", process.env.RELEASE_ONBOARDING_AUTH_PASSWO
 const organizationName = argument("organization-name") ?? `Release Certification ${Date.now()}`;
 const projectName = argument("project-name") ?? "Release certification project";
 const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+const cleanupAllowed = process.env.RELEASE_ONBOARDING_CLEANUP_ALLOWED === "1";
+const databaseUrl = process.env.DATABASE_URL?.trim();
+
+async function cleanupPreviewFixture() {
+  if (!cleanupAllowed) return;
+  if (!databaseUrl) throw new Error("MISSING_ONBOARDING_CLEANUP_DATABASE_URL");
+  if (baseOrigin === "https://token-intelligence-eight.vercel.app") {
+    throw new Error("ONBOARDING_CLEANUP_REFUSES_PRODUCTION");
+  }
+
+  const sql = postgres(databaseUrl, {
+    max: 1,
+    ssl: process.env.DATABASE_SSL === "disable" ? false : "require",
+    connect_timeout: 15,
+  });
+  try {
+    await sql.begin(async (tx) => {
+      const rows = await tx<{ organization_id: string }[]>`
+        select distinct om.organization_id
+        from organization_members om
+        inner join users u on u.id = om.user_id
+        inner join organizations o on o.id = om.organization_id
+        where lower(u.email) = lower(${email})
+          and o.name = ${organizationName}
+      `;
+      for (const row of rows) {
+        await tx`delete from organizations where id = ${row.organization_id}`;
+      }
+      await tx`
+        delete from users
+        where lower(email) = lower(${email})
+          and not exists (
+            select 1 from organization_members om where om.user_id = users.id
+          )
+      `;
+    });
+  } finally {
+    await sql.end({ timeout: 3 });
+  }
+}
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
@@ -90,8 +131,10 @@ try {
     organizationCreation: "PASS",
     firstProjectCreation: "PASS",
     refreshIdempotency: "PASS",
+    previewFixtureCleanup: cleanupAllowed ? "ENABLED" : "DISABLED",
   }, null, 2) + "\n");
 } finally {
   await context.close();
   await browser.close();
+  await cleanupPreviewFixture();
 }
