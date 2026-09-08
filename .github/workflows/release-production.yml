@@ -32,7 +32,6 @@ jobs:
     timeout-minutes: 25
     env:
       TARGET_SHA: ${{ inputs.sha }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       PRODUCTION_URL: ${{ inputs.production_url }}
@@ -43,6 +42,8 @@ jobs:
     steps:
       - name: Validate exact SHA and deployment credentials
         shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
           for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
@@ -91,12 +92,12 @@ jobs:
 
       - name: Fail closed on incomplete Production runtime configuration
         run: >
-          npx --yes vercel@59.11.7 env run -e production --
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run env:validate -- --scope=production
 
       - name: Verify Production WorkOS account and runtime prerequisites
         run: >
-          npx --yes vercel@59.11.7 env run -e production --
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run workos:verify --
           --scope=production
           --base-url="$PRODUCTION_URL"
@@ -104,7 +105,7 @@ jobs:
 
       - name: Verify live Stripe catalog and webhook before promotion
         run: >
-          npx --yes vercel@59.11.7 env run -e production --
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run stripe:verify -- --require
 
       - name: Install Chromium for real AuthKit certification
@@ -113,6 +114,8 @@ jobs:
       - name: Capture current Production deployment for automatic rollback
         id: previous
         shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           CURRENT="$(npm run --silent release:vercel:deployment -- --url="$PRODUCTION_URL")"
           PREVIOUS_ID="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.id)' "$CURRENT")"
@@ -124,14 +127,14 @@ jobs:
 
       - name: Promote certified artifact without rebuilding
         id: promote
-        run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Certify stable Production runtime
         run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
 
       - name: Certify real Production WorkOS auth lifecycle
         run: >
-          npx --yes vercel@59.11.7 env run -e production --
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
           --base-url="$PRODUCTION_URL"
 
@@ -147,7 +150,7 @@ jobs:
       - name: Fail on Production 5xx runtime errors
         shell: bash
         run: |
-          npx --yes vercel@59.11.7 logs --deployment "${{ steps.production_identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="$VERCEL_TOKEN" > /tmp/production-5xx.ndjson
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.production_identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="${{ secrets.VERCEL_TOKEN }}" > /tmp/production-5xx.ndjson
           if test -s /tmp/production-5xx.ndjson; then
             echo "Production emitted one or more 5xx runtime log entries; certification failed."
             exit 2
@@ -177,10 +180,12 @@ jobs:
 
       - name: Automatically restore previous Production artifact after failed certification
         if: ${{ failure() && steps.promote.outcome != 'skipped' }}
-        run: npx --yes vercel@59.11.7 promote "${{ steps.previous.outputs.url }}" --yes --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@59.11.7 promote "${{ steps.previous.outputs.url }}" --yes --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Verify automatic rollback restored the captured deployment
         if: ${{ failure() && steps.promote.outcome != 'skipped' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: >
           npm run release:vercel:deployment --
           --url="$PRODUCTION_URL"
