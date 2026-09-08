@@ -14,12 +14,12 @@ afterEach(() => {
 });
 
 describe("WorkOS redirect URI resolution", () => {
-  it("prefers an explicitly configured Preview callback over a stale Vercel URL", () => {
+  it("prefers the exact Vercel Preview callback over a stale configured branch URL", () => {
     process.env.VERCEL_ENV = "preview";
     process.env.VERCEL_URL = "token-intelligence-preview.example.vercel.app";
     process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI = "https://token-intelligence-pr6.example.vercel.app/auth/callback";
 
-    expect(configuredWorkosRedirectUri()).toBe("https://token-intelligence-pr6.example.vercel.app/auth/callback");
+    expect(configuredWorkosRedirectUri()).toBe("https://token-intelligence-preview.example.vercel.app/auth/callback");
     expect(hasConfiguredWorkosRedirectUri()).toBe(true);
   });
 
