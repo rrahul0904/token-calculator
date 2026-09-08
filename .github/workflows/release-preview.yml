@@ -36,7 +36,7 @@ jobs:
       - id: check
         shell: bash
         env:
-          REQUESTED_SHA: ${{ needs.preflight.outputs.sha }}
+          REQUESTED_SHA: ${{ inputs.sha }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_SHA: ${{ github.sha }}
         run: |
