@@ -23,6 +23,7 @@ const report = [
   line("GitHub Actions run", manifest.githubRunId),
   line("Vercel deployment", manifest.vercelDeploymentId),
   line("Preview URL", manifest.vercelPreviewUrl),
+  line("Staged Production URL", manifest.stagedProductionUrl),
   line("Production URL", manifest.productionUrl),
   line("Neon project", manifest.neonProjectId),
   line("Neon branch", manifest.neonBranch),
