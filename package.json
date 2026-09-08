@@ -42,7 +42,8 @@
     "release:verify:onboarding": "tsx scripts/release/verify-live-onboarding.ts",
     "release:vercel:list": "tsx scripts/release/vercel-deployments.ts",
     "release:verify:billing": "tsx scripts/release/verify-live-billing.ts",
-    "release:verify:database": "tsx scripts/release/verify-database-identity.ts"
+    "release:verify:database": "tsx scripts/release/verify-database-identity.ts",
+    "workos:configure": "tsx scripts/release/workos-configure.ts"
   },
   "engines": {
     "node": "22.x"
