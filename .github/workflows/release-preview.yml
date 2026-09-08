@@ -130,6 +130,15 @@ jobs:
           test -n "$DEPLOYMENT_ID" || { echo "deployment identity endpoint did not expose a deployment ID"; exit 2; }
           echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
 
+      - name: Fail on Preview 5xx runtime errors
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="$VERCEL_TOKEN" > /tmp/preview-5xx.ndjson
+          if test -s /tmp/preview-5xx.ndjson; then
+            echo "Preview emitted one or more 5xx runtime log entries; refusing certification."
+            exit 2
+          fi
+
       - name: Write certified Preview manifest
         run: >
           npm run release:manifest --
