@@ -40,8 +40,8 @@ Implemented controls include:
 - staged Production build/health/AuthKit/MCP/5xx certification;
 - promotion of the already-certified staged Production deployment;
 - post-promotion deployment-ID equality check proving the stable domain serves the exact staged artifact;
-- automatic restoration of the previously captured Production deployment if post-promotion certification fails;
-- exact-artifact manual rollback workflow;
+- automatic Vercel rollback to the previously captured Production deployment ID if post-promotion certification fails;
+- exact Production-deployment-ID manual rollback workflow using Vercel's rollback API;
 - post-merge release/tag finalization workflow;
 - first-user onboarding concurrency serialization across both identity and WorkOS organization;
 - Stripe checkout idempotency, customer-creation race handling, Pro single-seat enforcement, replay safety, stale/out-of-order event rejection and cancel-at-period-end coverage;
