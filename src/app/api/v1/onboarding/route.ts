@@ -15,6 +15,12 @@ function slugify(value: string): string {
   return `${base}-${randomUUID().slice(0, 6)}`;
 }
 
+export function onboardingLockKeys(input: { userId: string; email: string; workosOrganizationId: string | null }) {
+  const keys = [`onboarding:user:${input.userId}:${input.email.toLowerCase()}`];
+  if (input.workosOrganizationId) keys.unshift(`onboarding:workos-org:${input.workosOrganizationId}`);
+  return keys;
+}
+
 export async function POST(request: Request) {
   if (!isDatabaseConfigured()) {
     return Response.json({ error: "DATABASE_NOT_CONFIGURED" }, { status: 503, headers: { "Cache-Control": "no-store" } });
@@ -29,8 +35,9 @@ export async function POST(request: Request) {
 
   const db = getDb();
   const result = await db.transaction(async (tx) => {
-    const lockKey = `onboarding:${session.userId}:${session.email.toLowerCase()}`;
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+    for (const lockKey of onboardingLockKeys(session)) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+    }
 
     const existingUsers = await tx.select().from(users).where(
       or(eq(users.workosUserId, session.userId), eq(users.email, session.email)),
