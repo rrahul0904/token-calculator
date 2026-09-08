@@ -36,6 +36,9 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       PRODUCTION_URL: ${{ inputs.production_url }}
+      WORKOS_PRODUCTION_STATE: ${{ vars.WORKOS_PRODUCTION_STATE }}
+      WORKOS_BILLING_ADDRESS_CONFIGURED: ${{ vars.WORKOS_BILLING_ADDRESS_CONFIGURED }}
+      WORKOS_PAYMENT_METHOD_CONFIGURED: ${{ vars.WORKOS_PAYMENT_METHOD_CONFIGURED }}
 
     steps:
       - name: Validate exact SHA and deployment credentials
@@ -85,6 +88,24 @@ jobs:
         run: |
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Fail closed on incomplete Production runtime configuration
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --
+          npm run env:validate -- --scope=production
+
+      - name: Verify Production WorkOS account and runtime prerequisites
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --
+          npm run workos:verify --
+          --scope=production
+          --base-url="$PRODUCTION_URL"
+          --require
+
+      - name: Verify live Stripe catalog and webhook before promotion
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --
+          npm run stripe:verify -- --require
 
       - name: Promote certified artifact without rebuilding
         run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="$VERCEL_TOKEN"
