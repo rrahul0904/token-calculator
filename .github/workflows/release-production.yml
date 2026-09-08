@@ -1,0 +1,192 @@
+name: Release Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      preview_run_id:
+        description: "GitHub Actions run ID that produced the certified Preview manifest"
+        required: true
+        type: string
+      sha:
+        description: "Exact certified Git SHA"
+        required: true
+        type: string
+      production_url:
+        description: "Stable production origin"
+        required: true
+        default: "https://token-intelligence-eight.vercel.app"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: token-intelligence-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TARGET_SHA: ${{ inputs.sha }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PRODUCTION_URL: ${{ inputs.production_url }}
+      WORKOS_PRODUCTION_STATE: ${{ vars.WORKOS_PRODUCTION_STATE }}
+      WORKOS_BILLING_ADDRESS_CONFIGURED: ${{ vars.WORKOS_BILLING_ADDRESS_CONFIGURED }}
+      WORKOS_PAYMENT_METHOD_CONFIGURED: ${{ vars.WORKOS_PAYMENT_METHOD_CONFIGURED }}
+
+    steps:
+      - name: Validate exact SHA and deployment credentials
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
+          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [[ -n "${!key}" ]] || { echo "missing required GitHub secret: $key"; exit 2; }
+          done
+          [[ "$VERCEL_PROJECT_ID" == "prj_ADoR3dW8VcpJOaQcagZXOpioyM7l" ]] || { echo "wrong Vercel project"; exit 2; }
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: token-intelligence-release-manifest
+          path: release-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.preview_run_id }}
+
+      - name: Verify certified manifest
+        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="$TARGET_SHA" --status=preview_certified
+
+      - name: Read certified Preview URL
+        id: manifest
+        shell: bash
+        run: |
+          PREVIEW_URL="$(node -e 'const m=require("./release-evidence/release-manifest.json"); process.stdout.write(m.vercelPreviewUrl||"")')"
+          [[ "$PREVIEW_URL" == https://*.vercel.app ]] || { echo "manifest Preview URL is invalid"; exit 2; }
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Re-certify Preview immediately before promotion
+        run: npm run release:verify:deployment -- --mode=preview --url="${{ steps.manifest.outputs.preview_url }}" --sha="$TARGET_SHA"
+
+      - name: Link existing Vercel project
+        shell: bash
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Fail closed on incomplete Production runtime configuration
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run env:validate -- --scope=production
+
+      - name: Verify Production WorkOS account and runtime prerequisites
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run workos:verify --
+          --scope=production
+          --base-url="$PRODUCTION_URL"
+          --require
+
+      - name: Verify live Stripe catalog and webhook before promotion
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run stripe:verify -- --require
+
+      - name: Install Chromium for real AuthKit certification
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture current Production deployment for automatic rollback
+        id: previous
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          CURRENT="$(npm run --silent release:vercel:deployment -- --url="$PRODUCTION_URL")"
+          PREVIOUS_ID="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.id)' "$CURRENT")"
+          PREVIOUS_URL="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.url)' "$CURRENT")"
+          test -n "$PREVIOUS_ID"
+          test -n "$PREVIOUS_URL"
+          echo "id=$PREVIOUS_ID" >> "$GITHUB_OUTPUT"
+          echo "url=$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Promote certified artifact without rebuilding
+        id: promote
+        run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Certify stable Production runtime
+        run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
+
+      - name: Certify real Production WorkOS auth lifecycle
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:auth --
+          --base-url="$PRODUCTION_URL"
+
+      - name: Read promoted Production deployment identity
+        id: production_identity
+        shell: bash
+        run: |
+          BODY="$(curl --fail --silent "$PRODUCTION_URL/api/build")"
+          DEPLOYMENT_ID="$(node -e 'const b=JSON.parse(process.argv[1]); process.stdout.write(b.deploymentId||"")' "$BODY")"
+          test -n "$DEPLOYMENT_ID" || { echo "Production build identity did not expose deployment ID"; exit 2; }
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on Production 5xx runtime errors
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.production_identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="${{ secrets.VERCEL_TOKEN }}" > /tmp/production-5xx.ndjson
+          if test -s /tmp/production-5xx.ndjson; then
+            echo "Production emitted one or more 5xx runtime log entries; certification failed."
+            exit 2
+          fi
+
+      - name: Write Production certification manifest
+        run: >
+          npm run release:manifest --
+          --sha="$TARGET_SHA"
+          --branch="release-candidate-full-site"
+          --run-id="${{ github.run_id }}"
+          --deployment-id="${{ steps.production_identity.outputs.deployment_id }}"
+          --preview-url="${{ steps.manifest.outputs.preview_url }}"
+          --production-url="$PRODUCTION_URL"
+          --neon-branch="main"
+          --status="production_certified"
+
+      - run: npm run release:report
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: token-intelligence-production-certification
+          path: release-evidence/
+          if-no-files-found: error
+
+      - run: cat release-evidence/release-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Automatically restore previous Production artifact after failed certification
+        if: ${{ failure() && steps.promote.outcome != 'skipped' }}
+        run: npx --yes vercel@59.11.7 promote "${{ steps.previous.outputs.url }}" --yes --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Verify automatic rollback restored the captured deployment
+        if: ${{ failure() && steps.promote.outcome != 'skipped' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: >
+          npm run release:vercel:deployment --
+          --url="$PRODUCTION_URL"
+          --expect-id="${{ steps.previous.outputs.id }}"
