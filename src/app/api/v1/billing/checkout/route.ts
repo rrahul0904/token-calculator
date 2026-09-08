@@ -25,6 +25,11 @@ export function checkoutIdempotencyKey(input: { organizationId: string; plan: "p
   return `checkout:${input.organizationId}:${input.plan}:${input.quantity}:${fiveMinuteBucket}`;
 }
 
+export function checkoutQuantity(plan: "pro" | "team", seats: number | undefined): number | null {
+  if (plan === "pro") return seats === undefined || seats === 1 ? 1 : null;
+  return seats ?? 1;
+}
+
 export async function POST(request: Request) {
   if (!isDatabaseConfigured()) return response({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   if (!isStripeConfigured()) return response({ error: "STRIPE_NOT_CONFIGURED", state: "code_complete_configuration_blocked" }, 503);
@@ -33,7 +38,8 @@ export async function POST(request: Request) {
   if (tenant.role !== "owner" && tenant.role !== "admin") return response({ error: "FORBIDDEN" }, 403);
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return response({ error: "INVALID_REQUEST", issues: parsed.error.issues }, 400);
-  if (parsed.data.plan === "pro" && (parsed.data.seats ?? 1) !== 1) return response({ error: "PRO_IS_SINGLE_SEAT" }, 400);
+  const quantity = checkoutQuantity(parsed.data.plan, parsed.data.seats);
+  if (quantity === null) return response({ error: "PRO_IS_SINGLE_SEAT" }, 400);
 
   const priceId = stripePriceForPlan(parsed.data.plan);
   if (!priceId) return response({ error: "STRIPE_PRICE_NOT_CONFIGURED" }, 503);
@@ -46,15 +52,17 @@ export async function POST(request: Request) {
       name: tenant.organizationName,
       metadata: { organization_id: tenant.organizationId },
     }, { idempotencyKey: `customer:${tenant.organizationId}` });
-    customer = (await db.insert(billingCustomers).values({
+    const inserted = await db.insert(billingCustomers).values({
       id: `bc_${randomUUID()}`,
       organizationId: tenant.organizationId,
       stripeCustomerId: created.id,
-    }).returning())[0];
+    }).onConflictDoNothing({ target: billingCustomers.organizationId }).returning();
+    customer = inserted[0]
+      ?? (await db.select().from(billingCustomers).where(eq(billingCustomers.organizationId, tenant.organizationId)).limit(1))[0];
+    if (!customer) return response({ error: "BILLING_CUSTOMER_PERSISTENCE_FAILED" }, 500);
   }
 
   const baseUrl = billingReturnOrigin(request);
-  const quantity = parsed.data.plan === "team" ? parsed.data.seats ?? 1 : 1;
   const checkout = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customer.stripeCustomerId,
