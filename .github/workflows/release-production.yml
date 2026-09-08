@@ -1,0 +1,114 @@
+name: Release Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      preview_run_id:
+        description: "GitHub Actions run ID that produced the certified Preview manifest"
+        required: true
+        type: string
+      sha:
+        description: "Exact certified Git SHA"
+        required: true
+        type: string
+      production_url:
+        description: "Stable production origin"
+        required: true
+        default: "https://token-intelligence-eight.vercel.app"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: token-intelligence-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TARGET_SHA: ${{ inputs.sha }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      PRODUCTION_URL: ${{ inputs.production_url }}
+
+    steps:
+      - name: Validate exact SHA and deployment credentials
+        shell: bash
+        run: |
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
+          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [[ -n "${!key}" ]] || { echo "missing required GitHub secret: $key"; exit 2; }
+          done
+          [[ "$VERCEL_PROJECT_ID" == "prj_ADoR3dW8VcpJOaQcagZXOpioyM7l" ]] || { echo "wrong Vercel project"; exit 2; }
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: token-intelligence-release-manifest
+          path: release-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.preview_run_id }}
+
+      - name: Verify certified manifest
+        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="$TARGET_SHA" --status=preview_certified
+
+      - name: Read certified Preview URL
+        id: manifest
+        shell: bash
+        run: |
+          PREVIEW_URL="$(node -e 'const m=require("./release-evidence/release-manifest.json"); process.stdout.write(m.vercelPreviewUrl||"")')"
+          [[ "$PREVIEW_URL" == https://*.vercel.app ]] || { echo "manifest Preview URL is invalid"; exit 2; }
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Re-certify Preview immediately before promotion
+        run: npm run release:verify:deployment -- --mode=preview --url="${{ steps.manifest.outputs.preview_url }}" --sha="$TARGET_SHA"
+
+      - name: Link existing Vercel project
+        shell: bash
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Promote certified artifact without rebuilding
+        run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="$VERCEL_TOKEN"
+
+      - name: Certify stable Production runtime
+        run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
+
+      - name: Write Production certification manifest
+        run: >
+          npm run release:manifest --
+          --sha="$TARGET_SHA"
+          --branch="release-candidate-full-site"
+          --run-id="${{ github.run_id }}"
+          --preview-url="${{ steps.manifest.outputs.preview_url }}"
+          --production-url="$PRODUCTION_URL"
+          --neon-branch="main"
+          --status="production_certified"
+
+      - run: npm run release:report
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: token-intelligence-production-certification
+          path: release-evidence/
+          if-no-files-found: error
+
+      - run: cat release-evidence/release-report.md >> "$GITHUB_STEP_SUMMARY"
