@@ -20,6 +20,11 @@ function billingReturnOrigin(request: Request): string {
   return process.env.APP_BASE_URL?.replace(/\/$/, "") ?? new URL(request.url).origin;
 }
 
+export function checkoutIdempotencyKey(input: { organizationId: string; plan: "pro" | "team"; quantity: number; now?: number }) {
+  const fiveMinuteBucket = Math.floor((input.now ?? Date.now()) / (5 * 60 * 1000));
+  return `checkout:${input.organizationId}:${input.plan}:${input.quantity}:${fiveMinuteBucket}`;
+}
+
 export async function POST(request: Request) {
   if (!isDatabaseConfigured()) return response({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   if (!isStripeConfigured()) return response({ error: "STRIPE_NOT_CONFIGURED", state: "code_complete_configuration_blocked" }, 503);
@@ -60,7 +65,7 @@ export async function POST(request: Request) {
     allow_promotion_codes: true,
     metadata: { organization_id: tenant.organizationId, plan: parsed.data.plan },
     subscription_data: { metadata: { organization_id: tenant.organizationId, plan: parsed.data.plan } },
-  }, { idempotencyKey: request.headers.get("idempotency-key") ?? `checkout:${tenant.organizationId}:${parsed.data.plan}:${Date.now()}` });
+  }, { idempotencyKey: request.headers.get("idempotency-key") ?? checkoutIdempotencyKey({ organizationId: tenant.organizationId, plan: parsed.data.plan, quantity }) });
 
   await db.insert(auditEvents).values({
     id: `aud_${randomUUID()}`,
