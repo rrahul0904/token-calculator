@@ -27,13 +27,17 @@ Run **Release Preview** with an exact 40-character SHA. The workflow:
 2. reruns the complete repository release gate;
 3. links only the existing Token Intelligence Vercel project;
 4. pulls Preview project settings;
-5. builds with a trusted build-time SHA;
-6. deploys the prebuilt artifact;
-7. certifies public routes, `/api/build`, fail-closed callback behavior, MCP challenge and `/api/health`;
-8. runs a real WorkOS/AuthKit sign-in → callback → workspace → sign-out lifecycle using CI-only release credentials;
-9. proves true first-user onboarding against Preview and cleans only the generated Preview fixture afterward;
-10. rejects recent Preview 5xx runtime errors;
-11. emits `release-manifest.json` and `release-report.md`.
+5. proves the configured database is Neon project `restless-queen-06517393`, branch `br-small-haze-aeqj7d25`;
+6. applies forward-only migrations to that verified validation branch and checks exact migration checksums;
+7. builds with a trusted build-time SHA;
+8. deploys the prebuilt artifact;
+9. certifies public routes, `/api/build`, fail-closed callback behavior, MCP challenge and `/api/health`;
+10. runs a real WorkOS/AuthKit sign-in → callback → workspace → sign-out lifecycle using CI-only release credentials;
+11. proves true first-user onboarding against Preview and cleans only the generated Preview fixture afterward;
+12. proves Stripe test Checkout + portal + signed subscription lifecycle without making a charge;
+13. verifies MCP protected-resource metadata and AuthKit issuer/JWKS;
+14. rejects recent Preview 5xx runtime errors;
+15. emits `release-manifest.json` and `release-report.md`.
 
 A Vercel READY state alone is not certification.
 
@@ -41,7 +45,7 @@ A Vercel READY state alone is not certification.
 
 Run **Release Production** only with the Preview workflow run ID and the same exact SHA. The GitHub `production` environment should require human approval.
 
-The workflow downloads the certified manifest, recertifies Preview, validates the actual Vercel Production environment and WorkOS/Stripe prerequisites, captures the current Production deployment, and promotes that exact Preview artifact without rebuilding. It then certifies build identity, health, real AuthKit sign-in/callback/sign-out, and recent 5xx logs. If any post-promotion certification step fails, the workflow automatically re-promotes the captured previous Production artifact and verifies the alias points back to its deployment ID.
+The workflow downloads the certified manifest, recertifies Preview, validates the actual Vercel Production environment and WorkOS/Stripe prerequisites, proves the Production database is Neon branch `br-muddy-sun-aeyodc4h`, applies/validates forward-only migrations there, captures the current Production deployment, and promotes that exact Preview artifact without rebuilding. It then certifies build identity, health, real AuthKit sign-in/callback/sign-out, and recent 5xx logs. If any post-promotion certification step fails, the workflow automatically re-promotes the captured previous Production artifact and verifies the alias points back to its deployment ID.
 
 PR #14 remains draft until this gate passes plus real provider/account checks have been completed.
 
