@@ -127,6 +127,7 @@ jobs:
         run: |
           BODY="$(curl --fail --silent "${{ steps.deploy.outputs.url }}/api/build")"
           DEPLOYMENT_ID="$(node -e 'const b=JSON.parse(process.argv[1]); process.stdout.write(b.deploymentId||"")' "$BODY")"
+          test -n "$DEPLOYMENT_ID" || { echo "deployment identity endpoint did not expose a deployment ID"; exit 2; }
           echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Write certified Preview manifest
