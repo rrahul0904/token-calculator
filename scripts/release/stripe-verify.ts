@@ -4,7 +4,6 @@ import Stripe from "stripe";
 type State = "PASS" | "FAIL" | "BLOCKED_EXTERNAL";
 
 const requiredEvents = [
-  "checkout.session.completed",
   "customer.subscription.created",
   "customer.subscription.updated",
   "customer.subscription.deleted",
