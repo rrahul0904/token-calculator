@@ -17,5 +17,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" suppressHydrationWarning><body><PulseAtlasPageView /><SiteHeader />{children}</body></html>;
+  return <html lang="en" data-theme="light" suppressHydrationWarning><body><PulseAtlasPageView /><SiteHeader />{children}</body></html>;
 }
