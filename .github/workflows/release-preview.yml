@@ -58,7 +58,7 @@ jobs:
               echo "## Preview certification blocked externally"
               echo ""
               echo "The exact-SHA release workflow is implemented, but these GitHub Actions secrets are not configured:"
-              for key in "${MISSING[@]}"; do echo "- `$key`"; done
+              for key in "${MISSING[@]}"; do printf -- '- %s\n' "$key"; done
               echo ""
               echo "No deployment was attempted."
             } >> "$GITHUB_STEP_SUMMARY"
