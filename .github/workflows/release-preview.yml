@@ -141,6 +141,7 @@ jobs:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           RELEASE_ONBOARDING_AUTH_EMAIL: ${{ secrets.RELEASE_ONBOARDING_AUTH_EMAIL }}
           RELEASE_ONBOARDING_AUTH_PASSWORD: ${{ secrets.RELEASE_ONBOARDING_AUTH_PASSWORD }}
+          RELEASE_ONBOARDING_CLEANUP_ALLOWED: "1"
         run: >
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:onboarding --
