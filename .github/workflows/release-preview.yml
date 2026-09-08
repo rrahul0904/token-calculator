@@ -22,10 +22,8 @@ jobs:
     timeout-minutes: 50
     env:
       TARGET_SHA: ${{ inputs.sha }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
       DATABASE_SSL: disable
       TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE: "1"
@@ -57,6 +55,8 @@ jobs:
     steps:
       - name: Validate exact SHA and deployment credentials
         shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
           for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
@@ -102,36 +102,42 @@ jobs:
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
 
       - name: Pull Preview project settings
-        run: npx --yes vercel@59.11.7 pull --yes --environment=preview --token="$VERCEL_TOKEN"
+        run: npx --yes vercel@59.11.7 pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Build exact SHA for Preview
         env:
           NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_SHA: ${{ inputs.sha }}
         run: |
           export NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          npx --yes vercel@59.11.7 build --token="$VERCEL_TOKEN"
+          npx --yes vercel@59.11.7 build --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Deploy immutable Preview artifact
         id: deploy
         shell: bash
         run: |
-          npx --yes vercel@59.11.7 deploy --prebuilt --yes --token="$VERCEL_TOKEN" 2>&1 | tee /tmp/vercel-deploy.log
+          npx --yes vercel@59.11.7 deploy --prebuilt --yes --token="${{ secrets.VERCEL_TOKEN }}" 2>&1 | tee /tmp/vercel-deploy.log
           DEPLOYMENT_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.vercel\.app' /tmp/vercel-deploy.log | tail -n 1)"
           [[ -n "$DEPLOYMENT_URL" ]] || { echo "unable to determine Vercel Preview URL"; exit 2; }
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
       - name: Certify Preview runtime
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: npm run release:verify:deployment -- --mode=preview --url="${{ steps.deploy.outputs.url }}" --sha="$TARGET_SHA"
 
       - name: Certify real WorkOS sign-in callback session and sign-out
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: >
-          npx --yes vercel@59.11.7 env run -e preview --
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
           --base-url="${{ steps.deploy.outputs.url }}"
 
       - name: Read deployment identity
         id: identity
         shell: bash
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           CURL_ARGS=(--fail --silent)
           if test -n "$VERCEL_AUTOMATION_BYPASS_SECRET"; then
@@ -145,7 +151,7 @@ jobs:
       - name: Fail on Preview 5xx runtime errors
         shell: bash
         run: |
-          npx --yes vercel@59.11.7 logs --deployment "${{ steps.identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="$VERCEL_TOKEN" > /tmp/preview-5xx.ndjson
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="${{ secrets.VERCEL_TOKEN }}" > /tmp/preview-5xx.ndjson
           if test -s /tmp/preview-5xx.ndjson; then
             echo "Preview emitted one or more 5xx runtime log entries; refusing certification."
             exit 2
