@@ -19,9 +19,11 @@ Update this section with the final certified release SHA and production deployme
 
 ## Vercel rollback
 
+The repository now includes `.github/workflows/release-rollback.yml` plus `npm run release:vercel:list` and `npm run release:vercel:deployment`. Normal Production promotion also captures the previous artifact and automatically restores it if post-promotion certification fails.
+
 1. Confirm the incident is application/runtime related rather than a provider outage.
-2. Record the failing deployment ID, Git SHA, first failing route, and timestamp.
-3. Re-promote the recorded prior known-good Vercel production deployment.
+2. Run `npm run release:vercel:list` from an authorized environment to enumerate recent READY Production artifacts, then record the failing deployment ID, Git SHA, first failing route, and timestamp.
+3. Prefer the **Release Rollback** workflow and provide the exact previously certified deployment URL plus expected Git SHA. It verifies the artifact before re-promotion and verifies the stable Production alias afterward.
 4. Verify:
    - `/`
    - `/api/health`
