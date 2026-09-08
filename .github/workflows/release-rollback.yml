@@ -1,0 +1,56 @@
+name: Release Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: "Previously certified Vercel deployment URL to re-promote"
+        required: true
+        type: string
+      expected_sha:
+        description: "Git SHA expected from /api/build on the rollback target"
+        required: true
+        type: string
+      production_url:
+        required: true
+        default: "https://token-intelligence-eight.vercel.app"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Verify target artifact before rollback
+        run: npm run release:verify:deployment -- --mode=production --url="${{ inputs.deployment_url }}" --sha="${{ inputs.expected_sha }}"
+
+      - name: Link existing project
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Re-promote exact prior artifact
+        run: npx --yes vercel@59.11.7 promote "${{ inputs.deployment_url }}" --yes --token="$VERCEL_TOKEN"
+
+      - name: Verify stable Production now serves rollback SHA
+        run: npm run release:verify:deployment -- --mode=production --url="${{ inputs.production_url }}" --sha="${{ inputs.expected_sha }}"
