@@ -26,5 +26,18 @@ export function hasConfiguredWorkosRedirectUri(): boolean {
 }
 
 export function workosRedirectUriForRequest(requestOrigin: string): string {
-  return configuredWorkosRedirectUri() ?? new URL("/auth/callback", requestOrigin).toString();
+  const origin = new URL(requestOrigin).origin;
+
+  // A staged Production deployment must be certifiable before the stable
+  // production domain is moved. Vercel exposes that deployment's immutable
+  // hostname as VERCEL_URL. Only trust that exact system hostname; arbitrary
+  // Host/request origins must never override the canonical Production URI.
+  if (process.env.VERCEL_ENV === "production") {
+    const deploymentHost = process.env.VERCEL_URL?.trim();
+    if (deploymentHost && origin === `https://${deploymentHost}`) {
+      return `${origin}/auth/callback`;
+    }
+  }
+
+  return configuredWorkosRedirectUri() ?? new URL("/auth/callback", origin).toString();
 }
