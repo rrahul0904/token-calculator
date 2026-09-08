@@ -47,12 +47,12 @@ describeIntegration("Stripe signed subscription lifecycle", () => {
     });
   }
 
-  function subscriptionEvent(args: { id: string; type: string; status: string; priceId: string; seats?: number; cancelAtPeriodEnd?: boolean }) {
+  function subscriptionEvent(args: { id: string; type: string; status: string; priceId: string; seats?: number; cancelAtPeriodEnd?: boolean; created?: number }) {
     return {
       id: args.id,
       object: "event",
       type: args.type,
-      created: Math.floor(Date.now() / 1000),
+      created: args.created ?? Math.floor(Date.now() / 1000),
       livemode: false,
       data: {
         object: {
@@ -112,6 +112,35 @@ describeIntegration("Stripe signed subscription lifecycle", () => {
     expect(org[0]?.plan).toBe("team");
     const subs = await sql<{ plan: string; seats: number }[]>`select plan, seats from subscriptions where stripe_subscription_id = ${subscriptionId}`;
     expect(subs).toEqual([{ plan: "team", seats: 7 }]);
+  });
+
+  it("ignores an older subscription event delivered after a newer one", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const newer = await stripeWebhook(signedRequest(subscriptionEvent({
+      id: `evt_newer_${suffix}`,
+      type: "customer.subscription.updated",
+      status: "active",
+      priceId: teamPrice,
+      seats: 9,
+      created: now + 60,
+    })));
+    expect(newer.status).toBe(200);
+
+    const stale = await stripeWebhook(signedRequest(subscriptionEvent({
+      id: `evt_stale_${suffix}`,
+      type: "customer.subscription.updated",
+      status: "active",
+      priceId: proPrice,
+      seats: 1,
+      created: now - 60,
+    })));
+    expect(stale.status).toBe(200);
+    expect(await stale.json()).toMatchObject({ received: true, processed: false, stale: true });
+
+    const org = await sql<{ plan: string }[]>`select plan from organizations where id = ${organizationId}`;
+    expect(org[0]?.plan).toBe("team");
+    const subs = await sql<{ plan: string; seats: number }[]>`select plan, seats from subscriptions where stripe_subscription_id = ${subscriptionId}`;
+    expect(subs).toEqual([{ plan: "team", seats: 9 }]);
   });
 
   it("removes entitlement when the subscription is deleted", async () => {
