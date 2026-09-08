@@ -1,0 +1,180 @@
+name: Release Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Exact 40-character Git SHA to deploy"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-preview-${{ inputs.sha }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      TARGET_SHA: ${{ inputs.sha }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
+      DATABASE_SSL: disable
+      TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE: "1"
+      TOKEN_INTELLIGENCE_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_BASE_URL: http://127.0.0.1:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+      TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED: "1"
+      TOKEN_INTELLIGENCE_E2E_AUTH_SECRET: ci-only-e2e-auth-secret-not-production
+      TOKEN_INTELLIGENCE_E2E_USER_ID: user_e2e_owner
+      TOKEN_INTELLIGENCE_E2E_USER_EMAIL: e2e-owner@token-intelligence.invalid
+      TOKEN_INTELLIGENCE_E2E_WORKOS_ORG_ID: org_e2e
+      TOKEN_INTELLIGENCE_E2E_PLATFORM_ADMIN: "1"
+      TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_ID: user_e2e_org_admin
+      TOKEN_INTELLIGENCE_E2E_SECONDARY_USER_EMAIL: e2e-org-admin@token-intelligence.invalid
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: token_intelligence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d token_intelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Validate exact SHA and deployment credentials
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
+          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [[ -n "${!key}" ]] || { echo "missing required GitHub secret: $key"; exit 2; }
+          done
+          [[ "$VERCEL_PROJECT_ID" == "prj_ADoR3dW8VcpJOaQcagZXOpioyM7l" ]] || { echo "VERCEL_PROJECT_ID must target the existing token-intelligence project"; exit 2; }
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 0
+
+      - name: Prove checkout identity
+        run: |
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Full-history secret scan
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo"
+          zricethezav/gitleaks:v8.24.3
+          detect --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=2 --log-opts="--all"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Install browser matrix
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Repository release gate
+        run: npm run release:gate
+
+      - name: Link existing Vercel project
+        shell: bash
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Pull Preview project settings
+        run: npx --yes vercel@59.11.7 pull --yes --environment=preview --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build exact SHA for Preview
+        env:
+          NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_SHA: ${{ inputs.sha }}
+        run: |
+          export NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          npx --yes vercel@59.11.7 build --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy immutable Preview artifact
+        id: deploy
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 deploy --prebuilt --yes --token="${{ secrets.VERCEL_TOKEN }}" 2>&1 | tee /tmp/vercel-deploy.log
+          DEPLOYMENT_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.vercel\.app' /tmp/vercel-deploy.log | tail -n 1)"
+          [[ -n "$DEPLOYMENT_URL" ]] || { echo "unable to determine Vercel Preview URL"; exit 2; }
+          echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Certify Preview runtime
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npm run release:verify:deployment -- --mode=preview --url="${{ steps.deploy.outputs.url }}" --sha="$TARGET_SHA"
+
+      - name: Certify real WorkOS sign-in callback session and sign-out
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:auth --
+          --base-url="${{ steps.deploy.outputs.url }}"
+
+      - name: Read deployment identity
+        id: identity
+        shell: bash
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          CURL_ARGS=(--fail --silent)
+          if test -n "$VERCEL_AUTOMATION_BYPASS_SECRET"; then
+            CURL_ARGS+=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
+          fi
+          BODY="$(curl "${CURL_ARGS[@]}" "${{ steps.deploy.outputs.url }}/api/build")"
+          DEPLOYMENT_ID="$(node -e 'const b=JSON.parse(process.argv[1]); process.stdout.write(b.deploymentId||"")' "$BODY")"
+          test -n "$DEPLOYMENT_ID" || { echo "deployment identity endpoint did not expose a deployment ID"; exit 2; }
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on Preview 5xx runtime errors
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="${{ secrets.VERCEL_TOKEN }}" > /tmp/preview-5xx.ndjson
+          if test -s /tmp/preview-5xx.ndjson; then
+            echo "Preview emitted one or more 5xx runtime log entries; refusing certification."
+            exit 2
+          fi
+
+      - name: Write certified Preview manifest
+        run: >
+          npm run release:manifest --
+          --sha="$TARGET_SHA"
+          --branch="release-candidate-full-site"
+          --run-id="${{ github.run_id }}"
+          --deployment-id="${{ steps.identity.outputs.deployment_id }}"
+          --preview-url="${{ steps.deploy.outputs.url }}"
+          --neon-branch="release-validation-full-site"
+          --status="preview_certified"
+
+      - run: npm run release:report
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: token-intelligence-release-manifest
+          path: release-evidence/
+          if-no-files-found: error
+
+      - name: Release summary
+        run: cat release-evidence/release-report.md >> "$GITHUB_STEP_SUMMARY"
