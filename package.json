@@ -35,7 +35,8 @@
     "release:verify:deployment": "tsx scripts/release/verify-deployment.ts",
     "release:verify:manifest": "tsx scripts/release/verify-manifest.ts",
     "release:gate": "tsx scripts/release-gate.ts",
-    "release:gate:production": "tsx scripts/release-gate.ts --require-production-providers"
+    "release:gate:production": "tsx scripts/release-gate.ts --require-production-providers",
+    "secret:policy": "tsx scripts/release/secret-policy.ts"
   },
   "engines": {
     "node": "22.x"
