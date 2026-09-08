@@ -23,10 +23,17 @@ const publicPaths = [
 ];
 
 async function request(path: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+  if (bypass) {
+    headers.set("x-vercel-protection-bypass", bypass);
+    headers.set("x-vercel-set-bypass-cookie", "true");
+  }
   return fetch(`${baseUrl}${path}`, {
     redirect: "manual",
     signal: AbortSignal.timeout(12000),
     ...init,
+    headers,
   });
 }
 
