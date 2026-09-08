@@ -4,7 +4,7 @@
 
 Production is deployed from the verified `main` commit through the existing Vercel project `token-intelligence`. Do not create a second Vercel project for release candidates.
 
-The current gap-closure work uses one temporary PR branch, `reverse-engineering-gap-closure`. The old Wave branches are not a dependency stack and must not be resurrected or merged independently.
+The canonical release candidate is `release-candidate-full-site` in PR #14. The old Wave and gap-closure branches are historical inputs, not a dependency stack, and must not be resurrected or merged independently.
 
 Preview release candidates should use a Neon validation branch and Stripe test-mode configuration. Production must use the intended Neon production branch, production WorkOS configuration, separate production secrets, and live Token Intelligence Stripe Price IDs.
 
@@ -22,8 +22,8 @@ WorkOS/AuthKit:
 - `WORKOS_COOKIE_PASSWORD`
 - `NEXT_PUBLIC_WORKOS_REDIRECT_URI`
 - `WORKOS_WEBHOOK_SECRET`
-- `WORKOS_AUTHKIT_DOMAIN` when MCP OAuth is enabled
-- `MCP_RESOURCE_URI` when MCP OAuth is enabled
+- `WORKOS_AUTHKIT_DOMAIN` (required for production MCP OAuth)
+- `MCP_RESOURCE_URI` (required for production MCP OAuth)
 
 Stripe:
 - `STRIPE_SECRET_KEY`
@@ -47,7 +47,7 @@ Never place server secrets in `NEXT_PUBLIC_*` variables. Never copy Preview data
 
 The repository contains an explicitly gated deterministic E2E auth adapter used by GitHub Actions with a disposable PostgreSQL tenant. It requires `TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED=1` plus a matching synthetic secret/header and is not a production authentication mechanism.
 
-Production and real Preview authentication must be verified through WorkOS/AuthKit. Do not configure the E2E adapter in Vercel Production or use it to bypass a broken WorkOS setup.
+Production and real Preview authentication must be verified through WorkOS/AuthKit. Do not configure the E2E adapter in Vercel Production or use it to bypass a broken WorkOS setup. Production readiness also requires the signed WorkOS directory webhook and MCP OAuth resource configuration; `/api/health` fails closed when either is absent.
 
 ## Database migration
 
@@ -61,7 +61,7 @@ Production and real Preview authentication must be verified through WorkOS/AuthK
 
 The migration runner uses an advisory lock and stores SHA-256 checksums in `_token_intelligence_migrations`. An applied migration whose contents later change fails with `MIGRATION_CHECKSUM_MISMATCH`; fix by adding a new migration, never by rewriting applied history.
 
-The current verifier requires all current migrations (`0000` through `0006`), the complete release table set, the API-key quota metering trigger, critical tenant-reference triggers, and a valid foreign-key inventory. A migration file existing in Git is not evidence that a deployed database has been migrated.
+The current verifier requires all current migrations (`0000` through `0007`), the complete release table set, the API-key quota metering trigger, critical tenant-reference triggers, and a valid foreign-key inventory. A migration file existing in Git is not evidence that a deployed database has been migrated.
 
 ## Build and CI gate
 
