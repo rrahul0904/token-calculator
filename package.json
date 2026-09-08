@@ -37,7 +37,8 @@
     "release:gate": "tsx scripts/release-gate.ts",
     "release:gate:production": "tsx scripts/release-gate.ts --require-production-providers",
     "secret:policy": "tsx scripts/release/secret-policy.ts",
-    "release:verify:auth": "tsx scripts/release/verify-live-auth.ts"
+    "release:verify:auth": "tsx scripts/release/verify-live-auth.ts",
+    "release:vercel:deployment": "tsx scripts/release/vercel-deployment.ts"
   },
   "engines": {
     "node": "22.x"
