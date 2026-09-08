@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import process from "node:process";
 import postgres from "postgres";
 
@@ -73,9 +76,29 @@ async function main() {
     const migrationRows = await sql<{ name: string; checksum: string }[]>`
       select name, checksum from _token_intelligence_migrations order by name
     `;
-    for (const name of requiredMigrations) {
-      if (!migrationRows.some((row) => row.name === name)) throw new Error(`MISSING_MIGRATION_RECORD:${name}`);
+    const migrationDirectory = resolve(process.cwd(), "drizzle");
+    const repositoryMigrationNames = (await readdir(migrationDirectory))
+      .filter((name) => /^\\d+.*\\.sql$/.test(name))
+      .sort();
+    const repositoryMigrationSet = new Set(repositoryMigrationNames);
+    const ledgerMigrationSet = new Set(migrationRows.map((row) => row.name));
+
+    const missingRecords = repositoryMigrationNames.filter((name) => !ledgerMigrationSet.has(name));
+    if (missingRecords.length) throw new Error(`MISSING_MIGRATION_RECORD:${missingRecords.join(",")}`);
+
+    const unexpectedRecords = migrationRows.map((row) => row.name).filter((name) => !repositoryMigrationSet.has(name));
+    if (unexpectedRecords.length) throw new Error(`UNEXPECTED_MIGRATION_RECORD:${unexpectedRecords.join(",")}`);
+
+    for (const name of repositoryMigrationNames) {
+      const source = await readFile(resolve(migrationDirectory, name), "utf8");
+      const checksum = createHash("sha256").update(source).digest("hex");
+      const applied = migrationRows.find((row) => row.name === name);
+      if (!applied) throw new Error(`MISSING_MIGRATION_RECORD:${name}`);
+      if (applied.checksum !== checksum) throw new Error(`MIGRATION_CHECKSUM_MISMATCH:${name}`);
     }
+
+    const requiredMissing = requiredMigrations.filter((name) => !repositoryMigrationSet.has(name));
+    if (requiredMissing.length) throw new Error(`REQUIRED_MIGRATION_FILE_MISSING:${requiredMissing.join(",")}`);
 
     const triggerRows = await sql<{ trigger_name: string }[]>`
       select distinct trigger_name from information_schema.triggers
