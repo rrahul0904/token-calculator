@@ -46,11 +46,13 @@ export function normalizedScope(value: string | undefined): ReleaseScope {
   throw new Error("INVALID_RELEASE_SCOPE");
 }
 
-function hasValue(env: NodeJS.ProcessEnv, name: string) {
+export type ReleaseEnvironment = Readonly<Record<string, string | undefined>>;
+
+function hasValue(env: ReleaseEnvironment, name: string) {
   return Boolean(env[name]?.trim());
 }
 
-export function releaseEnvStatus(scope: ReleaseScope, env: NodeJS.ProcessEnv = process.env) {
+export function releaseEnvStatus(scope: ReleaseScope, env: ReleaseEnvironment = process.env) {
   const variables = RELEASE_ENV_CONTRACT.map((spec) => {
     const required = spec.requiredIn.includes(scope);
     let configured = hasValue(env, spec.name);
