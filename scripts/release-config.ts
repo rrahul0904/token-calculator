@@ -1,3 +1,4 @@
+import { releaseEnvStatus } from "./release/env-contract";
 type State = "configured" | "missing" | "not_enabled";
 
 const groups: Record<string, { required: string[]; optional?: boolean }> = {
@@ -26,7 +27,7 @@ const result = Object.fromEntries(Object.entries(groups).map(([name, group]) => 
   },
 ]));
 
-process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+const typedProduction = releaseEnvStatus("production");
+process.stdout.write(JSON.stringify({ ...result, typedProduction }, null, 2) + "\n");
 
-const requiredMissing = Object.entries(groups).filter(([, group]) => !group.optional).some(([name]) => result[name]?.state !== "configured");
-if (process.argv.includes("--require-production") && requiredMissing) process.exitCode = 2;
+if (process.argv.includes("--require-production") && !typedProduction.ready) process.exitCode = 2;
