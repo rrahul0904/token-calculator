@@ -154,9 +154,81 @@ jobs:
           echo "id=$PREVIOUS_ID" >> "$GITHUB_OUTPUT"
           echo "url=$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
 
-      - name: Promote certified artifact without rebuilding
+      - name: Pull Production project settings
+        run: npx --yes vercel@59.11.7 pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build exact SHA with Production environment
+        env:
+          NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_SHA: ${{ inputs.sha }}
+        run: |
+          export NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          npx --yes vercel@59.11.7 build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy staged Production artifact without assigning domains
+        id: staged
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 deploy --prebuilt --prod --skip-domain --yes --token="${{ secrets.VERCEL_TOKEN }}" 2>&1 | tee /tmp/vercel-staged-production.log
+          STAGED_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.vercel\.app' /tmp/vercel-staged-production.log | tail -n 1)"
+          [[ -n "$STAGED_URL" ]] || { echo "unable to determine staged Production URL"; exit 2; }
+          echo "url=$STAGED_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Allow exact staged Production origin in WorkOS
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run workos:configure --
+          --scope=production
+          --base-url="${{ steps.staged.outputs.url }}"
+
+      - name: Certify staged Production runtime before traffic
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: npm run release:verify:deployment -- --mode=production --url="${{ steps.staged.outputs.url }}" --sha="$TARGET_SHA"
+
+      - name: Certify staged Production MCP OAuth before traffic
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run mcp:verify --
+          --base-url="${{ steps.staged.outputs.url }}"
+          --require
+
+      - name: Certify staged Production WorkOS auth before traffic
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
+          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:auth --
+          --base-url="${{ steps.staged.outputs.url }}"
+
+      - name: Read staged Production deployment identity
+        id: staged_identity
+        shell: bash
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          CURL_ARGS=(--fail --silent)
+          if test -n "$VERCEL_AUTOMATION_BYPASS_SECRET"; then
+            CURL_ARGS+=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
+          fi
+          BODY="$(curl "${CURL_ARGS[@]}" "${{ steps.staged.outputs.url }}/api/build")"
+          DEPLOYMENT_ID="$(node -e 'const b=JSON.parse(process.argv[1]); process.stdout.write(b.deploymentId||"")' "$BODY")"
+          test -n "$DEPLOYMENT_ID" || { echo "staged Production build identity did not expose deployment ID"; exit 2; }
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on staged Production 5xx runtime errors
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.staged_identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="${{ secrets.VERCEL_TOKEN }}" > /tmp/staged-production-5xx.ndjson
+          if test -s /tmp/staged-production-5xx.ndjson; then
+            echo "Staged Production emitted one or more 5xx runtime log entries; refusing promotion."
+            exit 2
+          fi
+
+      - name: Promote already-certified staged Production artifact without rebuilding
         id: promote
-        run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="${{ secrets.VERCEL_TOKEN }}"
+        run: npx --yes vercel@59.11.7 promote "${{ steps.staged.outputs.url }}" --yes --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Certify stable Production runtime
         run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
@@ -177,13 +249,17 @@ jobs:
           npm run release:verify:auth --
           --base-url="$PRODUCTION_URL"
 
-      - name: Read promoted Production deployment identity
+      - name: Prove Production serves the exact staged deployment
         id: production_identity
         shell: bash
         run: |
           BODY="$(curl --fail --silent "$PRODUCTION_URL/api/build")"
           DEPLOYMENT_ID="$(node -e 'const b=JSON.parse(process.argv[1]); process.stdout.write(b.deploymentId||"")' "$BODY")"
           test -n "$DEPLOYMENT_ID" || { echo "Production build identity did not expose deployment ID"; exit 2; }
+          test "$DEPLOYMENT_ID" = "${{ steps.staged_identity.outputs.deployment_id }}" || {
+            echo "Production deployment ID differs from the certified staged artifact; refusing certification."
+            exit 2
+          }
           echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Fail on Production 5xx runtime errors
