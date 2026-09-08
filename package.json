@@ -40,7 +40,8 @@
     "release:verify:auth": "tsx scripts/release/verify-live-auth.ts",
     "release:vercel:deployment": "tsx scripts/release/vercel-deployment.ts",
     "release:verify:onboarding": "tsx scripts/release/verify-live-onboarding.ts",
-    "release:vercel:list": "tsx scripts/release/vercel-deployments.ts"
+    "release:vercel:list": "tsx scripts/release/vercel-deployments.ts",
+    "release:verify:billing": "tsx scripts/release/verify-live-billing.ts"
   },
   "engines": {
     "node": "22.x"
