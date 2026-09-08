@@ -84,7 +84,9 @@ After WorkOS Production is activated:
 - Directory webhook: `https://token-intelligence-eight.vercel.app/api/webhooks/workos`
 - MCP resource: `https://token-intelligence-eight.vercel.app/mcp`
 
-The strict WorkOS verifier accepts `WORKOS_PRODUCTION_STATE`, `WORKOS_BILLING_ADDRESS_CONFIGURED` and `WORKOS_PAYMENT_METHOD_CONFIGURED` as non-secret operator evidence for dashboard-only account state. It fails closed when that state is unknown.
+The release workflow can idempotently register the exact redirect URI and CORS origin through the Production `WORKOS_API_KEY`. Sign-out URI, Sign-in URL and the AuthKit MCP Resource Indicator remain provider configuration that must exist in WorkOS Production.
+
+The strict WorkOS verifier accepts `WORKOS_PRODUCTION_STATE`, `WORKOS_BILLING_ADDRESS_CONFIGURED` and `WORKOS_PAYMENT_METHOD_CONFIGURED` as non-secret operator evidence for dashboard-only account state. It fails closed when that state is unknown. It also queries WorkOS `/webhook_endpoints` and requires the exact Production URL `/api/webhooks/workos`, enabled status, exactly the Directory Sync lifecycle events handled by source code, and a signing secret equal to `WORKOS_WEBHOOK_SECRET`. The secret is compared but never printed.
 
 ## Database identity and migration safety
 
@@ -98,6 +100,12 @@ Only after that identity check can the workflow apply forward-only migrations an
 ## Preview billing certification
 
 `npm run release:verify:billing` refuses the stable Production origin and refuses any Stripe key that is not test mode. On Preview it creates a Checkout session and billing portal session, sends signed test-mode subscription lifecycle events through the deployed webhook route, verifies Pro → Team → free entitlement reconciliation, and cleans the synthetic Preview database/Stripe customer fixture when it created one. It never supplies a payment method and reports `charged: false`.
+
+## Staged Production deployment
+
+Vercel Preview promotion is not treated as immutable because Vercel rebuilds a Preview deployment when converting it to Production. The release workflow therefore creates a Production-environment build first, deploys it with `--prod --skip-domain`, certifies its generated deployment URL, and only then promotes that already-Production deployment. The stable Production domain must report the same Vercel deployment ID afterward.
+
+The server-side WorkOS callback resolver permits the exact Vercel system `VERCEL_URL` while a staged Production deployment is being certified, but rejects arbitrary request origins and returns to the canonical Production callback when traffic uses the stable domain.
 
 ## Build identity
 
