@@ -17,8 +17,9 @@ Repository or environment secrets required by the release workflows:
 - `VERCEL_TOKEN`
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID` — must equal `prj_ADoR3dW8VcpJOaQcagZXOpioyM7l`
+- `VERCEL_AUTOMATION_BYPASS_SECRET` — optional; required only when Preview Deployment Protection blocks release automation.
 
-The token is used only by the Vercel CLI. The workflows do not print it.
+The token/bypass values are used only by release automation and are never printed.
 
 ## Runtime environment contract
 
@@ -49,6 +50,24 @@ Production launch-critical variables include:
 
 Optional integrations remain optional and do not silently become launch-critical.
 
+## Release-test AuthKit accounts
+
+Real authentication certification does not use `TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED`.
+
+Store a dedicated low-privilege release-test account in the relevant Vercel environment as server-only values:
+
+- `RELEASE_AUTH_EMAIL`
+- `RELEASE_AUTH_PASSWORD`
+
+The release workflows load these only through `vercel env run` and execute `npm run release:verify:auth`. The verifier does not print credentials and checks hosted sign-in, callback/session establishment, workspace access, sign-out, and post-sign-out protection.
+
+For the one-time first-user onboarding certification, use a fresh low-privilege account through:
+
+- `RELEASE_ONBOARDING_AUTH_EMAIL`
+- `RELEASE_ONBOARDING_AUTH_PASSWORD`
+
+Then run `npm run release:verify:onboarding -- --base-url=<certified deployment>`. The command must not be reused with a user that is already onboarded.
+
 ## WorkOS public Production values
 
 After WorkOS Production is activated:
@@ -72,7 +91,7 @@ The strict WorkOS verifier accepts `WORKOS_PRODUCTION_STATE`, `WORKOS_BILLING_AD
 - deployment ID/URL
 - build timestamp
 
-The Preview workflow injects the exact Git SHA at build time. Certification fails if the endpoint does not match the requested SHA.
+The Preview workflow injects the exact Git SHA at build time. Certification fails if the endpoint does not match the requested SHA or if Vercel does not expose a deployment ID. Preview security URLs use the exact `VERCEL_URL`; SEO canonical URLs intentionally continue to use the stable Production host.
 
 ## Secret handling
 
