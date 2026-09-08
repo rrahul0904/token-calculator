@@ -35,6 +35,8 @@ export const RELEASE_ENV_CONTRACT: readonly ReleaseEnvSpec[] = [
   { name: "REDIS_URL", description: "Optional Redis URL.", secret: true, requiredIn: [] },
   { name: "RELEASE_AUTH_EMAIL", description: "Server-only dedicated release-test AuthKit account email used by secure live certification.", secret: true, requiredIn: [] },
   { name: "RELEASE_AUTH_PASSWORD", description: "Server-only dedicated release-test AuthKit account password used by secure live certification.", secret: true, requiredIn: [] },
+  { name: "RELEASE_ONBOARDING_AUTH_EMAIL", description: "Server-only fresh AuthKit account email for one-time onboarding certification.", secret: true, requiredIn: [] },
+  { name: "RELEASE_ONBOARDING_AUTH_PASSWORD", description: "Server-only fresh AuthKit account password for one-time onboarding certification.", secret: true, requiredIn: [] },
   { name: "TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED", description: "Local/CI-only E2E auth switch.", secret: false, requiredIn: [] },
   { name: "TOKEN_INTELLIGENCE_E2E_AUTH_SECRET", description: "Local/CI-only E2E auth secret.", secret: true, requiredIn: [] },
 ] as const;
