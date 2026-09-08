@@ -189,6 +189,13 @@ jobs:
           [[ -n "$DEPLOYMENT_URL" ]] || { echo "unable to determine Vercel Preview URL"; exit 2; }
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Ensure exact Preview origin is allowed by WorkOS Staging
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run workos:configure --
+          --scope=preview
+          --base-url="${{ steps.deploy.outputs.url }}"
+
       - name: Certify Preview runtime
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
