@@ -47,6 +47,20 @@ describe("WorkOS redirect URI resolution", () => {
     expect(configuredWorkosRedirectUri()).toBe("https://token-intelligence-eight.vercel.app/auth/callback");
   });
 
+  it("uses the exact staged Production deployment origin without trusting arbitrary hosts", () => {
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_URL = "token-intelligence-stage.example.vercel.app";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "token-intelligence-eight.vercel.app";
+    process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI = "https://token-intelligence-eight.vercel.app/auth/callback";
+
+    expect(workosRedirectUriForRequest("https://token-intelligence-stage.example.vercel.app")).toBe(
+      "https://token-intelligence-stage.example.vercel.app/auth/callback",
+    );
+    expect(workosRedirectUriForRequest("https://attacker.example.com")).toBe(
+      "https://token-intelligence-eight.vercel.app/auth/callback",
+    );
+  });
+
   it("uses the request origin outside Vercel when configuration is absent", () => {
     delete process.env.VERCEL_ENV;
     delete process.env.VERCEL_URL;
