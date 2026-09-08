@@ -32,7 +32,9 @@ const baseUrl = argument("base-url") ?? process.env.APP_BASE_URL ?? "";
 const origin = normalizeOrigin(baseUrl);
 const issuerRaw = process.env.WORKOS_AUTHKIT_DOMAIN?.trim();
 const issuer = issuerRaw ? normalizeOrigin(issuerRaw.includes("://") ? issuerRaw : `https://${issuerRaw}`) : null;
-const redirect = process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI?.trim() || (scope === "preview" && origin ? `${origin}/auth/callback` : null);
+const redirect = scope === "preview" && origin
+  ? `${origin}/auth/callback`
+  : process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI?.trim() || null;
 const productionState = process.env.WORKOS_PRODUCTION_STATE?.trim().toLowerCase() || "unknown";
 const billingAddress = boolEvidence("WORKOS_BILLING_ADDRESS_CONFIGURED");
 const paymentMethod = boolEvidence("WORKOS_PAYMENT_METHOD_CONFIGURED");
