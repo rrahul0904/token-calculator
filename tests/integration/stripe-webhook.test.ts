@@ -150,6 +150,7 @@ describeIntegration("Stripe signed subscription lifecycle", () => {
       status: "canceled",
       priceId: teamPrice,
       seats: 7,
+      created: Math.floor(Date.now() / 1000) + 120,
     })));
     expect(response.status).toBe(200);
     const org = await sql<{ plan: string }[]>`select plan from organizations where id = ${organizationId}`;
