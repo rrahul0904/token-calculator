@@ -17,7 +17,7 @@ export const RELEASE_ENV_CONTRACT: readonly ReleaseEnvSpec[] = [
   { name: "NEXT_PUBLIC_WORKOS_REDIRECT_URI", description: "AuthKit callback URL.", secret: false, requiredIn: ["production"] },
   { name: "WORKOS_WEBHOOK_SECRET", description: "WorkOS webhook signing secret.", secret: true, requiredIn: ["production", "preview"] },
   { name: "WORKOS_AUTHKIT_DOMAIN", description: "AuthKit issuer used for MCP OAuth.", secret: false, requiredIn: ["production", "preview"] },
-  { name: "MCP_RESOURCE_URI", description: "OAuth protected-resource URI.", secret: false, requiredIn: ["production", "preview"] },
+  { name: "MCP_RESOURCE_URI", description: "OAuth protected-resource URI. Exact Vercel Preview hosts are derived at runtime.", secret: false, requiredIn: ["production"] },
   { name: "STRIPE_SECRET_KEY", description: "Stripe server credential.", secret: true, requiredIn: ["production", "preview"] },
   { name: "STRIPE_WEBHOOK_SECRET", description: "Stripe webhook signing secret.", secret: true, requiredIn: ["production", "preview"] },
   { name: "STRIPE_PRICE_PRO", description: "Stripe recurring Price ID for Pro.", secret: false, requiredIn: ["production", "preview"] },
