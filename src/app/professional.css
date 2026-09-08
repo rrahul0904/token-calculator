@@ -534,7 +534,7 @@ pre {
   .shell { width: min(100% - 28px, 1160px); }
   .site-header__inner { min-height: 52px; }
   .site-header__actions .button--ghost { display: none; }
-  .theme-toggle { display: none; }
+  .theme-toggle { min-width: 42px; padding: 0 7px; font-size: .62rem; }
   .hero--commercial { padding-top: 52px; padding-bottom: 32px; }
   .hero--commercial h1 { font-size: clamp(2.65rem, 13vw, 4.2rem); }
   .calculator-shell { border-radius: 7px; }
