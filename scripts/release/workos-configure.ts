@@ -16,7 +16,7 @@ function required(name: string, fallback?: string) {
   if (!value?.trim()) throw new Error(`MISSING_WORKOS_CONFIG_INPUT:${name}`);
   return value.trim();
 }
-function wildcardCovers(pattern: string, candidate: string) {
+export function wildcardCovers(pattern: string, candidate: string) {
   if (pattern === candidate) return true;
   if (!pattern.includes("*")) return false;
   const escaped = pattern
