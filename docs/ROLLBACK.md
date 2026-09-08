@@ -23,7 +23,7 @@ The repository now includes `.github/workflows/release-rollback.yml` plus `npm r
 
 1. Confirm the incident is application/runtime related rather than a provider outage.
 2. Run `npm run release:vercel:list` from an authorized environment to enumerate recent READY Production artifacts, then record the failing deployment ID, Git SHA, first failing route, and timestamp.
-3. Prefer the **Release Rollback** workflow and provide the exact previously certified deployment URL plus expected Git SHA. It verifies the artifact before re-promotion and verifies the stable Production alias afterward.
+3. Prefer the **Release Rollback** workflow and provide the exact previously certified Production deployment URL plus expected Git SHA. It resolves that URL to a Vercel deployment ID, requests Vercel's project rollback API for that exact ID, then verifies both the stable Production deployment ID and expected Git SHA afterward.
 4. Verify:
    - `/`
    - `/api/health`
@@ -31,7 +31,7 @@ The repository now includes `.github/workflows/release-rollback.yml` plus `npm r
    - representative public calculator flow
 5. Inspect runtime errors after rollback and confirm new failures have stopped.
 
-Do not rebuild a different commit and call it a rollback. A rollback must identify the exact previously deployed artifact.
+Do not rebuild or re-promote an arbitrary deployment and call it a rollback. A rollback must identify the exact previously deployed Production deployment ID and use Vercel's rollback mechanism.
 
 ## Database recovery
 
@@ -66,7 +66,7 @@ The `release-validation-full-site` branch is a schema/data reference, not automa
 Before promotion, record which Vercel Production variables changed by name (never secret values). If rollback requires restoring configuration:
 
 1. restore the prior value/version through the authorized secret-management path;
-2. redeploy/re-promote the known-good artifact as required by Vercel;
+2. restore the known-good Production deployment through Vercel rollback, or create a new staged Production release only when configuration changes require a rebuild;
 3. verify `/api/health` and authentication;
 4. verify no Preview value leaked into Production.
 
