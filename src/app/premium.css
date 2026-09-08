@@ -150,6 +150,6 @@ pre { border-color: var(--border-subtle); background: #05070D; color: #d9f8ff; }
 :root[data-theme="light"] textarea, :root[data-theme="light"] input, :root[data-theme="light"] select, :root[data-theme="light"] pre { background: #fff; color: var(--text-primary); }
 :root[data-theme="light"] .button--primary { color: #06232b; }
 @media (max-width: 1000px) { .site-header__inner { gap: 10px; } }
-@media (max-width: 720px) { .site-header__inner { min-height: 56px; } .site-header__actions .button--ghost { display: none; } .site-header__actions { gap: 6px; } .theme-toggle { width: 32px; height: 32px; } .header-cta { padding: 7px 9px !important; } .hero--commercial { min-height: auto; padding-top: 64px; } .hero--commercial h1 { font-size: clamp(2.75rem, 13vw, 4.25rem); } }
+@media (max-width: 720px) { .site-header__inner { min-height: 56px; } .site-header__actions .button--ghost { display: none; } .site-header__actions { gap: 6px; } .theme-toggle { width: 32px; height: 32px; } .header-cta { padding: 7px 9px !important; } .hero--commercial { min-height: auto; padding-top: 64px; overflow: clip; } .hero--commercial h1 { font-size: clamp(2.75rem, 13vw, 4.25rem); } }
 @media (max-width: 420px) { .shell { width: min(100% - 20px, 1180px); } .header-cta { font-size: 0 !important; } .header-cta::after { content: "Workspace"; font-size: .66rem; } }
 @media (prefers-reduced-motion: reduce) { .button, .tool-link { transition: none !important; } .button:hover, .tool-link:hover { transform: none; } }
