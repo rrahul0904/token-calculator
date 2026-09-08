@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       deployment_url:
-        description: "Previously certified Vercel deployment URL to re-promote"
+        description: "Previously certified Vercel Production deployment URL to restore"
         required: true
         type: string
       expected_sha:
@@ -49,8 +49,25 @@ jobs:
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
 
-      - name: Re-promote exact prior artifact
-        run: npx --yes vercel@59.11.7 promote "${{ inputs.deployment_url }}" --yes --token="$VERCEL_TOKEN"
+      - name: Resolve exact rollback deployment ID
+        id: target
+        shell: bash
+        run: |
+          TARGET="$(npm run --silent release:vercel:deployment -- --url="${{ inputs.deployment_url }}")"
+          TARGET_ID="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.id)' "$TARGET")"
+          test -n "$TARGET_ID" || { echo "unable to resolve rollback deployment ID"; exit 2; }
+          echo "id=$TARGET_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Request Vercel rollback to exact prior Production deployment
+        shell: bash
+        run: |
+          curl --fail-with-body --silent --show-error             --request POST             --url "https://api.vercel.com/v1/projects/$VERCEL_PROJECT_ID/rollback/${{ steps.target.outputs.id }}?teamId=$VERCEL_ORG_ID"             --header "Authorization: Bearer $VERCEL_TOKEN"             --header "Content-Type: application/json"
+
+      - name: Verify stable Production now serves exact rollback deployment
+        run: >
+          npm run release:vercel:deployment --
+          --url="${{ inputs.production_url }}"
+          --expect-id="${{ steps.target.outputs.id }}"
 
       - name: Verify stable Production now serves rollback SHA
         run: npm run release:verify:deployment -- --mode=production --url="${{ inputs.production_url }}" --sha="${{ inputs.expected_sha }}"
