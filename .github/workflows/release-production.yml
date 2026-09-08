@@ -107,7 +107,23 @@ jobs:
           npx --yes vercel@59.11.7 env run -e production --
           npm run stripe:verify -- --require
 
+      - name: Install Chromium for real AuthKit certification
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture current Production deployment for automatic rollback
+        id: previous
+        shell: bash
+        run: |
+          CURRENT="$(npm run --silent release:vercel:deployment -- --url="$PRODUCTION_URL")"
+          PREVIOUS_ID="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.id)' "$CURRENT")"
+          PREVIOUS_URL="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.url)' "$CURRENT")"
+          test -n "$PREVIOUS_ID"
+          test -n "$PREVIOUS_URL"
+          echo "id=$PREVIOUS_ID" >> "$GITHUB_OUTPUT"
+          echo "url=$PREVIOUS_URL" >> "$GITHUB_OUTPUT"
+
       - name: Promote certified artifact without rebuilding
+        id: promote
         run: npx --yes vercel@59.11.7 promote "${{ steps.manifest.outputs.preview_url }}" --yes --token="$VERCEL_TOKEN"
 
       - name: Certify stable Production runtime
@@ -158,3 +174,14 @@ jobs:
           if-no-files-found: error
 
       - run: cat release-evidence/release-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Automatically restore previous Production artifact after failed certification
+        if: ${{ failure() && steps.promote.outcome == 'success' }}
+        run: npx --yes vercel@59.11.7 promote "${{ steps.previous.outputs.url }}" --yes --token="$VERCEL_TOKEN"
+
+      - name: Verify automatic rollback restored the captured deployment
+        if: ${{ failure() && steps.promote.outcome == 'success' }}
+        run: >
+          npm run release:vercel:deployment --
+          --url="$PRODUCTION_URL"
+          --expect-id="${{ steps.previous.outputs.id }}"
