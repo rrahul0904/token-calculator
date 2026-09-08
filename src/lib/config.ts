@@ -1,4 +1,5 @@
 import { hasConfiguredWorkosRedirectUri } from "@/lib/auth/redirect-uri";
+import { hasRuntimeMcpResourceUri } from "@/lib/auth/deployment-origin";
 
 export type IntegrationState = "live" | "code_complete_configuration_blocked" | "not_enabled";
 
@@ -40,7 +41,7 @@ export function getConfigurationStatus() {
     workosWebhook: all("WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET")
       ? "live"
       : "code_complete_configuration_blocked",
-    mcpOAuth: all("WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI")
+    mcpOAuth: all("WORKOS_AUTHKIT_DOMAIN") && hasRuntimeMcpResourceUri()
       ? "live"
       : "code_complete_configuration_blocked",
     stripe: all("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM")
