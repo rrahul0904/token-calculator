@@ -18,6 +18,7 @@ describe("sign-out route", () => {
     for (const key of keys) delete process.env[key];
 
     const response = await signOut();
+    if (!response) throw new Error("EXPECTED_CONFIGURATION_RESPONSE");
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
       error: "AUTH_NOT_CONFIGURED",
