@@ -2,6 +2,7 @@ import { createPublicKey, verify as verifySignature, type JsonWebKey } from "nod
 import { and, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { organizationMembers, organizations, users } from "@/db/schema";
+import { runtimeApplicationOrigin, runtimeMcpResourceUri } from "@/lib/auth/deployment-origin";
 
 export interface McpOAuthPrincipal {
   kind: "oauth";
@@ -52,23 +53,7 @@ function configuredIssuer(): string | null {
 }
 
 export function mcpResourceUri(): string | null {
-  const explicit = process.env.MCP_RESOURCE_URI?.trim();
-  if (explicit) {
-    try {
-      const parsed = new URL(explicit);
-      if (!["https:", "http:"].includes(parsed.protocol)) return null;
-      return parsed.toString().replace(/\/$/, "");
-    } catch {
-      return null;
-    }
-  }
-  const base = process.env.APP_BASE_URL?.trim();
-  if (!base) return null;
-  try {
-    return new URL("/mcp", base).toString().replace(/\/$/, "");
-  } catch {
-    return null;
-  }
+  return runtimeMcpResourceUri();
 }
 
 export function mcpAuthorizationServer(): string | null {
@@ -193,12 +178,8 @@ export async function authenticateMcpOAuth(request: Request, requiredScope = "mc
 }
 
 export function mcpWwwAuthenticateHeader(): string | null {
-  const base = process.env.APP_BASE_URL?.trim();
-  if (!base) return null;
-  try {
-    const metadata = new URL("/.well-known/oauth-protected-resource", base).toString();
-    return `Bearer error="unauthorized", error_description="Authorization needed", resource_metadata="${metadata}"`;
-  } catch {
-    return null;
-  }
+  const origin = runtimeApplicationOrigin();
+  if (!origin) return null;
+  const metadata = `${origin}/.well-known/oauth-protected-resource`;
+  return `Bearer error="unauthorized", error_description="Authorization needed", resource_metadata="${metadata}"`;
 }
