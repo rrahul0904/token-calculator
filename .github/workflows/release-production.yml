@@ -122,6 +122,15 @@ jobs:
           test -n "$DEPLOYMENT_ID" || { echo "Production build identity did not expose deployment ID"; exit 2; }
           echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
 
+      - name: Fail on Production 5xx runtime errors
+        shell: bash
+        run: |
+          npx --yes vercel@59.11.7 logs --deployment "${{ steps.production_identity.outputs.deployment_id }}" --status-code 5xx --since 10m --json --token="$VERCEL_TOKEN" > /tmp/production-5xx.ndjson
+          if test -s /tmp/production-5xx.ndjson; then
+            echo "Production emitted one or more 5xx runtime log entries; certification failed."
+            exit 2
+          fi
+
       - name: Write Production certification manifest
         run: >
           npm run release:manifest --
