@@ -97,6 +97,13 @@ jobs:
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run env:validate -- --scope=production
 
+      - name: Configure Production WorkOS redirect and CORS idempotently
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run workos:configure --
+          --scope=production
+          --base-url="$PRODUCTION_URL"
+
       - name: Verify Production WorkOS account and runtime prerequisites
         run: >
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
