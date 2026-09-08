@@ -176,11 +176,11 @@ jobs:
       - run: cat release-evidence/release-report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Automatically restore previous Production artifact after failed certification
-        if: ${{ failure() && steps.promote.outcome == 'success' }}
+        if: ${{ failure() && steps.promote.outcome != 'skipped' }}
         run: npx --yes vercel@59.11.7 promote "${{ steps.previous.outputs.url }}" --yes --token="$VERCEL_TOKEN"
 
       - name: Verify automatic rollback restored the captured deployment
-        if: ${{ failure() && steps.promote.outcome == 'success' }}
+        if: ${{ failure() && steps.promote.outcome != 'skipped' }}
         run: >
           npm run release:vercel:deployment --
           --url="$PRODUCTION_URL"
