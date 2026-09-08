@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import * as z from "zod";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { organizationMembers, organizations, projects, users } from "@/db/schema";
@@ -29,7 +29,12 @@ export async function POST(request: Request) {
 
   const db = getDb();
   const result = await db.transaction(async (tx) => {
-    const existingUsers = await tx.select().from(users).where(eq(users.email, session.email)).limit(1);
+    const lockKey = `onboarding:${session.userId}:${session.email.toLowerCase()}`;
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
+
+    const existingUsers = await tx.select().from(users).where(
+      or(eq(users.workosUserId, session.userId), eq(users.email, session.email)),
+    ).limit(1);
     let user = existingUsers[0];
     if (!user) {
       const rows = await tx.insert(users).values({
@@ -42,6 +47,8 @@ export async function POST(request: Request) {
     } else if (!user.workosUserId) {
       const rows = await tx.update(users).set({ workosUserId: session.userId, name: session.name, updatedAt: new Date() }).where(eq(users.id, user.id)).returning();
       user = rows[0];
+    } else if (user.workosUserId !== session.userId) {
+      throw new Error("AUTH_IDENTITY_CONFLICT");
     }
 
     if (session.workosOrganizationId) {
@@ -56,6 +63,14 @@ export async function POST(request: Request) {
         }).onConflictDoNothing();
         return { organizationId: existing.id, userId: user.id, created: false };
       }
+    }
+
+    const existingMembership = (await tx.select({ organizationId: organizationMembers.organizationId })
+      .from(organizationMembers)
+      .where(eq(organizationMembers.userId, user.id))
+      .limit(1))[0];
+    if (existingMembership) {
+      return { organizationId: existingMembership.organizationId, userId: user.id, created: false };
     }
 
     const organizationId = `org_${randomUUID()}`;
