@@ -6,6 +6,7 @@ import "./globals.css";
 import "./features.css";
 import "./commercial.css";
 import "./premium.css";
+import "./professional.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(getPublicSiteUrl()),
@@ -16,5 +17,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" suppressHydrationWarning><body><PulseAtlasPageView /><SiteHeader />{children}</body></html>;
+  return <html lang="en" data-theme="light" suppressHydrationWarning><body><PulseAtlasPageView /><SiteHeader />{children}</body></html>;
 }

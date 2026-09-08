@@ -175,10 +175,10 @@ export function TokenCalculator() {
     <main>
       <section className="hero hero--commercial shell">
         <div className="hero__copy">
-          <span className="pill">Local-first token intelligence</span>
-          <h1>Know what your AI workload costs <span>before</span> it runs.</h1>
-          <p>Measure context locally, compare current model economics, forecast recurring spend, then connect real agent runs when you need observability and control.</p>
-          <div className="hero-actions"><a href="#calculator" className="button button--primary">Calculate now</a><Link href="/app/overview" className="button button--ghost">Open Agent Economics</Link></div>
+          <span className="pill">AI workload economics</span>
+          <h1>Plan, measure, and govern AI spend.</h1>
+          <p>Estimate token and model costs before execution, compare current pricing, and connect real usage when you need finance-grade attribution and controls.</p>
+          <div className="hero-actions"><a href="#calculator" className="button button--primary">Open calculator</a><Link href="/app/overview" className="button button--ghost">View workspace</Link></div>
         </div>
         <div className="hero-proof" aria-label="Product principles">
           <div><strong>Browser-local</strong><span>Prompt tokenization</span></div>

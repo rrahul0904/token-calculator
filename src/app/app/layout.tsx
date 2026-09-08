@@ -6,6 +6,7 @@ import { getConfigurationStatus } from "@/lib/config";
 import { getExternalAuthSession, getTenantContext, isAuthConfigured } from "@/lib/auth/session";
 import "./app.css";
 import "./premium-app.css";
+import "./professional-app.css";
 
 // Runtime credentials may be changed independently of the application build.
 // Never freeze an authenticated workspace's configuration state into static HTML.
