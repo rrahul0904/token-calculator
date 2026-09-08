@@ -152,8 +152,8 @@ body {
 /* Editorial hero */
 .hero--commercial {
   min-height: auto;
-  padding-top: 86px;
-  padding-bottom: 44px;
+  padding-top: 68px;
+  padding-bottom: 38px;
   align-items: flex-end;
 }
 .hero--commercial::before { display: none; }
@@ -172,7 +172,7 @@ body {
   max-width: 810px;
   margin: 18px 0 20px;
   color: var(--pro-text);
-  font-size: clamp(3.2rem, 6.1vw, 5.9rem);
+  font-size: clamp(2.9rem, 5vw, 4.8rem);
   font-weight: 570;
   line-height: .96;
   letter-spacing: -.062em;
@@ -422,7 +422,7 @@ textarea:focus, input:focus, select:focus {
 .page-hero h1 {
   margin-top: 10px;
   color: var(--pro-text);
-  font-size: clamp(2.4rem, 5vw, 4.6rem);
+  font-size: clamp(2.2rem, 4.2vw, 3.8rem);
   font-weight: 570;
   line-height: 1;
   letter-spacing: -.055em;
@@ -546,4 +546,10 @@ pre {
   .tool-link:last-child { border-bottom: 0; }
   .hero-actions { width: 100%; }
   .hero-actions .button { flex: 1; }
+}
+
+
+:where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pro-accent) 70%, white);
+  outline-offset: 2px;
 }
