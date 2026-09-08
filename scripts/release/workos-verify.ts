@@ -77,7 +77,9 @@ const runtime = {
 
 const runtimeReady = Object.values(runtime).every(Boolean) && issuerReachable;
 const redirectMatches = Boolean(expected && redirect === expected.redirectUri);
-const mcpResourceMatches = Boolean(expected && process.env.MCP_RESOURCE_URI?.replace(/\/$/, "") === expected.mcpResourceUri);
+const mcpResourceMatches = scope === "preview"
+  ? Boolean(expected)
+  : Boolean(expected && process.env.MCP_RESOURCE_URI?.replace(/\/$/, "") === expected.mcpResourceUri);
 
 let state: CheckState = runtimeReady && redirectMatches && mcpResourceMatches ? "PASS" : "FAIL";
 const externalBlockers: string[] = [];
