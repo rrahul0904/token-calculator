@@ -110,6 +110,23 @@ jobs:
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run stripe:verify -- --require
 
+      - name: Verify Production Neon branch identity
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run release:verify:database --
+          --expected-project="restless-queen-06517393"
+          --expected-branch="br-muddy-sun-aeyodc4h"
+
+      - name: Apply forward-only migrations to verified Production branch
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run db:migrate
+
+      - name: Verify Production schema and migration checksums
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npm run db:verify
+
       - name: Install Chromium for real AuthKit certification
         run: npx playwright install --with-deps chromium
 
