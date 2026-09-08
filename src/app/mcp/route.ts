@@ -4,6 +4,7 @@ import { getDb, isDatabaseConfigured } from "@/db/client";
 import { organizations } from "@/db/schema";
 import { authenticateApiKey } from "@/lib/auth/api-auth";
 import { authenticateMcpOAuth, mcpWwwAuthenticateHeader } from "@/lib/auth/mcp-oauth";
+import { runtimeApplicationOrigin } from "@/lib/auth/deployment-origin";
 import { PLAN_ENTITLEMENTS, hasEntitlement } from "@/lib/billing/entitlements";
 import { createTokenIntelligenceMcpServer } from "@/lib/mcp/server";
 
@@ -15,9 +16,9 @@ function error(code: string, status: number, extraHeaders: Record<string, string
 }
 
 function originAllowed(request: Request) {
-  const base = process.env.APP_BASE_URL;
-  if (!base) return true;
-  const expected = new URL(base);
+  const runtimeOrigin = runtimeApplicationOrigin();
+  if (!runtimeOrigin) return true;
+  const expected = new URL(runtimeOrigin);
   const origin = request.headers.get("origin");
   if (origin && origin !== expected.origin) return false;
   const host = request.headers.get("host");
