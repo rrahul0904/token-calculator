@@ -122,6 +122,12 @@ jobs:
       - name: Certify Preview runtime
         run: npm run release:verify:deployment -- --mode=preview --url="${{ steps.deploy.outputs.url }}" --sha="$TARGET_SHA"
 
+      - name: Certify real WorkOS sign-in callback session and sign-out
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --
+          npm run release:verify:auth --
+          --base-url="${{ steps.deploy.outputs.url }}"
+
       - name: Read deployment identity
         id: identity
         shell: bash
