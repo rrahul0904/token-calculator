@@ -86,6 +86,19 @@ After WorkOS Production is activated:
 
 The strict WorkOS verifier accepts `WORKOS_PRODUCTION_STATE`, `WORKOS_BILLING_ADDRESS_CONFIGURED` and `WORKOS_PAYMENT_METHOD_CONFIGURED` as non-secret operator evidence for dashboard-only account state. It fails closed when that state is unknown.
 
+## Database identity and migration safety
+
+Release automation does not trust a `DATABASE_URL` merely because it connects. It queries Neon runtime settings and requires:
+
+- Preview: project `restless-queen-06517393`, branch `br-small-haze-aeqj7d25`
+- Production: project `restless-queen-06517393`, branch `br-muddy-sun-aeyodc4h`
+
+Only after that identity check can the workflow apply forward-only migrations and run checksum/schema verification.
+
+## Preview billing certification
+
+`npm run release:verify:billing` refuses the stable Production origin and refuses any Stripe key that is not test mode. On Preview it creates a Checkout session and billing portal session, sends signed test-mode subscription lifecycle events through the deployed webhook route, verifies Pro → Team → free entitlement reconciliation, and cleans the synthetic Preview database/Stripe customer fixture when it created one. It never supplies a payment method and reports `charged: false`.
+
 ## Build identity
 
 `GET /api/build` returns only non-sensitive deployment identity:
