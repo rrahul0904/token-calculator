@@ -36,7 +36,8 @@
     "release:verify:manifest": "tsx scripts/release/verify-manifest.ts",
     "release:gate": "tsx scripts/release-gate.ts",
     "release:gate:production": "tsx scripts/release-gate.ts --require-production-providers",
-    "secret:policy": "tsx scripts/release/secret-policy.ts"
+    "secret:policy": "tsx scripts/release/secret-policy.ts",
+    "release:verify:auth": "tsx scripts/release/verify-live-auth.ts"
   },
   "engines": {
     "node": "22.x"
