@@ -18,9 +18,14 @@ const checks: Check[] = [
   { name: "migrations", command: "npm", args: ["run", "db:migrate"] },
   { name: "database verification", command: "npm", args: ["run", "db:verify"] },
   { name: "database integration", command: "npm", args: ["run", "test:integration"] },
-  { name: "SDK", command: "npm", args: ["run", "sdk:build"] },
+  { name: "authenticated E2E seed", command: "npx", args: ["tsx", "scripts/seed-e2e.ts"] },
+  { name: "admin rollup first pass", command: "npm", args: ["run", "admin:rollup"] },
+  { name: "admin rollup idempotency pass", command: "npm", args: ["run", "admin:rollup"] },
+  { name: "TypeScript SDK", command: "npm", args: ["run", "sdk:build"] },
+  { name: "Python SDK", command: "python3", args: ["-c", "from token_intelligence import TokenIntelligenceClient, TokenIntelligenceError; assert TokenIntelligenceClient and TokenIntelligenceError"] },
   { name: "CLI", command: "npm", args: ["run", "ti", "--", "--help"] },
   { name: "production build", command: "npm", args: ["run", "build"] },
+  { name: "browser matrix", command: "npm", args: ["run", "test:e2e"] },
   {
     name: "provider preflight",
     command: "npm",
@@ -34,6 +39,8 @@ for (const check of checks) {
   process.stdout.write(`\n== release gate: ${check.name} ==\n`);
   const env = { ...process.env };
   if (check.name === "database integration") env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS = "1";
+  if (check.name === "authenticated E2E seed") env.TOKEN_INTELLIGENCE_E2E_SEED = "1";
+  if (check.name === "Python SDK") env.PYTHONPATH = "packages/sdk-python";
   const result = spawnSync(check.command, check.args, { stdio: "inherit", env });
   const status = result.status ?? 1;
   if (status !== 0) {
