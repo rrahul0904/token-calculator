@@ -113,12 +113,22 @@ jobs:
       - name: Certify stable Production runtime
         run: npm run release:verify:deployment -- --mode=production --url="$PRODUCTION_URL" --sha="$TARGET_SHA"
 
+      - name: Read promoted Production deployment identity
+        id: production_identity
+        shell: bash
+        run: |
+          BODY="$(curl --fail --silent "$PRODUCTION_URL/api/build")"
+          DEPLOYMENT_ID="$(node -e 'const b=JSON.parse(process.argv[1]); process.stdout.write(b.deploymentId||"")' "$BODY")"
+          test -n "$DEPLOYMENT_ID" || { echo "Production build identity did not expose deployment ID"; exit 2; }
+          echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+
       - name: Write Production certification manifest
         run: >
           npm run release:manifest --
           --sha="$TARGET_SHA"
           --branch="release-candidate-full-site"
           --run-id="${{ github.run_id }}"
+          --deployment-id="${{ steps.production_identity.outputs.deployment_id }}"
           --preview-url="${{ steps.manifest.outputs.preview_url }}"
           --production-url="$PRODUCTION_URL"
           --neon-branch="main"
