@@ -32,8 +32,8 @@ jobs:
     timeout-minutes: 40
     env:
       TARGET_SHA: ${{ inputs.sha }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD
+      VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l
       PRODUCTION_URL: ${{ inputs.production_url }}
       WORKOS_PRODUCTION_STATE: ${{ vars.WORKOS_PRODUCTION_STATE }}
       WORKOS_BILLING_ADDRESS_CONFIGURED: ${{ vars.WORKOS_BILLING_ADDRESS_CONFIGURED }}
@@ -47,7 +47,7 @@ jobs:
         run: |
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
           for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
-            [[ -n "${!key}" ]] || { echo "missing required GitHub secret: $key"; exit 2; }
+            [[ -n "${!key}" ]] || { echo "missing required deployment setting: $key"; exit 2; }
           done
           [[ "$VERCEL_PROJECT_ID" == "prj_ADoR3dW8VcpJOaQcagZXOpioyM7l" ]] || { echo "wrong Vercel project"; exit 2; }
 
