@@ -180,11 +180,21 @@ jobs:
           export NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           npx --yes vercel@59.11.7 build --token="${{ secrets.VERCEL_TOKEN }}"
 
-      - name: Deploy immutable Preview artifact
+      - name: Deploy immutable Preview artifact pinned to persistent validation database
         id: deploy
         shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          npx --yes vercel@59.11.7 deploy --prebuilt --yes --token="${{ secrets.VERCEL_TOKEN }}" 2>&1 | tee /tmp/vercel-deploy.log
+          npx --yes vercel@59.11.7 env run -e preview --token="$VERCEL_TOKEN" -- \
+            bash -euo pipefail -c '
+              : "${DATABASE_URL:?Preview DATABASE_URL is required}"
+              npx --yes vercel@59.11.7 deploy --prebuilt --yes \
+                --env "DATABASE_URL=$DATABASE_URL" \
+                --env "TOKEN_INTELLIGENCE_EXPECTED_NEON_PROJECT_ID=restless-queen-06517393" \
+                --env "TOKEN_INTELLIGENCE_EXPECTED_NEON_BRANCH_ID=br-small-haze-aeqj7d25" \
+                --token="$VERCEL_TOKEN"
+            ' 2>&1 | tee /tmp/vercel-deploy.log
           DEPLOYMENT_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.vercel\.app' /tmp/vercel-deploy.log | tail -n 1)"
           [[ -n "$DEPLOYMENT_URL" ]] || { echo "unable to determine Vercel Preview URL"; exit 2; }
           echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
