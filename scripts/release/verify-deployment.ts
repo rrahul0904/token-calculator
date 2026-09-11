@@ -61,7 +61,11 @@ const health = await healthResponse.json().catch(() => ({})) as {
   releaseReady?: boolean;
   application?: string;
   database?: string;
+  databaseIdentity?: string;
 };
+if (health.databaseIdentity !== "verified") {
+  throw new Error(`DATABASE_IDENTITY_NOT_VERIFIED:${health.databaseIdentity ?? "missing"}`);
+}
 if (!healthResponse.ok || health.releaseReady !== true) {
   throw new Error(`HEALTH_NOT_RELEASE_READY:http=${healthResponse.status}:releaseReady=${String(health.releaseReady)}`);
 }
@@ -90,6 +94,7 @@ process.stdout.write(JSON.stringify({
     status: healthResponse.status,
     application: health.application,
     database: health.database,
+    databaseIdentity: health.databaseIdentity,
     releaseReady: health.releaseReady,
   },
   auth: {
