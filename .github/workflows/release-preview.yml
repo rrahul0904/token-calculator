@@ -26,8 +26,8 @@ jobs:
       sha: ${{ steps.check.outputs.sha }}
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD
+      VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l
       RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
       RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
       RELEASE_ONBOARDING_AUTH_EMAIL: ${{ secrets.RELEASE_ONBOARDING_AUTH_EMAIL }}
@@ -48,7 +48,7 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
           MISSING=()
-          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID RELEASE_AUTH_EMAIL RELEASE_AUTH_PASSWORD RELEASE_ONBOARDING_AUTH_EMAIL RELEASE_ONBOARDING_AUTH_PASSWORD; do
+          for key in VERCEL_TOKEN RELEASE_AUTH_EMAIL RELEASE_AUTH_PASSWORD RELEASE_ONBOARDING_AUTH_EMAIL RELEASE_ONBOARDING_AUTH_PASSWORD; do
             [[ -n "${!key}" ]] || MISSING+=("$key")
           done
 
@@ -73,8 +73,8 @@ jobs:
     timeout-minutes: 50
     env:
       TARGET_SHA: ${{ needs.preflight.outputs.sha }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD
+      VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l
       NEXT_TELEMETRY_DISABLED: "1"
     services:
       postgres:
@@ -98,7 +98,7 @@ jobs:
         run: |
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
           for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
-            [[ -n "${!key}" ]] || { echo "missing required GitHub secret: $key"; exit 2; }
+            [[ -n "${!key}" ]] || { echo "missing required deployment setting: $key"; exit 2; }
           done
           [[ "$VERCEL_PROJECT_ID" == "prj_ADoR3dW8VcpJOaQcagZXOpioyM7l" ]] || { echo "VERCEL_PROJECT_ID must target the existing token-intelligence project"; exit 2; }
 
