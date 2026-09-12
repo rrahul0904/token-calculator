@@ -28,10 +28,6 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD
       VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l
-      RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
-      RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
-      RELEASE_ONBOARDING_AUTH_EMAIL: ${{ secrets.RELEASE_ONBOARDING_AUTH_EMAIL }}
-      RELEASE_ONBOARDING_AUTH_PASSWORD: ${{ secrets.RELEASE_ONBOARDING_AUTH_PASSWORD }}
     steps:
       - id: check
         shell: bash
@@ -47,18 +43,13 @@ jobs:
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "sha must be an exact 40-character commit SHA"; exit 2; }
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
 
-          MISSING=()
-          for key in VERCEL_TOKEN RELEASE_AUTH_EMAIL RELEASE_AUTH_PASSWORD RELEASE_ONBOARDING_AUTH_EMAIL RELEASE_ONBOARDING_AUTH_PASSWORD; do
-            [[ -n "${!key}" ]] || MISSING+=("$key")
-          done
-
-          if (( ${#MISSING[@]} > 0 )); then
+          if [[ -z "$VERCEL_TOKEN" ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             {
               echo "## Preview certification blocked externally"
               echo ""
-              echo "The exact-SHA release workflow is implemented, but these GitHub Actions secrets are not configured:"
-              for key in "${MISSING[@]}"; do printf -- '- %s\n' "$key"; done
+              echo "The exact-SHA release workflow is implemented, but the GitHub Actions secret VERCEL_TOKEN is not configured."
+              echo "Ephemeral WorkOS release users are provisioned inside the workflow and require no stored user credentials."
               echo ""
               echo "No deployment was attempted."
             } >> "$GITHUB_STEP_SUMMARY"
@@ -173,6 +164,14 @@ jobs:
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run db:verify
 
+      - name: Provision ephemeral WorkOS Staging certification users
+        id: release_users
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npx tsx scripts/release/workos-release-users.ts
+          --action=provision
+          --output="$GITHUB_OUTPUT"
+
       - name: Build exact SHA for Preview
         env:
           NEXT_PUBLIC_TOKEN_INTELLIGENCE_BUILD_SHA: ${{ needs.preflight.outputs.sha }}
@@ -214,8 +213,8 @@ jobs:
       - name: Certify real WorkOS sign-in callback session and sign-out
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
-          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
+          RELEASE_AUTH_EMAIL: ${{ steps.release_users.outputs.auth_email }}
+          RELEASE_AUTH_PASSWORD: ${{ steps.release_users.outputs.auth_password }}
         run: >
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
@@ -224,8 +223,8 @@ jobs:
       - name: Certify real first-user onboarding
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          RELEASE_ONBOARDING_AUTH_EMAIL: ${{ secrets.RELEASE_ONBOARDING_AUTH_EMAIL }}
-          RELEASE_ONBOARDING_AUTH_PASSWORD: ${{ secrets.RELEASE_ONBOARDING_AUTH_PASSWORD }}
+          RELEASE_ONBOARDING_AUTH_EMAIL: ${{ steps.release_users.outputs.onboarding_email }}
+          RELEASE_ONBOARDING_AUTH_PASSWORD: ${{ steps.release_users.outputs.onboarding_password }}
           RELEASE_ONBOARDING_CLEANUP_ALLOWED: "1"
         run: >
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
@@ -235,8 +234,8 @@ jobs:
       - name: Certify Stripe test checkout, portal, and entitlement lifecycle
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
-          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
+          RELEASE_AUTH_EMAIL: ${{ steps.release_users.outputs.auth_email }}
+          RELEASE_AUTH_PASSWORD: ${{ steps.release_users.outputs.auth_password }}
         run: >
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:billing --
@@ -274,6 +273,15 @@ jobs:
             echo "Preview emitted one or more 5xx runtime log entries; refusing certification."
             exit 2
           fi
+
+      - name: Delete ephemeral WorkOS Staging certification users
+        if: ${{ always() && steps.release_users.outcome == 'success' }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
+          npx tsx scripts/release/workos-release-users.ts
+          --action=cleanup
+          --user-id="${{ steps.release_users.outputs.auth_user_id }}"
+          --user-id="${{ steps.release_users.outputs.onboarding_user_id }}"
 
       - name: Write certified Preview manifest
         run: >
