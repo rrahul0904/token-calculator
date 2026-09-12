@@ -112,6 +112,15 @@ jobs:
           --base-url="$PRODUCTION_URL"
           --require
 
+      - name: Provision ephemeral WorkOS Production certification user
+        id: release_user
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npx tsx scripts/release/workos-release-users.ts
+          --action=provision
+          --profile=auth-only
+          --output="$GITHUB_OUTPUT"
+
       - name: Verify live Stripe catalog and webhook before promotion
         run: >
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
@@ -205,8 +214,8 @@ jobs:
       - name: Certify staged Production WorkOS auth before traffic
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
-          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
+          RELEASE_AUTH_EMAIL: ${{ steps.release_user.outputs.auth_email }}
+          RELEASE_AUTH_PASSWORD: ${{ steps.release_user.outputs.auth_password }}
         run: >
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
@@ -252,8 +261,8 @@ jobs:
 
       - name: Certify real Production WorkOS auth lifecycle
         env:
-          RELEASE_AUTH_EMAIL: ${{ secrets.RELEASE_AUTH_EMAIL }}
-          RELEASE_AUTH_PASSWORD: ${{ secrets.RELEASE_AUTH_PASSWORD }}
+          RELEASE_AUTH_EMAIL: ${{ steps.release_user.outputs.auth_email }}
+          RELEASE_AUTH_PASSWORD: ${{ steps.release_user.outputs.auth_password }}
         run: >
           npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run release:verify:auth --
@@ -310,7 +319,11 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         shell: bash
         run: |
-          curl --fail-with-body --silent --show-error             --request POST             --url "https://api.vercel.com/v1/projects/$VERCEL_PROJECT_ID/rollback/${{ steps.previous.outputs.id }}?teamId=$VERCEL_ORG_ID"             --header "Authorization: Bearer $VERCEL_TOKEN"             --header "Content-Type: application/json"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "https://api.vercel.com/v1/projects/$VERCEL_PROJECT_ID/rollback/${{ steps.previous.outputs.id }}?teamId=$VERCEL_ORG_ID" \
+            --header "Authorization: Bearer $VERCEL_TOKEN" \
+            --header "Content-Type: application/json"
 
       - name: Verify automatic rollback restored the captured deployment
         if: ${{ failure() && steps.promote.outcome != 'skipped' }}
@@ -320,3 +333,11 @@ jobs:
           npm run release:vercel:deployment --
           --url="$PRODUCTION_URL"
           --expect-id="${{ steps.previous.outputs.id }}"
+
+      - name: Delete ephemeral WorkOS Production certification user
+        if: ${{ always() && steps.release_user.outcome == 'success' }}
+        run: >
+          npx --yes vercel@59.11.7 env run -e production --token="${{ secrets.VERCEL_TOKEN }}" --
+          npx tsx scripts/release/workos-release-users.ts
+          --action=cleanup
+          --user-id="${{ steps.release_user.outputs.auth_user_id }}"
