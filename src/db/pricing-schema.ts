@@ -26,8 +26,11 @@ export const inferenceEndpoints = pgTable(
   ],
 );
 
+// The core platform already owns `pricing_snapshots` for reviewed effective-dated
+// provider/model prices. This table is intentionally separate: it represents an
+// immutable external-catalog publication event (for example, one OpenRouter fetch).
 export const pricingSnapshots = pgTable(
-  "pricing_snapshots",
+  "pricing_catalog_snapshots",
   {
     id: text("id").primaryKey(),
     source: text("source").notNull(),
@@ -39,7 +42,7 @@ export const pricingSnapshots = pgTable(
     error: text("error"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
   },
-  (table) => [index("pricing_snapshots_source_published_idx").on(table.source, table.publishedAt)],
+  (table) => [index("pricing_catalog_snapshots_source_published_idx").on(table.source, table.publishedAt)],
 );
 
 export const pricingRates = pgTable(
