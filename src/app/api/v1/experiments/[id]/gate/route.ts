@@ -5,6 +5,8 @@ import { requireTenant } from "@/lib/auth/session";
 import { evaluateRegressionGate } from "@/lib/evaluations/engine";
 import { MINIMUM_EXPERIMENT_EVIDENCE_SAMPLE } from "@/lib/evaluations/experiment-evidence";
 
+type ExperimentResult = typeof experimentResults.$inferSelect;
+
 function reply(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
@@ -22,7 +24,7 @@ function median(values: number[]) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function summarize(variant: "baseline" | "candidate", rows: typeof experimentResults.$inferSelect[]) {
+function summarize(variant: "baseline" | "candidate", rows: ExperimentResult[]) {
   const selected = rows.filter((row) => row.variant === variant);
   const qualities = selected.flatMap((row) => {
     const value = number(row.qualityScore);
