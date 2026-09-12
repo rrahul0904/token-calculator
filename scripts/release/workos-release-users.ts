@@ -7,6 +7,12 @@ type WorkosUser = {
   email: string;
 };
 
+type ReleaseUser = {
+  id: string;
+  email: string;
+  password: string;
+};
+
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
   const inline = process.argv.find((value) => value.startsWith(prefix));
@@ -50,7 +56,7 @@ async function request(path: string, init: RequestInit = {}) {
   return response.json();
 }
 
-async function createUser(kind: "auth" | "onboarding", suffix: string) {
+async function createUser(kind: "auth" | "onboarding", suffix: string): Promise<ReleaseUser> {
   const userPassword = password();
   const email = `token-intelligence-release-${kind}-${suffix}@example.com`;
   const created = await request("/user_management/users", {
@@ -79,35 +85,52 @@ async function deleteUser(id: string) {
   }
 }
 
+function mask(user: ReleaseUser) {
+  for (const value of [user.id, user.email, user.password]) {
+    process.stdout.write(`::add-mask::${value}\n`);
+  }
+}
+
 async function provision() {
   const outputPath = required("GITHUB_OUTPUT", argument("output") ?? process.env.GITHUB_OUTPUT);
+  const profile = argument("profile") ?? "preview";
+  if (profile !== "preview" && profile !== "auth-only") {
+    throw new Error(`UNKNOWN_RELEASE_USER_PROFILE:${profile}`);
+  }
+
   const run = (process.env.GITHUB_RUN_ID ?? Date.now().toString()).replace(/[^0-9A-Za-z_-]/g, "");
   const suffix = `${run}-${randomBytes(5).toString("hex")}`;
   const created: string[] = [];
   try {
     const auth = await createUser("auth", suffix);
     created.push(auth.id);
-    const onboarding = await createUser("onboarding", suffix);
-    created.push(onboarding.id);
+    mask(auth);
 
-    for (const value of [auth.email, auth.password, onboarding.email, onboarding.password, auth.id, onboarding.id]) {
-      process.stdout.write(`::add-mask::${value}\n`);
-    }
-
-    await appendFile(outputPath, [
+    const output = [
       `auth_user_id=${auth.id}`,
       `auth_email=${auth.email}`,
       `auth_password=${auth.password}`,
-      `onboarding_user_id=${onboarding.id}`,
-      `onboarding_email=${onboarding.email}`,
-      `onboarding_password=${onboarding.password}`,
-      "",
-    ].join("\n"));
+    ];
+
+    if (profile === "preview") {
+      const onboarding = await createUser("onboarding", suffix);
+      created.push(onboarding.id);
+      mask(onboarding);
+      output.push(
+        `onboarding_user_id=${onboarding.id}`,
+        `onboarding_email=${onboarding.email}`,
+        `onboarding_password=${onboarding.password}`,
+      );
+    }
+
+    output.push("");
+    await appendFile(outputPath, output.join("\n"));
 
     process.stdout.write(JSON.stringify({
       provider: "workos-authkit",
       action: "provision",
-      ephemeralUsers: 2,
+      profile,
+      ephemeralUsers: created.length,
       credentialsPersisted: false,
       githubOutputsMasked: true,
     }, null, 2) + "\n");
