@@ -1,96 +1,102 @@
-# Token Intelligence Reverse-Engineering Coverage Matrix
+# Token Intelligence Release Coverage Matrix
 
-This document tracks the September 2026 gap-closure wave. It is intentionally evidence-driven: documentation alone does not count as implementation, schema-only work is partial, and configuration-dependent external systems are not labeled live without runtime verification.
+Last reconciled: 2026-09-12 UTC
+
+This matrix describes the canonical release candidate on `release-candidate-full-site` / PR #14. It is evidence-driven: schema-only work is not treated as a complete user journey, and provider/account configuration is never mislabeled as live application functionality.
 
 ## Status legend
 
-- `IMPLEMENTED_AND_TESTED` — production path exists with direct automated evidence.
-- `IMPLEMENTED_NOT_FULLY_TESTED` — production path exists but a required acceptance journey is incomplete.
-- `PARTIAL` — some implementation exists, but the required user/enforcement path is incomplete.
-- `MISSING` — no material implementation exists yet.
-- `EXTERNAL_CONFIGURATION` — production code exists but live credentials/account configuration is still required.
-- `INTENTIONALLY_NOT_IMPLEMENTED` — excluded with an explicit product/security rationale.
+- `IMPLEMENTED_AND_TESTED` — the product path exists and is covered by automated unit/integration/browser evidence.
+- `IMPLEMENTED_PROVIDER_GATED` — application code and release automation exist, but a live provider/account credential or activation step is still required.
+- `POST_LAUNCH_ROADMAP` — deliberately broader follow-on capability that is not required for this website launch.
 
-## Core product coverage
+## Product and economics
 
-| ID | Feature | Implementation evidence | Test evidence | Status | Remaining action |
-| --- | --- | --- | --- | --- | --- |
-| CALC-001 | Browser-local calculator | Web Worker tokenizer, cost engine, model catalog | cost/planning/model tests | IMPLEMENTED_AND_TESTED | Preserve regression coverage. |
-| CALC-002 | Local batch text analysis | bounded browser-local text-like file analyzer | parser/share-state tests | IMPLEMENTED_AND_TESTED | Keep file types/size bounded. |
-| CALC-003 | Content-free share state | versioned share codec | malformed-state tests | IMPLEMENTED_AND_TESTED | Never add raw prompt/source to URLs. |
-| PRICE-001 | Source-verified model pricing | source URLs + verified timestamps | model tests | IMPLEMENTED_AND_TESTED | Continue reviewed source verification. |
-| PRICE-002 | Immutable pricing snapshots | pricing snapshot schema/service | snapshot tests | IMPLEMENTED_AND_TESTED | Populate via reviewed updates, not silent overwrite. |
-| COSTLAB-001 | Prompt A/B economics | Cost Lab | component/economics coverage | IMPLEMENTED_NOT_FULLY_TESTED | Real Preview authenticated E2E still external-gated. |
-| COSTLAB-002 | Scenario history lifecycle | CRUD/history APIs | API/OpenAPI + metadata privacy tests | IMPLEMENTED_NOT_FULLY_TESTED | Add complete interactive Preview journey. |
-| COSTLAB-003 | Cheapest permitted model | deterministic constrained recommendation core | unit tests | IMPLEMENTED_AND_TESTED | Never infer quality without evidence. |
-| COSTLAB-004 | Historical run replay | counterfactual economics service | unit tests | IMPLEMENTED_NOT_FULLY_TESTED | Full interactive workflow remains. |
+| Area | Release evidence | Status |
+| --- | --- | --- |
+| Browser-local token calculator | Web Worker tokenization, exact/estimated precision labels, model catalog, content-free share state, calculator/browser tests | IMPLEMENTED_AND_TESTED |
+| Pricing intelligence | Source URLs/timestamps, effective-dated pricing, immutable snapshots, reviewed override/refresh path, pricing tests | IMPLEMENTED_AND_TESTED |
+| Workload economics | Tokens→cost, cost→tokens, cache read/write economics, long-context behavior, endpoint selection, comparisons, reverse solver and APIs | IMPLEMENTED_AND_TESTED |
+| Prompt A/B Cost Lab | Local prompt tokenization, model-by-model cost delta, monthly projection, no prompt persistence | IMPLEMENTED_AND_TESTED |
+| Saved scenario history | Create/list/reopen metadata, rename, duplicate and delete through UI/API; authenticated E2E lifecycle | IMPLEMENTED_AND_TESTED |
+| Historical variance/replay | Versioned scenarios, actual-vs-estimated variance and deterministic advisory/replay logic | IMPLEMENTED_AND_TESTED |
 
-## Agent economics / telemetry coverage
+## Runs, telemetry, findings and FinOps
 
-| ID | Feature | Implementation evidence | Test evidence | Status | Remaining action |
-| --- | --- | --- | --- | --- | --- |
-| TEL-001 | Canonical Agent Run Receipt | runs/turns/LLM/tool/outcome schema + UI/API | DB/collector tests | IMPLEMENTED_AND_TESTED | Preserve provider-native token classes. |
-| TEL-002 | Codex collector | `src/lib/collectors/codex.ts` | fixtures | IMPLEMENTED_AND_TESTED | Preserve privacy defaults. |
-| TEL-003 | Claude Code collector | Claude collector | fixtures | IMPLEMENTED_AND_TESTED | Preserve cache/thinking dimensions. |
-| TEL-004 | Cursor collector | Cursor collector | fixtures | IMPLEMENTED_AND_TESTED | Keep inferred usage `estimated`. |
-| TEL-005 | Antigravity adapter | capability-aware collector | fixtures | IMPLEMENTED_AND_TESTED | Never claim unavailable telemetry. |
-| TEL-006 | Durable collector checkpoints | local checkpoint/sync module | checkpoint tests | IMPLEMENTED_NOT_FULLY_TESTED | More real filesystem/version fixtures useful. |
-| TEL-007 | Generic hook ingestion | hook schemas/normalizer | unit tests | IMPLEMENTED_AND_TESTED | Add vendor adapters only for documented hooks. |
-| TEL-008 | Provider-admin spend connectors | capability registry/reconciliation model | capability tests | PARTIAL | Live account APIs depend on provider support/credentials. |
-| TEL-009 | Billing/usage CSV/JSON imports | preview/commit API + row persistence + duplicate checks | parser/import tests + DB schema verification | IMPLEMENTED_NOT_FULLY_TESTED | Real provider export fixtures/UI remain. |
+| Area | Release evidence | Status |
+| --- | --- | --- |
+| Canonical Agent Run Receipt | Runs, turns, LLM calls, tool calls, outcomes, pricing provenance and provider-native token buckets | IMPLEMENTED_AND_TESTED |
+| Collector normalization | Codex, Claude Code, Cursor, Antigravity, generic hooks, durable checkpoints | IMPLEMENTED_AND_TESTED |
+| Provider usage import | Preview/commit import flow, duplicate protection, persisted rows and UI | IMPLEMENTED_AND_TESTED |
+| Waste/findings engine | Orientation, repeated reads, oversized output, retries, edit churn, cache blind spots, context growth, fallback premium, route evidence and outcome checks | IMPLEMENTED_AND_TESTED |
+| Anomaly/FinOps engine | Deterministic anomaly detection, forecast/showback/cost-center aggregation, weekly deterministic brief | IMPLEMENTED_AND_TESTED |
+| Broader live provider-admin collectors | Requires provider-specific account support/credentials beyond the launch baseline | POST_LAUNCH_ROADMAP |
 
-## Waste, anomaly and optimization coverage
+## Experiments and optimization
 
-| ID | Feature | Implementation evidence | Test evidence | Status | Remaining action |
-| --- | --- | --- | --- | --- | --- |
-| WASTE-001 | Orientation-heavy | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-002 | Repeated reads | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-003 | Oversized tool output | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-004 | Retry loops | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-005 | Same-resource edit churn | evidence-gated rule | positive/negative/edge tests | IMPLEMENTED_AND_TESTED | No source content stored. |
-| WASTE-006 | Cache blind spots | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-007 | Context growth | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-008 | Fallback premium | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| WASTE-009 | Oversized model route | outcome-comparable evidence-gated rule | positive/negative tests | IMPLEMENTED_AND_TESTED | Never emit without comparable success evidence. |
-| WASTE-010 | Spend without verified outcome | findings engine | dedicated findings suite | IMPLEMENTED_AND_TESTED | — |
-| ANOM-001 | Deterministic anomaly engine | median/MAD detector + FinOps model | anomaly tests | IMPLEMENTED_AND_TESTED | Production scheduling/history requires live DB. |
-| OPT-001 | Route replay / historical optimizer | deterministic cohort analyzer | optimizer null/unknown/evidence tests | IMPLEMENTED_NOT_FULLY_TESTED | Full UI/experiment verification remains. |
-| OPT-002 | Prompt/context/config attribution | DB schema + run attribution foundation | migration/schema verification | IMPLEMENTED_NOT_FULLY_TESTED | UI/lifecycle APIs remain. |
-| OPT-003 | Datasets/evaluations/experiments | schema/core evaluators | evaluator tests | IMPLEMENTED_NOT_FULLY_TESTED | Full execution/UI remains. |
+| Area | Release evidence | Status |
+| --- | --- | --- |
+| Evaluation datasets | Versioned tenant-scoped metadata-only datasets + case references through UI/API | IMPLEMENTED_AND_TESTED |
+| Experiment lifecycle | Create/update controlled baseline/candidate experiment, result ingestion, deterministic evaluators | IMPLEMENTED_AND_TESTED |
+| Regression/savings gate | Minimum 5+5 evidence, completed status, non-inferior quality and success, strictly lower median cost | IMPLEMENTED_AND_TESTED |
+| Experiment privacy | Prompt/content retention rejected; only references, hashes and economics/evaluation metadata are durable | IMPLEMENTED_AND_TESTED |
+| Route Lab / optimizer | Deterministic historical cohorts, evidence-aware optimizer and route UI | IMPLEMENTED_AND_TESTED |
 
-## Governance / gateway / MCP coverage
+## Governance, gateway and teams
 
-| ID | Feature | Implementation evidence | Test evidence | Status | Remaining action |
-| --- | --- | --- | --- | --- | --- |
-| GOV-001 | Hierarchical policies/budgets | authoritative policy engine | policy tests | IMPLEMENTED_AND_TESTED | — |
-| GOV-002 | Approval records | scoped GET/POST/PATCH API | policy/API + OpenAPI contract | IMPLEMENTED_NOT_FULLY_TESTED | Full Preview approval journey remains. |
-| GOV-003 | Signed outbound webhooks | encrypted destination + HMAC + SSRF protection | security tests | IMPLEMENTED_AND_TESTED | — |
-| GOV-004 | Real team scope | teams/team-members/project-team schema + APIs | tenant triggers/schema tests | IMPLEMENTED_NOT_FULLY_TESTED | Full team browser lifecycle remains. |
-| GATE-001 | Governed provider gateway | OpenAI/Anthropic/Gemini authoritative execution | provider/gateway tests | IMPLEMENTED_AND_TESTED | Live provider call requires a safe test credential. |
-| GATE-002 | Drop-in compatibility | `/v1/responses`, `/v1/chat/completions`, `/v1/messages` route adapters into authoritative gateway | request-mapping/provider tests + OpenAPI contract | IMPLEMENTED_NOT_FULLY_TESTED | Real Preview upstream fixture/live credential test remains. |
-| MCP-001 | MCP API-key auth | `/mcp` API-key/service-account auth | MCP tests | IMPLEMENTED_AND_TESTED | — |
-| MCP-002 | MCP OAuth path | RFC 9728 protected-resource discovery + WorkOS/AuthKit JWT resource validation | signature/audience/expiry/scope/tenant tests + OpenAPI contract | IMPLEMENTED_AND_TESTED | Live WorkOS Preview OAuth round trip is EXTERNAL_CONFIGURATION, not missing code. |
+| Area | Release evidence | Status |
+| --- | --- | --- |
+| Budgets | Create/view scoped budget guardrails and deterministic policy engine | IMPLEMENTED_AND_TESTED |
+| Policies | Website policy authoring for cost/turn/retry/tool/fallback rules plus policy-check API | IMPLEMENTED_AND_TESTED |
+| Approval queue | Scoped approval records, UI review, approve/deny lifecycle and authenticated E2E | IMPLEMENTED_AND_TESTED |
+| Teams | Real team membership/project attribution APIs and interactive manager | IMPLEMENTED_AND_TESTED |
+| Signed outbound webhooks | Encrypted destinations, HMAC signing and SSRF controls | IMPLEMENTED_AND_TESTED |
+| Governed gateway | OpenAI/Anthropic/Gemini execution, compatibility routes and deterministic pre-call policy/budget checks | IMPLEMENTED_AND_TESTED |
+| Live upstream provider invocation | Needs a safe provider test credential for live external-call certification | IMPLEMENTED_PROVIDER_GATED |
+| MCP | API-key/service-account auth, RFC 9728 metadata, WorkOS OAuth/JWT validation | IMPLEMENTED_AND_TESTED |
 
-## FinOps / enterprise / production coverage
+## Enterprise, auth and billing
 
-| ID | Feature | Implementation evidence | Test evidence | Status | Remaining action |
-| --- | --- | --- | --- | --- | --- |
-| FIN-001 | Forecast/showback/cost center | `/app/finops` aggregation + cost-center model | finance tests | IMPLEMENTED_NOT_FULLY_TESTED | Real Preview data/browser evidence remains. |
-| FIN-002 | Weekly deterministic brief | briefing generator | unit tests | IMPLEMENTED_AND_TESTED | Scheduled delivery optional. |
-| FIN-003 | Provider/run reconciliation coverage | reconciliation core/import attribution | unit tests | IMPLEMENTED_AND_TESTED | Live provider admin connectors remain configuration-dependent. |
-| ENT-001 | WorkOS auth/RBAC | AuthKit session/tenant/RBAC implementation | redirect/auth/unit coverage | EXTERNAL_CONFIGURATION | Active gap-closure Preview lacks branch-scoped WorkOS variables; prior release Preview proved auth can be live. |
-| ENT-002 | Directory/SCIM lifecycle | signed WorkOS webhook + event ledger + user/group mappings + group→team lifecycle + least privilege + owner protection | DB integration covers idempotency, provisioning, membership, owner protection, cross-tenant replay | IMPLEMENTED_AND_TESTED | Real Directory connection/event delivery remains EXTERNAL_CONFIGURATION. |
-| ENT-003 | Service accounts | DB/API/UI | authorization tests | IMPLEMENTED_AND_TESTED | — |
-| ENT-004 | Audit/SIEM export | audit APIs/NDJSON + signed webhook foundation | security tests | IMPLEMENTED_NOT_FULLY_TESTED | Vendor-specific SIEM destinations optional. |
-| ENT-005 | Privacy modes | audited `organization_data_controls`; metadata-only active; unsupported content modes explicitly unavailable | authenticated E2E rejects `full_content` and preserves metadata-only | IMPLEMENTED_AND_TESTED | Redacted/full/customer-managed storage intentionally unavailable until lifecycle guarantees exist. |
-| ENT-006 | Data-region truth | requested/configured/deployment region state and verified-only-on-match claim | authenticated E2E prevents fake verified residency | IMPLEMENTED_AND_TESTED | Real deployed region evidence required for a live residency claim. |
-| TEST-001 | Authenticated browser E2E | explicitly gated CI-only auth adapter + disposable seeded tenant | project lifecycle, API key one-time secret/rotate/revoke, cross-tenant isolation, privacy, retention, workspace desktop/mobile suite | IMPLEMENTED_NOT_FULLY_TESTED | Exact current head CI must finish green; real WorkOS Preview login remains separate. |
-| PROD-001 | Production matches verified main | Git-linked Vercel project and exact-SHA Preview deployments exist | Preview health/runtime inspection | EXTERNAL_CONFIGURATION | Active Preview has no real DATABASE_URL and lacks branch-scoped WorkOS/Stripe/vault values; do not merge/promote yet. |
+| Area | Release evidence | Status |
+| --- | --- | --- |
+| Auth/RBAC | WorkOS/AuthKit session, callback, sign-out, tenant/RBAC and ephemeral release-test-user automation | IMPLEMENTED_PROVIDER_GATED |
+| Directory lifecycle | Signed WorkOS webhook, idempotent event ledger, group/team membership lifecycle and owner protection | IMPLEMENTED_PROVIDER_GATED |
+| Service accounts/API keys | Create/rotate/revoke, one-time secret display and authorization coverage | IMPLEMENTED_AND_TESTED |
+| Audit/SIEM export | Audit APIs/NDJSON + signed webhook delivery foundation | IMPLEMENTED_AND_TESTED |
+| Privacy controls | Metadata-only active; unsupported full-content modes fail closed | IMPLEMENTED_AND_TESTED |
+| Billing | Stripe checkout, portal, webhook entitlement lifecycle and live catalog/webhook verifier | IMPLEMENTED_PROVIDER_GATED |
 
-## Database verification
+## Database and release controls
 
-The release gate now requires all current migrations (`0000` through `0006`), 48 required tables, the quota-metering trigger, and critical cross-tenant reference triggers. A migration file existing in Git is not accepted as evidence that a deployed Neon database has been migrated.
+Current migration chain is **`0000` through `0008`**.
+
+- CI applies the complete chain to disposable PostgreSQL and verifies schema/checksums/triggers.
+- Neon validation branch `br-small-haze-aeqj7d25` is verified through `0008_workload_pricing_intelligence`.
+- Neon Production branch `br-muddy-sun-aeyodc4h` intentionally remains through `0007` until certified Preview promotion.
+- Runtime `/api/health` proves the actual Neon project and branch identity; a merely connectable but wrong/ephemeral database cannot pass release certification.
+- Release Preview pins the persistent validation database; Production pins the Production branch.
+- Production promotion is staged, certified before traffic, deployment-ID checked after promotion, and protected by automatic rollback.
+
+## Current provider gates
+
+These are the remaining launch gates; they are external account/runtime state, not unfinished feature code:
+
+1. **GitHub/Vercel:** repository secret `VERCEL_TOKEN` is not configured. The Release Preview preflight therefore fails closed before deployment. Vercel CLI pull/deploy/promote requires an authorization token.
+2. **Vercel Preview runtime:** the existing old Preview has a stale `DATABASE_URL`; the environment must be refreshed with the persistent validation DB, WorkOS Staging, Stripe TEST, vault and cron values.
+3. **Stripe TEST:** the connected Stripe session currently exposes the live account only. Preview release certification requires TEST-mode Checkout/portal/webhook lifecycle and intentionally refuses live mode.
+4. **WorkOS Production:** WorkOS reports Production `Inactive`; no billing address/default payment method is configured. Production mutations are rejected while inactive. Real billing details/payment method must activate the existing workspace first.
+5. **Vercel Production runtime:** the existing stable deployment is an older artifact and lacks the launch-critical Production runtime contract. Production values are installed only after the provider prerequisites above are valid.
 
 ## Current release rule
 
-PR #6 remains draft. The gap-closure branch must **not** be merged merely because source and CI foundations exist. Merge requires an exact-candidate green CI run plus the runtime gates defined by the production-release plan: real Preview database/migrations, WorkOS sign-in, tenant/API-key/MCP/retention verification, billing test-mode verification when release-scoped, Vercel Git/main mapping, Production environment preparation, and rollback planning. External credential-dependent capabilities are reported as `EXTERNAL_CONFIGURATION`, never simulated as live.
+PR #14 is the only canonical release candidate. It must remain draft and must not be promoted/merged merely because repository CI is green. Release completion requires:
+
+1. exact-head repository CI green;
+2. exact-head immutable Preview deployment and `preview_certified` manifest;
+3. real WorkOS Staging AuthKit/onboarding lifecycle using ephemeral release users;
+4. Stripe TEST lifecycle, MCP, database identity and zero recent Preview 5xx;
+5. WorkOS Production activation and verified Production runtime configuration;
+6. staged Production certification, forward-only `0008` migration, promotion and post-promotion deployment-ID equality;
+7. final Production health/auth/MCP/5xx certification and release finalization.
+
+Issue #3 remains open only for broader post-launch collector/control-plane expansion; those future phases are not release blockers for the current website.
