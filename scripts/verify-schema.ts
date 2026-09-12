@@ -15,6 +15,7 @@ const requiredTables = [
   "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results",
   "workos_directory_events", "workos_directory_users", "workos_directory_groups", "organization_data_controls",
   "platform_admins", "platform_admin_audit_events", "platform_cost_entries", "platform_daily_metrics",
+  "inference_endpoints", "pricing_catalog_snapshots", "pricing_rates", "pricing_overrides", "scenario_versions",
   "_token_intelligence_migrations",
 ];
 
@@ -27,6 +28,7 @@ const requiredMigrations = [
   "0005_enterprise_directory_lifecycle.sql",
   "0006_data_controls.sql",
   "0007_platform_admin_operations.sql",
+  "0008_workload_pricing_intelligence.sql",
 ];
 
 const requiredTriggers = [
@@ -52,6 +54,10 @@ const requiredIndexes = [
   "platform_cost_entries_time_idx", "platform_cost_entries_service_idx",
   "users_created_at_idx", "organizations_created_at_idx",
   "subscriptions_status_created_idx", "llm_calls_started_at_idx",
+  "inference_endpoints_source_external_uq", "inference_endpoints_model_idx",
+  "pricing_catalog_snapshots_source_published_idx", "pricing_rates_snapshot_endpoint_uq",
+  "pricing_rates_endpoint_idx", "pricing_overrides_endpoint_idx",
+  "scenario_versions_scenario_version_uq", "scenario_versions_pricing_snapshot_idx",
 ];
 
 async function main() {
