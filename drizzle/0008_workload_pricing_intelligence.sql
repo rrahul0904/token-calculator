@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS "inference_endpoints" (
 CREATE UNIQUE INDEX IF NOT EXISTS "inference_endpoints_source_external_uq" ON "inference_endpoints" ("source","external_model_id");
 CREATE INDEX IF NOT EXISTS "inference_endpoints_model_idx" ON "inference_endpoints" ("canonical_model_id");
 
-CREATE TABLE IF NOT EXISTS "pricing_snapshots" (
+-- `pricing_snapshots` already stores reviewed effective-dated model pricing in the
+-- core platform. Catalog fetch publication state must remain a separate concept.
+CREATE TABLE IF NOT EXISTS "pricing_catalog_snapshots" (
   "id" text PRIMARY KEY NOT NULL,
   "source" text NOT NULL,
   "status" text DEFAULT 'candidate' NOT NULL,
@@ -25,11 +27,11 @@ CREATE TABLE IF NOT EXISTS "pricing_snapshots" (
   "error" text,
   "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL
 );
-CREATE INDEX IF NOT EXISTS "pricing_snapshots_source_published_idx" ON "pricing_snapshots" ("source","published_at");
+CREATE INDEX IF NOT EXISTS "pricing_catalog_snapshots_source_published_idx" ON "pricing_catalog_snapshots" ("source","published_at");
 
 CREATE TABLE IF NOT EXISTS "pricing_rates" (
   "id" text PRIMARY KEY NOT NULL,
-  "snapshot_id" text NOT NULL REFERENCES "pricing_snapshots"("id") ON DELETE CASCADE,
+  "snapshot_id" text NOT NULL REFERENCES "pricing_catalog_snapshots"("id") ON DELETE CASCADE,
   "endpoint_id" text NOT NULL REFERENCES "inference_endpoints"("id") ON DELETE CASCADE,
   "input_per_million" numeric(24,8),
   "cached_input_per_million" numeric(24,8),
@@ -59,7 +61,7 @@ CREATE TABLE IF NOT EXISTS "scenario_versions" (
   "id" text PRIMARY KEY NOT NULL,
   "scenario_id" text NOT NULL REFERENCES "saved_scenarios"("id") ON DELETE CASCADE,
   "version" integer NOT NULL,
-  "pricing_snapshot_id" text REFERENCES "pricing_snapshots"("id") ON DELETE SET NULL,
+  "pricing_snapshot_id" text REFERENCES "pricing_catalog_snapshots"("id") ON DELETE SET NULL,
   "assumptions" jsonb NOT NULL,
   "result" jsonb NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
