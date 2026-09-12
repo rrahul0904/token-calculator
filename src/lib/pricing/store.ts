@@ -103,7 +103,6 @@ export async function effectivePublishedPricing(modelId?: string | null) {
         stale: now.getTime() - row.observedAt.getTime() > 24 * 60 * 60 * 1000,
         override: override ? {
           id: override.id,
-          reason: override.reason,
           expiresAt: override.expiresAt,
           createdAt: override.createdAt,
         } : null,
