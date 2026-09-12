@@ -10,14 +10,16 @@ function authorized(request: Request) {
 
 async function execute(request: Request) {
   if (!process.env.CRON_SECRET) {
-    return Response.json({ error: "PRICING_CRON_NOT_CONFIGURED" }, { status: 503 });
+    return Response.json({ error: "PRICING_CRON_NOT_CONFIGURED" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
-  if (!authorized(request)) return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!authorized(request)) return Response.json({ error: "UNAUTHORIZED" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   if (!process.env.OPENROUTER_API_KEY) {
-    return Response.json({
-      error: "OPENROUTER_API_KEY_NOT_CONFIGURED",
+    const body = {
+      skipped: request.method === "GET",
+      reason: "OPENROUTER_API_KEY_NOT_CONFIGURED",
       lastPublished: await latestPublishedPricingSnapshot(),
-    }, { status: 503 });
+    };
+    return Response.json(body, { status: request.method === "GET" ? 200 : 503, headers: { "Cache-Control": "no-store" } });
   }
   try {
     const data = await refreshOpenRouterPricing();
