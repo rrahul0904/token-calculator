@@ -1,5 +1,6 @@
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 const PER_TOKEN_TO_PER_MILLION = 1_000_000;
+const PRICING_DECIMAL_SCALE = 1_000_000_000_000;
 
 export interface OpenRouterNormalizedEndpoint {
   id: string;
@@ -24,7 +25,8 @@ function moneyPerMillion(value: unknown) {
   if (typeof value === "string" && value.trim() === "") return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
-  return parsed * PER_TOKEN_TO_PER_MILLION;
+  const perMillion = parsed * PER_TOKEN_TO_PER_MILLION;
+  return Math.round(perMillion * PRICING_DECIMAL_SCALE) / PRICING_DECIMAL_SCALE;
 }
 
 function canonicalId(externalModelId: string) {
