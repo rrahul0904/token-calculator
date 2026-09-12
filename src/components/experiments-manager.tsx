@@ -11,9 +11,15 @@ type GateResult = {
   baseline?: { sampleSize: number; qualityScore: number | null; medianCostUsd: number | null; successRate: number | null };
   candidate?: { sampleSize: number; qualityScore: number | null; medianCostUsd: number | null; successRate: number | null };
 };
+type ApiBody = { data?: unknown; error?: string };
 
-async function json(response: Response) {
-  return response.json().catch(() => null) as Promise<Record<string, any> | null>;
+async function json(response: Response): Promise<ApiBody | null> {
+  return response.json().catch(() => null) as Promise<ApiBody | null>;
+}
+
+function dataObject(body: ApiBody | null): Record<string, unknown> | null {
+  const value = body?.data;
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 export function ExperimentsManager({ canManage }: { canManage: boolean }) {
@@ -75,8 +81,9 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
       });
       const body = await json(response);
       if (!response.ok) throw new Error(String(body?.error ?? "Dataset creation failed"));
+      const createdId = String(dataObject(body)?.id ?? "");
       setDatasetName(""); setDatasetVersion("1"); setMessage("Evaluation dataset created.");
-      await load(); setDatasetId(String(body?.data?.id ?? "")); router.refresh();
+      await load(); setDatasetId(createdId); router.refresh();
     });
   }
 
@@ -109,8 +116,9 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
       });
       const body = await json(response);
       if (!response.ok) throw new Error(String(body?.error ?? "Experiment creation failed"));
+      const createdId = String(dataObject(body)?.id ?? "");
       setExperimentName(""); setBaselineModel(""); setCandidateModel(""); setMessage("Experiment created.");
-      await load(); setExperimentId(String(body?.data?.id ?? "")); router.refresh();
+      await load(); setExperimentId(createdId); router.refresh();
     });
   }
 
@@ -142,8 +150,9 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
       const response = await fetch(`/api/v1/experiments/${encodeURIComponent(experimentId)}/gate`, { cache: "no-store" });
       const body = await json(response);
       if (!response.ok) throw new Error(String(body?.error ?? "Gate evaluation failed"));
-      setGate((body?.data ?? null) as GateResult | null);
-      setMessage(body?.data?.passed ? "Experiment verified: candidate is cheaper without quality/success regression." : "Experiment is not yet a verified savings claim.");
+      const gateData = dataObject(body) as GateResult | null;
+      setGate(gateData);
+      setMessage(gateData?.passed ? "Experiment verified: candidate is cheaper without quality/success regression." : "Experiment is not yet a verified savings claim.");
       await load(); router.refresh();
     });
   }
