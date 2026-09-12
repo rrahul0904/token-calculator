@@ -30,6 +30,33 @@ describe("release workflow invariants", () => {
     expect(source).toContain("TOKEN_INTELLIGENCE_EXPECTED_NEON_BRANCH_ID=br-small-haze-aeqj7d25");
   });
 
+  it("uses masked ephemeral WorkOS users instead of long-lived release-user secrets", async () => {
+    const preview = await workflow("release-preview.yml");
+    const production = await workflow("release-production.yml");
+    const provisioner = await source("scripts/release/workos-release-users.ts");
+
+    expect(preview).toContain("Provision ephemeral WorkOS Staging certification users");
+    expect(preview).toContain("Delete ephemeral WorkOS Staging certification users");
+    expect(preview).toContain("steps.release_users.outputs.auth_email");
+    expect(preview).toContain("steps.release_users.outputs.onboarding_email");
+    expect(preview).not.toContain("secrets.RELEASE_AUTH_EMAIL");
+    expect(preview).not.toContain("secrets.RELEASE_AUTH_PASSWORD");
+    expect(preview).not.toContain("secrets.RELEASE_ONBOARDING_AUTH_EMAIL");
+    expect(preview).not.toContain("secrets.RELEASE_ONBOARDING_AUTH_PASSWORD");
+
+    expect(production).toContain("Provision ephemeral WorkOS Production certification user");
+    expect(production).toContain("--profile=auth-only");
+    expect(production).toContain("Delete ephemeral WorkOS Production certification user");
+    expect(production).toContain("steps.release_user.outputs.auth_email");
+    expect(production).not.toContain("secrets.RELEASE_AUTH_EMAIL");
+    expect(production).not.toContain("secrets.RELEASE_AUTH_PASSWORD");
+
+    expect(provisioner).toContain("::add-mask::");
+    expect(provisioner).toContain("credentialsPersisted: false");
+    expect(provisioner).toContain('method: "DELETE"');
+    expect(provisioner).toContain("GITHUB_OUTPUT");
+  });
+
   it("certifies a staged Production artifact and promotes that exact deployment without rebuilding", async () => {
     const source = await workflow("release-production.yml");
     expect(source).toContain("download-artifact");
