@@ -8,6 +8,16 @@ function authorized(request: Request) {
   return Boolean(secret) && request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
+async function safeLatestPublishedPricingSnapshot() {
+  try {
+    return await latestPublishedPricingSnapshot();
+  } catch {
+    // Status/error reporting must remain safe before the optional pricing
+    // persistence migration exists (unit tests, rolling deploys, fresh installs).
+    return null;
+  }
+}
+
 async function execute(request: Request) {
   if (!process.env.CRON_SECRET) {
     return Response.json({ error: "PRICING_CRON_NOT_CONFIGURED" }, { status: 503, headers: { "Cache-Control": "no-store" } });
@@ -17,7 +27,7 @@ async function execute(request: Request) {
     const body = {
       skipped: request.method === "GET",
       reason: "OPENROUTER_API_KEY_NOT_CONFIGURED",
-      lastPublished: await latestPublishedPricingSnapshot(),
+      lastPublished: await safeLatestPublishedPricingSnapshot(),
     };
     return Response.json(body, { status: request.method === "GET" ? 200 : 503, headers: { "Cache-Control": "no-store" } });
   }
@@ -27,7 +37,7 @@ async function execute(request: Request) {
   } catch (error) {
     return Response.json({
       error: error instanceof Error ? error.message : "PRICING_REFRESH_FAILED",
-      lastPublished: await latestPublishedPricingSnapshot(),
+      lastPublished: await safeLatestPublishedPricingSnapshot(),
     }, { status: 502, headers: { "Cache-Control": "no-store" } });
   }
 }
