@@ -1,0 +1,69 @@
+name: Finalize Certified Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_run_id:
+        description: "GitHub Actions run ID that produced the Production certification manifest"
+        required: true
+        type: string
+      sha:
+        description: "Production-certified SHA that must already be on main"
+        required: true
+        type: string
+      production_url:
+        required: true
+        default: "https://token-intelligence-eight.vercel.app"
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - uses: actions/download-artifact@v6
+        with:
+          name: token-intelligence-production-certification
+          path: release-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.production_run_id }}
+
+      - name: Require Production certification manifest for this SHA
+        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="${{ inputs.sha }}" --status=production_certified
+
+      - name: Require certified SHA on main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "${{ inputs.sha }}" origin/main
+
+      - name: Re-certify Production identity and health
+        run: npm run release:verify:deployment -- --mode=production --url="${{ inputs.production_url }}" --sha="${{ inputs.sha }}"
+
+      - name: Create immutable GitHub release record
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          TAG="token-intelligence-v$VERSION"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$TAG")" = "${{ inputs.sha }}"
+            echo "$TAG already exists at the certified SHA"
+          else
+            gh release create "$TAG"               --target "${{ inputs.sha }}"               --title "Token Intelligence v$VERSION"               --notes "Production-certified release. SHA: ${{ inputs.sha }}. Migrations: 0000-0007. See docs/RELEASE_CLOSURE.md and docs/ROLLBACK.md."
+          fi

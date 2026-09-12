@@ -1,0 +1,73 @@
+name: Release Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_url:
+        description: "Previously certified Vercel Production deployment URL to restore"
+        required: true
+        type: string
+      expected_sha:
+        description: "Git SHA expected from /api/build on the rollback target"
+        required: true
+        type: string
+      production_url:
+        required: true
+        default: "https://token-intelligence-eight.vercel.app"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Verify target artifact before rollback
+        run: npm run release:verify:deployment -- --mode=production --url="${{ inputs.deployment_url }}" --sha="${{ inputs.expected_sha }}"
+
+      - name: Link existing project
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+
+      - name: Resolve exact rollback deployment ID
+        id: target
+        shell: bash
+        run: |
+          TARGET="$(npm run --silent release:vercel:deployment -- --url="${{ inputs.deployment_url }}")"
+          TARGET_ID="$(node -e 'const d=JSON.parse(process.argv[1]); process.stdout.write(d.id)' "$TARGET")"
+          test -n "$TARGET_ID" || { echo "unable to resolve rollback deployment ID"; exit 2; }
+          echo "id=$TARGET_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Request Vercel rollback to exact prior Production deployment
+        shell: bash
+        run: |
+          curl --fail-with-body --silent --show-error             --request POST             --url "https://api.vercel.com/v1/projects/$VERCEL_PROJECT_ID/rollback/${{ steps.target.outputs.id }}?teamId=$VERCEL_ORG_ID"             --header "Authorization: Bearer $VERCEL_TOKEN"             --header "Content-Type: application/json"
+
+      - name: Verify stable Production now serves exact rollback deployment
+        run: >
+          npm run release:vercel:deployment --
+          --url="${{ inputs.production_url }}"
+          --expect-id="${{ steps.target.outputs.id }}"
+
+      - name: Verify stable Production now serves rollback SHA
+        run: npm run release:verify:deployment -- --mode=production --url="${{ inputs.production_url }}" --sha="${{ inputs.expected_sha }}"

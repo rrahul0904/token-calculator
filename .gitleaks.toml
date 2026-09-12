@@ -1,0 +1,13 @@
+title = "Token Intelligence Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Exact synthetic WorkOS callback fixtures committed during release-candidate hardening; never used against WorkOS."
+regexTarget = "line"
+regexes = [
+  '''process\.env\.WORKOS_API_KEY = "sk_test_release_callback";''',
+  '''process\.env\.WORKOS_CLIENT_ID = "client_test_release_callback";''',
+  '''process\.env\.WORKOS_COOKIE_PASSWORD = "0123456789abcdef0123456789abcdef";'''
+]

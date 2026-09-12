@@ -49,7 +49,6 @@ test("workspace does not produce a server error when auth is intentionally absen
   await expect(page.locator("body")).toContainText(/workspace|configuration|sign in/i);
 });
 
-
 test("anonymous calculator does not send pasted text in network request bodies", async ({ page }) => {
   const sentinel = "PRIVATE_PROMPT_SENTINEL_9f1c7d2a";
   const leakedRequests: string[] = [];
@@ -81,7 +80,6 @@ test("sitemap exposes the public calculator, tools, and provider guides", async 
   expect(body).toContain("/compare/gpt-5.6-sol/vs/claude-sonnet-5");
 });
 
-
 test("calculator exposes tokenizer precision and bounded token inspection", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByLabel("Prompt, context, document or code").fill("hello world from the local tokenizer");
@@ -102,7 +100,8 @@ test("safe shared workload restores numeric state and can surface context overfl
   await expect(page.locator(".calculator-summary")).toContainText("Overflow");
 });
 
-test("copy scenario link never copies pasted prompt content", async ({ page, context }) => {
+test("copy scenario link never copies pasted prompt content", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Clipboard permission semantics are browser-engine specific; covered in Chromium.");
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
   const sentinel = "PRIVATE_SHARE_SENTINEL_3185b6";
   await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -154,12 +153,30 @@ test("critical public routes avoid page-level horizontal overflow at required mo
     for (const route of routes) {
       const response = await page.goto(route, { waitUntil: "domcontentloaded" });
       expect(response?.status(), route + " at " + size.width + "px").toBeLessThan(400);
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-      expect(overflow, route + " at " + size.width + "px").toBeLessThanOrEqual(1);
+      const layout = await page.evaluate(() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const overflow = document.documentElement.scrollWidth - viewportWidth;
+        const offenders = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              tag: element.tagName.toLowerCase(),
+              id: element.id || null,
+              className: typeof element.className === "string" ? element.className : "",
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              width: Math.round(rect.width),
+            };
+          })
+          .filter((entry) => entry.left < -1 || entry.right > viewportWidth + 1 || entry.width > viewportWidth + 1)
+          .sort((a, b) => Math.max(b.right - viewportWidth, b.width - viewportWidth) - Math.max(a.right - viewportWidth, a.width - viewportWidth))
+          .slice(0, 8);
+        return { overflow, offenders };
+      });
+      expect(layout.overflow, route + " at " + size.width + "px offenders=" + JSON.stringify(layout.offenders)).toBeLessThanOrEqual(1);
     }
   }
 });
-
 
 test("model detail exposes provenance, tokenizer certainty, canonical metadata and structured data", async ({ page }) => {
   await page.goto("/models/gpt-5.6-sol", { waitUntil: "domcontentloaded" });
@@ -190,7 +207,8 @@ test("comparison query restores safe workload and canonical reverse routes redir
   await expect(page).toHaveURL(/\/compare\/gpt-5\.6-sol\/vs\/claude-sonnet-5$/);
 });
 
-test("comparison share link contains workload numbers only", async ({ page, context }) => {
+test("comparison share link contains workload numbers only", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Clipboard permission semantics are browser-engine specific; covered in Chromium.");
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
   await page.goto("/compare/gpt-5.6-sol/vs/claude-sonnet-5?input=111&output=22&cached=33&requests=44", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Copy comparison link" }).click();
@@ -206,4 +224,46 @@ test("developer page exposes public API quickstarts and package-source caveat", 
   await expect(page.locator("body")).toContainText("npm install @token-intelligence/sdk");
   await expect(page.locator("body")).toContainText("pip install token-intelligence");
   await expect(page.locator("body")).toContainText(/does not claim registry publication status/i);
+});
+
+test("workload cost lab deep link round-trips current model assumptions and supports reverse mode", async ({ page, request }) => {
+  const path = "/tools/cost?model=gpt-5.6-luna&mode=tokens2cost&tokens=100000&input=90&cache=50&cacheable=100&requests=1";
+  const response = await page.goto(path, { waitUntil: "domcontentloaded" });
+  expect(response?.status()).toBeLessThan(400);
+  await expect(page.getByLabel("Total tokens")).toHaveValue("100000");
+  await expect(page.getByLabel("Input percent")).toHaveValue("90");
+  await expect(page.getByLabel("Cache hit percent")).toHaveValue("50");
+  await expect(page.getByTestId("workload-cost-lab")).toContainText("$0.02");
+  expect(page.url()).toContain("model=gpt-5.6-luna");
+  expect(page.url()).toContain("cache=50");
+
+  await page.getByRole("button", { name: "Cost → tokens" }).click();
+  await expect(page.getByLabel("Budget (USD)")).toBeVisible();
+  expect(page.url()).toContain("mode=cost2tokens");
+
+  const api = await request.post("/api/v1/economics/estimate", {
+    data: {
+      mode: "tokens2cost",
+      modelId: "gpt-5.6-luna",
+      totalTokens: 100000,
+      budgetUsd: 100,
+      inputPercent: 90,
+      cacheHitPercent: 50,
+      cacheableInputPercent: 100,
+      cacheWrite5mPercent: 0,
+      cacheWrite1hPercent: 0,
+      requestsPerMonth: 1,
+    },
+  });
+  expect(api.status()).toBe(200);
+  const body = await api.json();
+  expect(body.data.cost.totalUsd).toBeCloseTo(0.0219);
+});
+
+test("workload cost lab remains usable at mobile width", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/tools/cost?model=gpt-5.6-luna&tokens=100000&input=90&cache=50", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("workload-cost-lab")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(2);
 });

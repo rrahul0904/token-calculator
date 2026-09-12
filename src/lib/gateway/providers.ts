@@ -9,6 +9,8 @@ export interface GatewayUsage {
   totalTokens: number | null;
 }
 
+export type GatewayApiSurface = "native" | "responses" | "chat_completions" | "messages";
+
 export interface GatewayRequest {
   model: string;
   input: unknown;
@@ -16,6 +18,8 @@ export interface GatewayRequest {
   stream?: boolean;
   temperature?: number;
   metadata?: Record<string, string>;
+  apiSurface?: GatewayApiSurface;
+  compatibilityBody?: Record<string, unknown>;
 }
 
 export interface GatewayUpstream {
@@ -49,35 +53,69 @@ function userText(input: unknown): string {
   if (typeof input === "string") return input;
   return JSON.stringify(input);
 }
+function withoutUndefined(value: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+}
+
+type CompatibilityEnvelope = { surface: GatewayApiSurface; body: Record<string, unknown> };
+function compatibilityEnvelope(input: unknown): CompatibilityEnvelope | null {
+  const root = record(input);
+  const surface = root?.__ti_compat_surface;
+  const body = record(root?.__ti_compat_body);
+  if (!body || !["responses", "chat_completions", "messages"].includes(String(surface))) return null;
+  return { surface: surface as GatewayApiSurface, body };
+}
 
 const openai: GatewayProviderAdapter = {
   provider: "openai",
   buildRequest(request, credential) {
+    const envelope = compatibilityEnvelope(request.input);
+    const surface = request.apiSurface ?? envelope?.surface ?? "responses";
+    const body = request.compatibilityBody ?? envelope?.body ?? {};
+    if (surface === "chat_completions") {
+      return {
+        url: "https://api.openai.com/v1/chat/completions",
+        init: {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${credential}` },
+          body: JSON.stringify(withoutUndefined({
+            ...body,
+            model: request.model,
+            messages: body.messages ?? request.input,
+            stream: request.stream ?? Boolean(body.stream),
+            temperature: request.temperature ?? body.temperature,
+            max_completion_tokens: request.maxOutputTokens ?? body.max_completion_tokens,
+          })),
+        },
+      };
+    }
+
     return {
       url: "https://api.openai.com/v1/responses",
       init: {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${credential}` },
-        body: JSON.stringify({
+        body: JSON.stringify(withoutUndefined({
+          ...body,
           model: request.model,
-          input: request.input,
-          max_output_tokens: request.maxOutputTokens,
-          stream: request.stream ?? false,
-          temperature: request.temperature,
-          metadata: request.metadata,
-        }),
+          input: body.input ?? request.input,
+          max_output_tokens: request.maxOutputTokens ?? body.max_output_tokens,
+          stream: request.stream ?? Boolean(body.stream),
+          temperature: request.temperature ?? body.temperature,
+          metadata: request.metadata ?? body.metadata,
+        })),
       },
     };
   },
   normalizeUsage(payload) {
     const root = record(payload);
     const usage = record(root?.usage);
-    const inputDetails = record(usage?.input_tokens_details);
-    const outputDetails = record(usage?.output_tokens_details);
-    const input = num(usage?.input_tokens);
+    const inputDetails = record(usage?.input_tokens_details ?? usage?.prompt_tokens_details);
+    const outputDetails = record(usage?.output_tokens_details ?? usage?.completion_tokens_details);
+    const input = num(usage?.input_tokens ?? usage?.prompt_tokens);
     const cached = num(inputDetails?.cached_tokens);
     const reasoning = num(outputDetails?.reasoning_tokens);
-    const output = num(usage?.output_tokens);
+    const output = num(usage?.output_tokens ?? usage?.completion_tokens);
     return {
       freshInputTokens: input === null ? null : Math.max(input - (cached ?? 0), 0),
       cacheReadTokens: cached,
@@ -97,6 +135,8 @@ const openai: GatewayProviderAdapter = {
 const anthropic: GatewayProviderAdapter = {
   provider: "anthropic",
   buildRequest(request, credential) {
+    const envelope = compatibilityEnvelope(request.input);
+    const body = request.compatibilityBody ?? envelope?.body ?? {};
     return {
       url: "https://api.anthropic.com/v1/messages",
       init: {
@@ -106,14 +146,15 @@ const anthropic: GatewayProviderAdapter = {
           "x-api-key": credential,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify({
+        body: JSON.stringify(withoutUndefined({
+          ...body,
           model: request.model,
-          max_tokens: request.maxOutputTokens ?? 4096,
-          messages: Array.isArray(request.input) ? request.input : [{ role: "user", content: userText(request.input) }],
-          stream: request.stream ?? false,
-          temperature: request.temperature,
-          metadata: request.metadata ? { user_id: request.metadata.user_id } : undefined,
-        }),
+          max_tokens: request.maxOutputTokens ?? body.max_tokens ?? 4096,
+          messages: body.messages ?? (Array.isArray(request.input) ? request.input : [{ role: "user", content: userText(request.input) }]),
+          stream: request.stream ?? Boolean(body.stream),
+          temperature: request.temperature ?? body.temperature,
+          metadata: request.metadata ? { ...(record(body.metadata) ?? {}), user_id: request.metadata.user_id } : body.metadata,
+        })),
       },
     };
   },

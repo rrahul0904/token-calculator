@@ -6,5 +6,10 @@ coverage
 .env.*
 !.env.example
 .vercel
+test-results
+tsconfig.tsbuildinfo
+next-env.d.ts
+packages/sdk-typescript/dist
+packages/sdk-python/token_intelligence/__pycache__
 .DS_Store
 *.log

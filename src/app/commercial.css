@@ -53,12 +53,12 @@
 .planning-bar__output strong { font-size: .78rem; }
 .calculator-shell .metrics-strip { margin: 0; padding: 17px 22px; border-top: 1px solid var(--line); background: var(--panel); }
 
-.model-snapshot { margin: 52px 0 14px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.model-snapshot { width: 100%; max-width: 100%; min-width: 0; margin: 52px 0 14px; border: 1px solid var(--line); border-radius: 14px; overflow-x: clip; overflow-y: hidden; background: var(--panel); }
 .model-snapshot__header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 21px; border-bottom: 1px solid var(--line); }
 .model-snapshot__header h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.2rem); letter-spacing: -.04em; }
 .model-snapshot__header p:not(.eyebrow) { color: var(--muted); max-width: 650px; margin: 7px 0 0; line-height: 1.5; font-size: .8rem; }
-.model-snapshot__table-wrap { overflow-x: auto; }
-.model-snapshot__table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+.model-snapshot__table-wrap { display: block; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-inline: contain; }
+.model-snapshot__table { width: max-content; min-width: 100%; max-width: none; border-collapse: collapse; font-size: .76rem; }
 .model-snapshot__table th { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .63rem; text-transform: uppercase; letter-spacing: .06em; }
 .model-snapshot__table td { padding: 12px 14px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 .model-snapshot__table tr:last-child td { border-bottom: 0; }
@@ -109,4 +109,116 @@
   .planning-bar select { text-overflow: ellipsis; }
   .model-snapshot__header { align-items: flex-start; flex-direction: column; }
   .model-snapshot__footer { flex-direction: column; }
+}
+
+
+@media (max-width: 680px) {
+  .hero--commercial,
+  .calculator-shell,
+  .calculator-primary,
+  .calculator-editor,
+  .calculator-summary,
+  .calculator-shell .metrics-strip,
+  .planning-bar,
+  .form-actions {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .calculator-shell__top .mode-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    padding: 0;
+    gap: 4px;
+  }
+
+  .calculator-shell__top .mode-tab {
+    min-width: 0;
+    padding: 10px 6px;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .privacy-inline {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .summary-list > div,
+  .planning-bar__output > div:first-child,
+  .model-snapshot__footer,
+  .form-actions {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .summary-list strong,
+  .planning-bar__output strong,
+  .model-snapshot__footer,
+  .model-snapshot__footer a {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .calculator-editor,
+  .calculator-summary,
+  .planning-bar,
+  .calculator-shell .metrics-strip {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+
+@media (max-width: 680px) {
+  .model-snapshot__table-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    contain: layout paint;
+  }
+
+  .model-snapshot__table {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    table-layout: fixed;
+  }
+
+  .model-snapshot__table th,
+  .model-snapshot__table td {
+    min-width: 0;
+    padding: 10px 6px;
+    overflow-wrap: anywhere;
+  }
+
+  .model-snapshot__table th:nth-child(2),
+  .model-snapshot__table td:nth-child(2),
+  .model-snapshot__table th:nth-child(3),
+  .model-snapshot__table td:nth-child(3),
+  .model-snapshot__table th:nth-child(4),
+  .model-snapshot__table td:nth-child(4),
+  .model-snapshot__table th:nth-child(8),
+  .model-snapshot__table td:nth-child(8) {
+    display: none;
+  }
+
+  .model-snapshot__table th:first-child,
+  .model-snapshot__table td:first-child {
+    width: 38%;
+  }
+
+  .model-name-cell {
+    min-width: 0;
+    white-space: normal;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .best-economics {
+    width: max-content;
+    max-width: 100%;
+  }
 }
