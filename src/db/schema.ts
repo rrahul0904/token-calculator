@@ -27,6 +27,7 @@ export const users = pgTable(
   (table) => [
     uniqueIndex("users_workos_user_id_uq").on(table.workosUserId),
     uniqueIndex("users_email_uq").on(table.email),
+    index("users_created_at_idx").on(table.createdAt),
   ],
 );
 
@@ -45,6 +46,7 @@ export const organizations = pgTable(
   (table) => [
     uniqueIndex("organizations_workos_id_uq").on(table.workosOrganizationId),
     uniqueIndex("organizations_slug_uq").on(table.slug),
+    index("organizations_created_at_idx").on(table.createdAt),
   ],
 );
 
@@ -155,6 +157,7 @@ export const subscriptions = pgTable(
   (table) => [
     uniqueIndex("subscriptions_stripe_uq").on(table.stripeSubscriptionId),
     index("subscriptions_org_idx").on(table.organizationId),
+    index("subscriptions_status_created_idx").on(table.status, table.createdAt),
   ],
 );
 
@@ -362,7 +365,7 @@ export const llmCalls = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     ...timestamps,
   },
-  (table) => [index("llm_calls_run_idx").on(table.runId), index("llm_calls_org_idx").on(table.organizationId)],
+  (table) => [index("llm_calls_run_idx").on(table.runId), index("llm_calls_org_idx").on(table.organizationId), index("llm_calls_started_at_idx").on(table.startedAt)],
 );
 
 export const toolCalls = pgTable(
@@ -541,6 +544,82 @@ export const auditEvents = pgTable(
   (table) => [index("audit_events_org_time_idx").on(table.organizationId, table.occurredAt)],
 );
 
+/** Platform-wide privileges are deliberately separate from organization roles. */
+export const platformAdmins = pgTable(
+  "platform_admins",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    workosUserId: text("workos_user_id").notNull(),
+    role: text("role").notNull(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("platform_admins_workos_user_uq").on(table.workosUserId),
+    index("platform_admins_active_idx").on(table.disabledAt),
+  ],
+);
+
+export const platformAdminAuditEvents = pgTable(
+  "platform_admin_audit_events",
+  {
+    id: text("id").primaryKey(),
+    actorPlatformAdminId: text("actor_platform_admin_id").references(() => platformAdmins.id, { onDelete: "set null" }),
+    actorWorkosUserId: text("actor_workos_user_id").notNull(),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    reason: text("reason"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("platform_admin_audit_time_idx").on(table.occurredAt), index("platform_admin_audit_actor_idx").on(table.actorPlatformAdminId)],
+);
+
+export const platformCostEntries = pgTable(
+  "platform_cost_entries",
+  {
+    id: text("id").primaryKey(),
+    incurredAt: timestamp("incurred_at", { withTimezone: true }).notNull(),
+    service: text("service").notNull(),
+    category: text("category").notNull(),
+    environment: text("environment").notNull().default("production"),
+    amountUsd: numeric("amount_usd", { precision: 20, scale: 8 }).notNull(),
+    currency: text("currency").notNull().default("USD"),
+    evidenceSource: text("evidence_source").notNull(),
+    externalReference: text("external_reference"),
+    importedAt: timestamp("imported_at", { withTimezone: true }),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    ...timestamps,
+  },
+  (table) => [index("platform_cost_entries_time_idx").on(table.incurredAt), index("platform_cost_entries_service_idx").on(table.service)],
+);
+
+/** Idempotent daily rollups keep admin dashboards off raw event tables. */
+export const platformDailyMetrics = pgTable(
+  "platform_daily_metrics",
+  {
+    day: timestamp("day", { withTimezone: true }).primaryKey(),
+    registrations: integer("registrations").notNull().default(0),
+    organizations: integer("organizations").notNull().default(0),
+    activeUsers: integer("active_users").notNull().default(0),
+    runs: integer("runs").notNull().default(0),
+    successfulRuns: integer("successful_runs").notNull().default(0),
+    failedRuns: integer("failed_runs").notNull().default(0),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    knownAiCostUsd: numeric("known_ai_cost_usd", { precision: 20, scale: 8 }),
+    unknownCostCount: integer("unknown_cost_count").notNull().default(0),
+    payingSubscriptions: integer("paying_subscriptions").notNull().default(0),
+    knownPlatformCostUsd: numeric("known_platform_cost_usd", { precision: 20, scale: 8 }),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
 export type OrganizationRole = "owner" | "admin" | "finance" | "developer" | "viewer";
 export type UsageSource = "provider_measured" | "agent_measured" | "local_tokenizer_reference" | "estimated" | "reconciled";
 export type Plan = "free" | "pro" | "team" | "enterprise";
+export type PlatformAdminRole = "super_admin" | "operations" | "finance" | "support" | "read_only";

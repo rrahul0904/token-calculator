@@ -1,7 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
-import type { ApiPrincipal } from "@/lib/auth/api-auth";
 import { getDb } from "@/db/client";
 import { findings, runs } from "@/db/schema";
 import { calculateCost, contextUsage } from "@/lib/cost";
@@ -11,6 +10,14 @@ import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 import { policyCheckSchema } from "@/lib/policy/schemas";
 import { ingestTelemetryEvent } from "@/lib/telemetry/ingest";
 import { mcpTelemetryEventSchema, parseMcpTelemetryEvent } from "@/lib/telemetry/schemas";
+
+export interface McpPrincipal {
+  organizationId: string;
+  projectId: string | null;
+  serviceAccountId: string | null;
+  apiKeyId?: string;
+  scopes: string[];
+}
 
 function text(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -44,8 +51,8 @@ function displayRunCost(run: { reconciledCostUsd: string | null; actualCostUsd: 
   return { valueUsd: raw === null ? null : Number(raw), source };
 }
 
-export function createTokenIntelligenceMcpServer(principal: ApiPrincipal) {
-  const server = new McpServer({ name: "token-intelligence", version: "0.3.0" });
+export function createTokenIntelligenceMcpServer(principal: McpPrincipal) {
+  const server = new McpServer({ name: "token-intelligence", version: "0.4.0" });
 
   server.registerTool("estimate_cost", { description: "Estimate current model economics for a known token workload. This is cost/context analysis, not a quality guarantee.", inputSchema: economicsInput }, async (input) => text({ source: "current_pricing_catalog", results: economicRows(input) }));
   server.registerTool("compare_models", { description: "Rank compatible current models by estimated request cost while preserving pricing tier and tokenizer precision labels.", inputSchema: economicsInput }, async (input) => text({ results: economicRows(input), caveat: "Lower estimated cost does not establish equal model quality." }));
@@ -78,39 +85,48 @@ export function createTokenIntelligenceMcpServer(principal: ApiPrincipal) {
   server.registerTool("get_project_spend", { description: "Return known spend and run counts for one project. Unknown prices remain unknown rather than zero.", inputSchema: z.object({ projectId: z.string().min(1) }) }, async ({ projectId }) => {
     if (principal.projectId && principal.projectId !== projectId) return text({ error: "PROJECT_SCOPE_VIOLATION" });
     const owned = await getDb().select().from(runs).where(and(eq(runs.organizationId, principal.organizationId), eq(runs.projectId, projectId)));
-    const costs = owned.flatMap((run) => { const value = run.reconciledCostUsd ?? run.actualCostUsd ?? run.estimatedCostUsd; if (value === null) return []; const parsed = Number(value); return Number.isFinite(parsed) ? [parsed] : []; });
-    return text({ projectId, runs: owned.length, knownCostRuns: costs.length, spendUsd: costs.length ? costs.reduce((sum, value) => sum + value, 0) : null });
+    const known = owned.flatMap((run) => { const cost = displayRunCost(run); return cost.valueUsd === null ? [] : [cost.valueUsd]; });
+    return text({ projectId, runCount: owned.length, knownCostRunCount: known.length, knownSpendUsd: known.length ? known.reduce((sum, value) => sum + value, 0) : null, unknownCostRunCount: owned.length - known.length });
   });
 
-  server.registerTool("get_run", { description: "Return one tenant-scoped Agent Run Receipt including turns, LLM calls, tools, outcomes, policy decisions and findings.", inputSchema: z.object({ runId: z.string().min(1) }) }, async ({ runId }) => {
+  server.registerTool("get_run", { description: "Fetch one tenant-scoped Agent Run Receipt with turns, model/tool calls, policy decisions, outcome and findings.", inputSchema: z.object({ runId: z.string().min(1) }) }, async ({ runId }) => {
     const detail = await getRunDetail(principal.organizationId, runId);
     if (!detail) return text({ error: "RUN_NOT_FOUND" });
     if (principal.projectId && detail.run.projectId !== principal.projectId) return text({ error: "PROJECT_SCOPE_VIOLATION" });
     return text(detail);
   });
 
-  server.registerTool("find_savings", { description: "Return deterministic persisted waste findings. Findings include evidence, confidence, a recommended fix and a verification recipe; heuristic waste is not represented as measured.", inputSchema: z.object({ runId: z.string().optional(), limit: z.number().int().min(1).max(100).default(20) }) }, async ({ runId, limit }) => {
+  server.registerTool("find_savings", { description: "Return explainable findings already computed for tenant-scoped runs. Findings preserve measured-vs-estimated confidence and require outcome verification before claiming savings.", inputSchema: z.object({ runId: z.string().optional(), limit: z.number().int().min(1).max(100).default(20) }) }, async ({ runId, limit }) => {
     if (runId) {
       const detail = await getRunDetail(principal.organizationId, runId);
       if (!detail) return text({ error: "RUN_NOT_FOUND" });
       if (principal.projectId && detail.run.projectId !== principal.projectId) return text({ error: "PROJECT_SCOPE_VIOLATION" });
-      return text({ findings: detail.findings.slice(0, limit) });
+      return text({ runId, findings: detail.findings.slice(0, limit) });
     }
-    if (principal.projectId) {
-      const projectRuns = await getDb().select({ id: runs.id }).from(runs).where(and(eq(runs.organizationId, principal.organizationId), eq(runs.projectId, principal.projectId))).limit(500);
-      const allowedRunIds = new Set(projectRuns.map((run) => run.id));
-      const rows = await getDb().select().from(findings).where(eq(findings.organizationId, principal.organizationId)).limit(500);
-      return text({ findings: rows.filter((row) => allowedRunIds.has(row.runId)).slice(0, limit) });
-    }
-    return text({ findings: await getDb().select().from(findings).where(eq(findings.organizationId, principal.organizationId)).limit(limit) });
+    const scopedRuns = await getDb().select({ id: runs.id }).from(runs).where(principal.projectId ? and(eq(runs.organizationId, principal.organizationId), eq(runs.projectId, principal.projectId)) : eq(runs.organizationId, principal.organizationId));
+    const runIds = new Set(scopedRuns.map((row) => row.id));
+    const rows = await getDb().select().from(findings).where(eq(findings.organizationId, principal.organizationId));
+    return text({ findings: rows.filter((row) => runIds.has(row.runId)).slice(0, limit) });
   });
 
-  server.registerTool("explain_cost", { description: "Explain one run's known/estimated cost, token buckets, retries/fallbacks and cost certainty without exposing prompt or source content.", inputSchema: z.object({ runId: z.string().min(1) }) }, async ({ runId }) => {
+  server.registerTool("explain_cost", { description: "Explain the economics of one run without returning prompt/source content. Includes cost provenance, provider-native token classes, retries/fallbacks, findings and outcome evidence.", inputSchema: z.object({ runId: z.string().min(1) }) }, async ({ runId }) => {
     const detail = await getRunDetail(principal.organizationId, runId);
     if (!detail) return text({ error: "RUN_NOT_FOUND" });
     if (principal.projectId && detail.run.projectId !== principal.projectId) return text({ error: "PROJECT_SCOPE_VIOLATION" });
     const cost = displayRunCost(detail.run);
-    return text({ runId, cost, usageSource: detail.run.usageSource, tokens: { freshInput: detail.run.freshInputTokens, cacheRead: detail.run.cacheReadTokens, cacheWrite: detail.run.cacheWriteTokens, reasoning: detail.run.reasoningTokens, output: detail.run.outputTokens }, retries: detail.run.retryCount, fallbacks: detail.run.fallbackCount, turns: detail.run.turnCount, status: detail.run.status, outcomeStatus: detail.run.outcomeStatus, findings: detail.findings.map((finding) => ({ rule: finding.ruleId, severity: finding.severity, confidence: finding.confidence, estimatedWasteUsd: finding.estimatedWasteUsd })) });
+    return text({
+      runId,
+      cost,
+      usageSource: detail.run.usageSource,
+      tokens: { freshInput: detail.run.freshInputTokens, cacheRead: detail.run.cacheReadTokens, cacheWrite: detail.run.cacheWriteTokens, reasoning: detail.run.reasoningTokens, output: detail.run.outputTokens },
+      retries: detail.run.retryCount,
+      fallbacks: detail.run.fallbackCount,
+      turns: detail.run.turnCount,
+      status: detail.run.status,
+      outcome: detail.outcome,
+      findings: detail.findings,
+      privacy: { contentReturned: false },
+    });
   });
 
   return server;

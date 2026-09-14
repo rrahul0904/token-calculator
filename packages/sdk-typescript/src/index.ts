@@ -23,6 +23,21 @@ export interface EstimateInput {
   models?: string[];
 }
 
+export interface WorkloadScenarioInput {
+  mode: "tokens2cost" | "cost2tokens";
+  modelId: string;
+  endpointId?: string | null;
+  pinnedModelId?: string | null;
+  totalTokens: number;
+  budgetUsd: number;
+  inputPercent: number;
+  cacheHitPercent: number;
+  cacheableInputPercent: number;
+  cacheWrite5mPercent?: number;
+  cacheWrite1hPercent?: number;
+  requestsPerMonth: number;
+}
+
 export interface RunCreateInput {
   projectId?: string | null;
   environment?: string;
@@ -114,6 +129,14 @@ export class TokenIntelligenceClient {
     list: (signal?: AbortSignal) => this.request<unknown>("/api/v1/models", { signal }),
     get: (id: string, signal?: AbortSignal) => this.request<unknown>(`/api/v1/models/${encodeURIComponent(id)}`, { signal }),
     pricingHistory: (id: string, signal?: AbortSignal) => this.request<unknown>(`/api/v1/models/${encodeURIComponent(id)}/pricing-history`, { signal }),
+    endpoints: (id: string, signal?: AbortSignal) => this.request<unknown>(`/api/v1/models/${encodeURIComponent(id)}/endpoints`, { signal }),
+  };
+  pricing = { list: (signal?: AbortSignal) => this.request<unknown>("/api/v1/pricing", { signal }) };
+  economics = {
+    estimate: (input: WorkloadScenarioInput, signal?: AbortSignal) => this.request<unknown>("/api/v1/economics/estimate", { body: input, signal }),
+    reverse: (input: WorkloadScenarioInput, signal?: AbortSignal) => this.request<unknown>("/api/v1/economics/reverse", { body: input, signal }),
+    compare: (input: { scenario: WorkloadScenarioInput; baselineModelId?: string; candidateModelIds?: string[] }, signal?: AbortSignal) => this.request<unknown>("/api/v1/economics/compare", { body: input, signal }),
+    frontier: (input: { candidates: Array<Record<string, unknown>> }, signal?: AbortSignal) => this.request<unknown>("/api/v1/economics/frontier", { body: input, signal }),
   };
   estimate = (input: EstimateInput, signal?: AbortSignal) => this.request<unknown>("/api/v1/estimate", { body: input, signal });
   compare = (input: Record<string, unknown>, signal?: AbortSignal) => this.request<unknown>("/api/v1/compare", { body: input, signal });

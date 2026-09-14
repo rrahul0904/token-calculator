@@ -1,6 +1,6 @@
 # PulseAtlas instrumentation
 
-Token Intelligence sends only content-blind portfolio telemetry. The browser tracker currently emits `page_view` with a redacted path. It never includes calculator text, prompts, token pieces, API keys, provider credentials, or BYOK secrets.
+Token Intelligence sends only content-blind portfolio telemetry. The browser tracker currently emits `page_view` with a strict static-path allowlist: customer-controlled project and run identifiers are replaced with route templates, and unknown paths are recorded only as `/other`. It never includes calculator text, prompts, token pieces, API keys, provider credentials, BYOK secrets, query strings, or fragments.
 
 Telemetry is optional and fail-open. Missing configuration or a PulseAtlas outage must never affect calculator or control-plane functionality.
 

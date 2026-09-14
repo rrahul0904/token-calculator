@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { AppPageHeader, EmptyState, StatusBadge } from "@/components/app-ui";
 import { AlertsManager } from "@/components/alerts-manager";
 import { BudgetManager } from "@/components/budget-manager";
+import { PolicyApprovalManager } from "@/components/policy-approval-manager";
 import { getTenantContext, roleCan } from "@/lib/auth/session";
 import { getDb } from "@/db/client";
 import { budgets, policies } from "@/db/schema";
@@ -26,6 +27,7 @@ export default async function BudgetsPage() {
         </div>
         <section className="app-panel"><div className="app-panel__header"><div><h2>Create budget</h2><p>New limits are persisted and audited.</p></div></div><div className="app-panel__body">{canManage ? <BudgetManager /> : <EmptyState mark="—" title="Read-only access" body="Your organization role can view budgets but cannot change control-plane policy." />}</div></section>
       </div>
+      <PolicyApprovalManager canManage={canManage} />
       <AlertsManager canManage={canManageAlerts} />
     </div>
   </>;
