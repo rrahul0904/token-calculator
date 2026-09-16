@@ -284,8 +284,8 @@ export function auditCollectorResult(result: CollectorParseResult, options: { ge
   for (const runId of allRunIds) {
     const run = runs.get(runId);
     const runTurns = [...turns.values()].filter((turn) => turn.runId === runId);
-    const runToolCalls = [...toolCalls.values()].filter((call) => call.runId === runId).map(({ runId: _runId, ...call }) => call);
-    const runLlmCalls = [...llmCalls.values()].filter((call) => call.runId === runId).map(({ runId: _runId, ...call }) => call);
+    const runToolCalls = [...toolCalls.values()].filter((call) => call.runId === runId);
+    const runLlmCalls = [...llmCalls.values()].filter((call) => call.runId === runId);
     const analysis: RunAnalysisInput = {
       runId,
       status: run?.status ?? "unknown",
