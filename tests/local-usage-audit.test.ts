@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CollectorParseResult } from "@/lib/collectors/types";
 import { auditCollectorResult, formatLocalUsageAuditReport } from "@/lib/optimization/local-usage-audit";
@@ -159,5 +161,29 @@ describe("local usage audit", () => {
     expect(text).toContain("Largest single token opportunity: 9,000");
     expect(text).toContain("does not add them into a headline savings total");
     expect(text).toContain("High reasoning spend is a benchmark candidate");
+  });
+
+  it("executes the real CLI audit path offline against a provider-format trace", () => {
+    const tsxBinary = resolve(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
+    const stdout = execFileSync(
+      tsxBinary,
+      ["scripts/ti.ts", "audit", "codex", "tests/fixtures/codex-local-audit.jsonl", "--json"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          TOKEN_INTELLIGENCE_API_KEY: "",
+          TOKEN_INTELLIGENCE_BASE_URL: "http://127.0.0.1:1",
+        },
+      },
+    );
+    const report = JSON.parse(stdout) as ReturnType<typeof auditCollectorResult>;
+
+    expect(report.source).toBe("codex");
+    expect(report.sessionId).toBe("codex-local-audit-fixture");
+    expect(report.summary).toMatchObject({ runs: 1, turns: 1, reasoningTokens: 6_000 });
+    expect(report.privacy).toEqual({ localOnly: true, contentStored: false, rawPromptContentInspected: false, networkRequestsRequired: false });
+    expect(report.recommendations.some((finding) => finding.ruleId === "reasoning-review-candidate")).toBe(true);
   });
 });
