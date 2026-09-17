@@ -20,7 +20,7 @@ Token Intelligence is the system of record. Reuse its existing gateway, telemetr
 | SupaNexus | Unified provider gateway, BYOK/provider connections, routing, spend controls, guardrails | Gateway routes/adapters, provider connections, policy/budget engine, Route Lab/optimization | Already native; no duplicate gateway added |
 | SynapsCLI | Provider-neutral event stream | Canonical run/turn/LLM/tool/outcome/budget-decision telemetry schemas and ingestion | Already native; no second event bus added |
 | SynapsCLI | Cache economics / cache-aware analysis | Cache read/write receipts, pricing, findings and workload economics | Already native; no second cache layer added |
-| SynapsCLI | Hard runtime budgets across time/provider rounds/result size | Policy rules/check state: `maxElapsedMs`, `maxProviderRounds`, `maxResultBytes`; policy UI, API contract and CLI counters | Implemented in this consolidation slice |
+| SynapsCLI | Hard runtime budgets across time/provider rounds/result size | Policy rules/check state: `maxElapsedMs`, `maxProviderRounds`, `maxResultBytes`; policy UI, API contract and CLI counters | Implemented in PR #20; gateway-owned measurement is extended by the stacked runtime-enforcement slice |
 | SynapsCLI | Full worker/scheduler/supervisor/memory/skills runtime | Not a Token Intelligence responsibility | Deliberately excluded rather than misrepresented as parity |
 | Boomi Agentstudio | Governed agent/tool interoperability, MCP, auditability and approvals | MCP server, policy engine, approval queue, audit log, telemetry | Existing native primitives cover the reusable control-plane layer |
 | Salience | Human-controlled actions, policy gates and audit trail | Approval queue, policy actions, scoped audit events | Existing native primitives; richer action-risk taxonomy remains a possible product increment |
@@ -29,17 +29,17 @@ Token Intelligence is the system of record. Reuse its existing gateway, telemetr
 | VoiceTutor | Provider abstraction, traces/evaluation patterns | Provider adapters, telemetry, evaluations and experiments | Reusable infrastructure already native; voice-learning UI excluded |
 | AI Engineering Studio | Evaluation/provider/trace primitives | Evaluation engine, datasets, experiments, telemetry and gateway | Existing native primitives; editor/course/workbench UX excluded |
 
-## Net-new implementation in this slice
+## Runtime policy implementation
 
 ### Hard runtime policy dimensions
 
-Policy rule sets now support:
+Policy rule sets support:
 
 - `maxElapsedMs`
 - `maxProviderRounds`
 - `maxResultBytes`
 
-Policy checks now accept the corresponding observed counters:
+Policy checks accept the corresponding observed counters:
 
 - `elapsedMs`
 - `providerRounds`
@@ -60,11 +60,18 @@ The controls are available through:
 - the OpenAPI contract;
 - deterministic unit coverage.
 
-### Enforcement boundary
+### Gateway-owned measurement
 
-These runtime counters are enforced when they are supplied to the policy check path. This consolidation slice does **not** claim that every gateway/streaming/provider adapter automatically derives all three counters. In particular, exact result-byte enforcement for streaming responses requires stream-aware measurement semantics before it can be described as built-in gateway enforcement.
+The stacked gateway runtime-enforcement slice adds native measurement where semantics are reliable:
 
-That distinction is intentional: configurable policy capability and automatic measurement are separate evidence claims.
+- elapsed wall-clock time is measured from gateway run start;
+- provider rounds are counted only when an upstream provider request is actually attempted, including retries and fallback attempts;
+- non-streaming upstream requests are capped to the remaining configured elapsed-time budget;
+- non-streaming result size is measured using UTF-8 bytes before provider content is delivered;
+- non-streaming delivery is policy-checked after the provider receipt is persisted, so a blocked result does not erase evidence of an upstream request that may already have incurred cost;
+- response headers expose measured runtime evidence for governed gateway calls.
+
+Streaming responses receive pre-call elapsed-time and provider-round governance. Exact streaming result-size enforcement is not claimed yet because safe truncation must preserve partial-output, finalization, usage, cost, and termination semantics.
 
 ## Existing architecture deliberately reused
 
@@ -82,12 +89,12 @@ No new duplicate implementation was created for:
 
 ## Compatible follow-on increments
 
-The following remain useful Token Intelligence product work but are not represented as already complete by this consolidation:
+The following remain useful Token Intelligence product work but are not represented as already complete:
 
-- automatic gateway measurement of elapsed runtime/provider rounds/result bytes where semantics are reliable, including stream-aware result sizing;
+- stream-aware result sizing and runtime termination with truthful partial-output receipts;
 - scheduled re-verification and evidence refresh;
 - versioned before/after verified-savings ledger;
-- richer explain → simulate → verify → apply UX on top of the existing experiment/policy engines;
+- richer explain → simulate → verify → apply UX on top of the existing experiment and policy engines;
 - action-risk taxonomy for approval policies;
 - additional real-provider history validation when explicit test data is available.
 
