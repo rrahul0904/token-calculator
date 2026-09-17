@@ -15,11 +15,11 @@ const nav = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">("light");
 
   useEffect(() => {
     const stored = window.localStorage.getItem("token-intelligence-theme");
-    const nextTheme = stored === "light" ? "light" : "dark";
+    const nextTheme = stored === "dark" ? "dark" : "light";
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
   }, []);
@@ -41,14 +41,17 @@ export function SiteHeader() {
           <span>Token Intelligence</span>
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">
-          {nav.map((item) => <Link key={item.href} href={item.href}>{item.label}</Link>)}
+          {nav.map((item) => {
+            const active = item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/");
+            return <Link key={item.href} href={item.href} className={active ? "site-nav__link--active" : undefined}>{item.label}</Link>;
+          })}
         </nav>
         <div className="site-header__actions">
           <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
-            {theme === "dark" ? "☀" : "☾"}
+            {theme === "dark" ? "Light" : "Dark"}
           </button>
           <Link href="/sign-in" className="button button--ghost">Sign in</Link>
-          <Link href="/app/overview" className="button button--primary header-cta">Open workspace</Link>
+          <Link href="/app/overview" className="button button--primary header-cta">Workspace</Link>
         </div>
       </div>
     </header>

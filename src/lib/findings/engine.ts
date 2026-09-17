@@ -1,5 +1,6 @@
 export type FindingSeverity = "info" | "low" | "medium" | "high" | "critical";
 export type FindingConfidence = "measured" | "high" | "medium" | "low" | "estimated";
+export type RouteEvidenceType = "historically_observed" | "counterfactual_estimate" | "experiment_verified";
 
 export interface FindingInputTurn {
   id: string;
@@ -24,6 +25,11 @@ export interface FindingInputToolCall {
   outputSizeBytes: number | null;
   outputTokensEstimated: number | null;
   resourceHash: string | null;
+  /** Privacy-safe semantic operation; never contains source content. */
+  operation?: "read" | "edit" | "write" | "delete" | "execute" | "search" | "other";
+  /** Optional content/version hashes supplied by a collector. */
+  resourceVersionBefore?: string | null;
+  resourceVersionAfter?: string | null;
 }
 
 export interface FindingInputLlmCall {
@@ -37,6 +43,21 @@ export interface FindingInputLlmCall {
   attemptIndex: number;
 }
 
+export interface ComparableRouteEvidence {
+  currentModel: string;
+  candidateModel: string;
+  workflowName?: string | null;
+  sampleSize: number;
+  currentSuccessRate: number;
+  candidateSuccessRate: number;
+  currentMedianCostUsd: number;
+  candidateMedianCostUsd: number;
+  contextRequirementTokens?: number | null;
+  candidateContextWindowTokens?: number | null;
+  toolRequirementsSatisfied?: boolean;
+  evidenceType: RouteEvidenceType;
+}
+
 export interface RunAnalysisInput {
   runId: string;
   status: string;
@@ -45,6 +66,7 @@ export interface RunAnalysisInput {
   turns: FindingInputTurn[];
   toolCalls: FindingInputToolCall[];
   llmCalls: FindingInputLlmCall[];
+  comparableRoutes?: ComparableRouteEvidence[];
 }
 
 export interface FindingResult {
@@ -84,7 +106,7 @@ function orientationFinding(input: RunAnalysisInput): FindingResult | null {
 }
 
 function repeatedReads(input: RunAnalysisInput): FindingResult | null {
-  const reads = input.toolCalls.filter((tool) => tool.toolCategory === "filesystem" && tool.resourceHash && tool.status === "completed");
+  const reads = input.toolCalls.filter((tool) => tool.toolCategory === "filesystem" && tool.resourceHash && tool.status === "completed" && tool.operation !== "edit" && tool.operation !== "write");
   const grouped = new Map<string, FindingInputToolCall[]>();
   for (const read of reads) grouped.set(read.resourceHash!, [...(grouped.get(read.resourceHash!) ?? []), read]);
   const repeated = [...grouped.entries()].filter(([, calls]) => calls.length > 1);
@@ -133,6 +155,40 @@ function retryLoops(input: RunAnalysisInput): FindingResult | null {
     confidence: "measured",
     recommendation: "Bound retries and record the failure cause so the agent changes strategy instead of repeating the same operation.",
     verificationRecipe: "Re-run with the retry cap/fix and require the same success outcome with fewer failed tool calls.",
+  };
+}
+
+function sameResourceEditChurn(input: RunAnalysisInput): FindingResult | null {
+  const edits = input.toolCalls.filter((tool) => tool.resourceHash && (tool.operation === "edit" || tool.operation === "write"));
+  const grouped = new Map<string, FindingInputToolCall[]>();
+  for (const edit of edits) grouped.set(edit.resourceHash!, [...(grouped.get(edit.resourceHash!) ?? []), edit]);
+  const churned = [...grouped.entries()].filter(([, calls]) => calls.length >= 3);
+  if (!churned.length) return null;
+
+  const evidence = churned.map(([resourceHash, calls]) => {
+    const failedOrRetried = calls.filter((call) => call.status === "failed" || call.isRetry).length;
+    const versions = calls.flatMap((call) => [call.resourceVersionBefore, call.resourceVersionAfter]).filter((value): value is string => Boolean(value));
+    const versionCounts = new Map<string, number>();
+    for (const version of versions) versionCounts.set(version, (versionCounts.get(version) ?? 0) + 1);
+    const revisitedVersion = [...versionCounts.values()].some((count) => count > 1);
+    return { resourceHash, edits: calls.length, failedOrRetried, revisitedVersion };
+  });
+
+  const totalEdits = evidence.reduce((sum, item) => sum + item.edits, 0);
+  const failed = evidence.reduce((sum, item) => sum + item.failedOrRetried, 0);
+  const hasVersionEvidence = evidence.some((item) => item.revisitedVersion);
+  const estimatedWasteTokens = churned.reduce((sum, [, calls]) => sum + calls.slice(2).reduce((inner, call) => inner + (call.outputTokensEstimated ?? 0), 0), 0);
+
+  return {
+    ruleId: "same-resource-edit-churn",
+    severity: totalEdits >= 8 || failed >= 3 ? "high" : "medium",
+    title: "The same resource was edited repeatedly across the run",
+    evidence: { resources: evidence, contentStored: false },
+    estimatedWasteTokens: estimatedWasteTokens || null,
+    estimatedWasteUsd: null,
+    confidence: hasVersionEvidence || failed > 0 ? "high" : "medium",
+    recommendation: "Reduce speculative edit cycles by validating the intended change and failure cause before repeatedly modifying the same resource.",
+    verificationRecipe: "Repeat an equivalent task and require the same verified outcome with fewer edits to the same resource and fewer failed validations.",
   };
 }
 
@@ -190,6 +246,43 @@ function fallbackPremium(input: RunAnalysisInput): FindingResult | null {
   };
 }
 
+function oversizedModelRoute(input: RunAnalysisInput): FindingResult | null {
+  const candidates = (input.comparableRoutes ?? []).filter((route) => {
+    if (route.sampleSize < 5) return false;
+    if (route.currentMedianCostUsd <= 0 || route.candidateMedianCostUsd >= route.currentMedianCostUsd * 0.9) return false;
+    if (route.candidateSuccessRate + 0.02 < route.currentSuccessRate) return false;
+    if (route.toolRequirementsSatisfied === false) return false;
+    if (route.contextRequirementTokens != null && route.candidateContextWindowTokens != null && route.candidateContextWindowTokens < route.contextRequirementTokens) return false;
+    return route.evidenceType === "historically_observed" || route.evidenceType === "experiment_verified";
+  });
+  if (!candidates.length) return null;
+  const best = [...candidates].sort((a, b) => (b.currentMedianCostUsd - b.candidateMedianCostUsd) - (a.currentMedianCostUsd - a.candidateMedianCostUsd))[0];
+  const savings = best.currentMedianCostUsd - best.candidateMedianCostUsd;
+  return {
+    ruleId: "oversized-model-route",
+    severity: savings >= 5 || best.candidateMedianCostUsd <= best.currentMedianCostUsd * 0.4 ? "high" : "medium",
+    title: "Comparable successful runs suggest a lower-cost model route",
+    evidence: {
+      currentModel: best.currentModel,
+      candidateModel: best.candidateModel,
+      workflowName: best.workflowName ?? null,
+      sampleSize: best.sampleSize,
+      currentSuccessRate: best.currentSuccessRate,
+      candidateSuccessRate: best.candidateSuccessRate,
+      currentMedianCostUsd: best.currentMedianCostUsd,
+      candidateMedianCostUsd: best.candidateMedianCostUsd,
+      evidenceType: best.evidenceType,
+      contextRequirementTokens: best.contextRequirementTokens ?? null,
+      candidateContextWindowTokens: best.candidateContextWindowTokens ?? null,
+    },
+    estimatedWasteTokens: null,
+    estimatedWasteUsd: dollar(savings),
+    confidence: best.evidenceType === "experiment_verified" ? "measured" : "high",
+    recommendation: `Evaluate ${best.candidateModel} for this comparable workflow cohort; the evidence supports a lower-cost route but does not guarantee quality for a new task.`,
+    verificationRecipe: "Run an approved A/B experiment on the same versioned task set and require non-inferior outcome quality before changing gateway policy.",
+  };
+}
+
 function noOutcome(input: RunAnalysisInput): FindingResult | null {
   if ((input.totalCostUsd ?? 0) < 0.25 || input.outcomeStatus) return null;
   return {
@@ -206,5 +299,16 @@ function noOutcome(input: RunAnalysisInput): FindingResult | null {
 }
 
 export function analyzeRun(input: RunAnalysisInput): FindingResult[] {
-  return [orientationFinding(input), repeatedReads(input), oversizedToolOutput(input), retryLoops(input), contextGrowth(input), cacheBlindSpot(input), fallbackPremium(input), noOutcome(input)].filter((finding): finding is FindingResult => finding !== null);
+  return [
+    orientationFinding(input),
+    repeatedReads(input),
+    oversizedToolOutput(input),
+    retryLoops(input),
+    sameResourceEditChurn(input),
+    contextGrowth(input),
+    cacheBlindSpot(input),
+    fallbackPremium(input),
+    oversizedModelRoute(input),
+    noOutcome(input),
+  ].filter((finding): finding is FindingResult => finding !== null);
 }
