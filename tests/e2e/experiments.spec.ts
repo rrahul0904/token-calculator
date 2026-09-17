@@ -16,8 +16,9 @@ test.describe("experiment lifecycle", () => {
     });
   }
 
-  test("dataset, cases, experiment evidence and deterministic savings gate work end to end", async ({ request }) => {
+  test("dataset, cases, experiment evidence and versioned verified savings work end to end", async ({ request, page }) => {
     const suffix = Date.now();
+    const experimentName = `Release experiment ${suffix}`;
     const datasetResponse = await request.post("/api/v1/evaluation-datasets", {
       data: { name: `Release dataset ${suffix}`, version: "1", projectId: "proj_e2e", contentRetentionMode: "metadata_only" },
     });
@@ -32,7 +33,7 @@ test.describe("experiment lifecycle", () => {
 
     const experimentResponse = await request.post("/api/v1/experiments", {
       data: {
-        name: `Release experiment ${suffix}`,
+        name: experimentName,
         datasetId: dataset.id,
         projectId: "proj_e2e",
         baselineConfig: { model: "gpt-5.6-sol" },
@@ -66,13 +67,39 @@ test.describe("experiment lifecycle", () => {
     expect(gate.evidenceType).toBe("experiment_verified");
     expect(gate.successPassed).toBe(true);
     expect(gate.costImproved).toBe(true);
-    expect(gate.baseline.sampleSize).toBe(5);
-    expect(gate.candidate.sampleSize).toBe(5);
+    expect(gate.baseline.count).toBe(5);
+    expect(gate.candidate.count).toBe(5);
+
+    const savingsResponse = await request.post(`/api/v1/experiments/${experiment.id}/savings-verifications`);
+    expect(savingsResponse.status()).toBe(201);
+    const savingsPayload = await savingsResponse.json();
+    expect(savingsPayload.created).toBe(true);
+    expect(savingsPayload.data.version).toBe(1);
+    expect(Number(savingsPayload.data.savingsPerObservationUsd)).toBeCloseTo(0.5, 8);
+    expect(Number(savingsPayload.data.savingsPct)).toBeCloseTo(50, 6);
+
+    const duplicate = await request.post(`/api/v1/experiments/${experiment.id}/savings-verifications`);
+    expect(duplicate.status()).toBe(200);
+    const duplicatePayload = await duplicate.json();
+    expect(duplicatePayload.created).toBe(false);
+    expect(duplicatePayload.data.id).toBe(savingsPayload.data.id);
+
+    const ledgerResponse = await request.get(`/api/v1/experiments/${experiment.id}/savings-verifications`);
+    expect(ledgerResponse.status()).toBe(200);
+    const ledger = (await ledgerResponse.json()).data;
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0].evidenceType).toBe("experiment_verified");
 
     const detailResponse = await request.get(`/api/v1/experiments/${experiment.id}`);
     expect(detailResponse.status()).toBe(200);
     const detail = (await detailResponse.json()).data;
     expect(detail.results).toHaveLength(10);
+
+    const experimentsPage = await page.goto("/app/experiments", { waitUntil: "domcontentloaded" });
+    expect(experimentsPage?.status()).toBeLessThan(400);
+    await expect(page.getByRole("heading", { name: experimentName })).toBeVisible();
+    await expect(page.getByText("Verified savings v1", { exact: true })).toBeVisible();
+    await expect(page.getByText("Verified savings snapshots", { exact: true })).toBeVisible();
   });
 
   test("experiment metadata rejects retained prompt content", async ({ request }) => {
