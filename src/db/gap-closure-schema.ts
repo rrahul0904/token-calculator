@@ -200,3 +200,29 @@ export const experimentResults = pgTable("experiment_results", {
   evaluatorResults: jsonb("evaluator_results").$type<Array<Record<string, unknown>>>().notNull().default([]),
   ...timestamps,
 }, (table) => [index("experiment_results_experiment_idx").on(table.experimentId)]);
+
+export const verifiedSavings = pgTable("verified_savings", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  experimentId: text("experiment_id").notNull().references(() => experiments.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  evidenceType: text("evidence_type").notNull().default("experiment_verified"),
+  evidenceHash: text("evidence_hash").notNull(),
+  baselineMedianCostUsd: numeric("baseline_median_cost_usd", { precision: 20, scale: 8 }).notNull(),
+  candidateMedianCostUsd: numeric("candidate_median_cost_usd", { precision: 20, scale: 8 }).notNull(),
+  savingsPerObservationUsd: numeric("savings_per_observation_usd", { precision: 20, scale: 8 }).notNull(),
+  savingsPct: numeric("savings_pct", { precision: 12, scale: 6 }),
+  baselineMedianQuality: numeric("baseline_median_quality", { precision: 10, scale: 4 }).notNull(),
+  candidateMedianQuality: numeric("candidate_median_quality", { precision: 10, scale: 4 }).notNull(),
+  baselineSuccessRate: numeric("baseline_success_rate", { precision: 10, scale: 6 }).notNull(),
+  candidateSuccessRate: numeric("candidate_success_rate", { precision: 10, scale: 6 }).notNull(),
+  baselineSampleSize: integer("baseline_sample_size").notNull(),
+  candidateSampleSize: integer("candidate_sample_size").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull().defaultNow(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("verified_savings_experiment_version_uq").on(table.experimentId, table.version),
+  uniqueIndex("verified_savings_experiment_evidence_hash_uq").on(table.experimentId, table.evidenceHash),
+  index("verified_savings_org_verified_idx").on(table.organizationId, table.verifiedAt),
+]);
