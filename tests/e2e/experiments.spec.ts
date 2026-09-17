@@ -69,6 +69,10 @@ test.describe("experiment lifecycle", () => {
     expect(gate.costImproved).toBe(true);
     expect(gate.baseline.count).toBe(5);
     expect(gate.candidate.count).toBe(5);
+    expect(gate.baseline.sampleSize).toBe(5);
+    expect(gate.candidate.sampleSize).toBe(5);
+    expect(gate.baseline.qualityScore).toBe(0.95);
+    expect(gate.candidate.qualityScore).toBe(0.95);
 
     const savingsResponse = await request.post(`/api/v1/experiments/${experiment.id}/savings-verifications`);
     expect(savingsResponse.status()).toBe(201);
