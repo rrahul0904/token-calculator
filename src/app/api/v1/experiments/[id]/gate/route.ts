@@ -8,6 +8,14 @@ function reply(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+function withLegacyAliases(variant: { count: number; medianQuality: number | null; medianCostUsd: number | null; successRate: number | null }) {
+  return {
+    ...variant,
+    sampleSize: variant.count,
+    qualityScore: variant.medianQuality,
+  };
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -27,13 +35,18 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     }).from(experimentResults)
       .where(and(eq(experimentResults.experimentId, id), eq(experimentResults.organizationId, tenant.organizationId)));
 
+    const verification = evaluateExperimentRows({
+      status: experiment.status,
+      rows,
+      minimumQualityScore: experiment.qualityThreshold,
+      maxCostRegressionPct: experiment.maxCostRegressionPct,
+    });
     return reply({
-      data: evaluateExperimentRows({
-        status: experiment.status,
-        rows,
-        minimumQualityScore: experiment.qualityThreshold,
-        maxCostRegressionPct: experiment.maxCostRegressionPct,
-      }),
+      data: {
+        ...verification,
+        baseline: withLegacyAliases(verification.baseline),
+        candidate: withLegacyAliases(verification.candidate),
+      },
     });
   } catch (error) {
     return reply({ error: error instanceof Error ? error.message : "AUTHORIZATION_FAILED" }, 403);
