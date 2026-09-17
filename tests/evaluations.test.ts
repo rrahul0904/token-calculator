@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateRegressionGate, evaluateSuite } from "@/lib/evaluations/engine";
+import { evaluateExperimentRows } from "@/lib/evaluations/experiment-evidence";
 
 describe("deterministic evaluations", () => {
   it("evaluates quality without an LLM judge", () => {
@@ -40,5 +41,46 @@ describe("deterministic evaluations", () => {
     const baseline = { variant: "baseline" as const, qualityScore: 0.95, successRate: 0.95, medianCostUsd: 1, sampleSize: 10 };
     const candidate = { variant: "candidate" as const, qualityScore: 0.7, successRate: 0.8, medianCostUsd: 0.1, sampleSize: 10 };
     expect(evaluateRegressionGate({ baseline, candidate }).passed).toBe(false);
+  });
+});
+
+describe("verified savings evidence", () => {
+  function rows(candidateCost = 0.6, candidateQuality = 0.94, candidateSuccess = true) {
+    return [
+      ...Array.from({ length: 5 }, (_, index) => ({ variant: "baseline", qualityScore: 0.95, costUsd: 1 + index * 0.01, success: true })),
+      ...Array.from({ length: 5 }, (_, index) => ({ variant: "candidate", qualityScore: candidateQuality, costUsd: candidateCost + index * 0.01, success: candidateSuccess })),
+    ];
+  }
+
+  it("computes a verified per-observation savings snapshot from controlled evidence", () => {
+    const result = evaluateExperimentRows({ status: "completed", rows: rows(), minimumQualityScore: 0.9, maxCostRegressionPct: 0 });
+    expect(result.passed).toBe(true);
+    expect(result.evidenceType).toBe("experiment_verified");
+    expect(result.baseline.count).toBe(5);
+    expect(result.candidate.count).toBe(5);
+    expect(result.savings?.savingsPerObservationUsd).toBeCloseTo(0.4, 8);
+    expect(result.savings?.savingsPct).toBeCloseTo(39.215686, 5);
+  });
+
+  it("refuses to verify savings with fewer than the minimum samples", () => {
+    const result = evaluateExperimentRows({ status: "completed", rows: rows().slice(0, 8), minimumQualityScore: 0.9 });
+    expect(result.passed).toBe(false);
+    expect(result.evidenceType).toBe("insufficient_evidence");
+    expect(result.savings).toBeNull();
+  });
+
+  it("refuses a cheaper candidate when success regresses", () => {
+    const result = evaluateExperimentRows({ status: "completed", rows: rows(0.6, 0.94, false), minimumQualityScore: 0.9 });
+    expect(result.passed).toBe(false);
+    expect(result.evidenceType).toBe("experiment_rejected");
+    expect(result.successPassed).toBe(false);
+    expect(result.savings).toBeNull();
+  });
+
+  it("requires strict cost improvement even when quality is preserved", () => {
+    const result = evaluateExperimentRows({ status: "completed", rows: rows(1.0), minimumQualityScore: 0.9 });
+    expect(result.passed).toBe(false);
+    expect(result.costImproved).toBe(false);
+    expect(result.savings).toBeNull();
   });
 });
