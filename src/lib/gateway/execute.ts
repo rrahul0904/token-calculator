@@ -513,6 +513,7 @@ function policyBlockedResponse(runId: string, policy: PolicyResult, error: strin
     action: policy.decision.action,
     reason: policy.decision.reason,
     runId,
+    approvalId: policy.approvalId,
   }, {
     status: policy.enforcement === "await_approval" ? 409 : 402,
     headers,
