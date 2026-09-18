@@ -1,5 +1,8 @@
 import * as z from "zod";
 
+export const actionRiskSchema = z.enum(["low", "medium", "high", "critical"]);
+const actionCategorySchema = z.string().trim().min(1).max(120).transform((value) => value.toLowerCase());
+
 export const scopeTypeSchema = z.enum(["organization", "team", "project", "environment", "user", "service_account", "api_key", "agent", "workflow", "run"]);
 
 export const policyRulesSchema = z.object({
@@ -18,6 +21,9 @@ export const policyRulesSchema = z.object({
   allowedModels: z.array(z.string().min(1).max(200)).max(200).optional(),
   fallbackPremiumApprovalUsd: z.number().nonnegative().optional(),
   disableFallback: z.boolean().optional(),
+  maxAutonomousActionRisk: actionRiskSchema.optional(),
+  approvalActionCategories: z.array(actionCategorySchema).max(50).optional(),
+  blockedActionCategories: z.array(actionCategorySchema).max(50).optional(),
 }).refine((rules) => rules.warnCostUsd === undefined || rules.maxCostUsd === undefined || rules.warnCostUsd <= rules.maxCostUsd, {
   message: "warnCostUsd must not exceed maxCostUsd",
 });
@@ -67,4 +73,7 @@ export const policyCheckSchema = z.object({
   model: z.string().max(200).optional(),
   fallbackPremiumUsd: z.number().nonnegative().optional(),
   isFallback: z.boolean().optional(),
+  actionRisk: actionRiskSchema.optional(),
+  actionCategory: actionCategorySchema.optional(),
+  actionName: z.string().trim().min(1).max(240).optional(),
 });
