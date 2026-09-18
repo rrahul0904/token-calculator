@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { auditEvents, organizations, outcomes, runs, usageEvents } from "@/db/schema";
-import { explicitRunIdFromText, safeGitHubDelivery, safeRepositoryName, verifyGitHubWebhook } from "@/lib/github/webhook";
+import { explicitRunIdFromText, githubActionsRunIdFromUrl, safeGitHubDelivery, safeGitHubIdentity, safeRepositoryName, verifyGitHubWebhook } from "@/lib/github/webhook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +12,12 @@ function record(value: unknown): JsonRecord | null { return value && typeof valu
 function string(value: unknown): string | null { return typeof value === "string" ? value : null; }
 function number(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 function bool(value: unknown): boolean | null { return typeof value === "boolean" ? value : null; }
+function boundedString(value: unknown, max: number): string | null { return typeof value === "string" && value.length > 0 && value.length <= max ? value : null; }
+function date(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 async function resolveRun(organizationId: string, repo: string | null, sha: string | null, explicitRunId: string | null) {
   const db = getDb();
@@ -25,7 +31,7 @@ async function resolveRun(organizationId: string, repo: string | null, sha: stri
   return { run: rows[0], confidence: 0.9, association: "strong" };
 }
 
-async function mergeOutcome(organizationId: string, runId: string, patch: Partial<{ status: string; commitSha: string | null; prNumber: number | null; ciPassed: boolean | null; merged: boolean | null; deploymentSuccessful: boolean | null; associationConfidence: number; metadata: JsonRecord }>) {
+async function mergeOutcome(organizationId: string, runId: string, patch: Partial<{ status: string; commitSha: string | null; prNumber: number | null; ciPassed: boolean | null; ciProvider: string | null; ciRunId: string | null; merged: boolean | null; deploymentSuccessful: boolean | null; deploymentProvider: string | null; deploymentId: string | null; deploymentEnvironment: string | null; deployedAt: Date | null; associationConfidence: number; metadata: JsonRecord }>) {
   const db = getDb();
   const existing = await db.select().from(outcomes).where(and(eq(outcomes.organizationId, organizationId), eq(outcomes.runId, runId))).limit(1);
   const now = new Date();
@@ -36,8 +42,14 @@ async function mergeOutcome(organizationId: string, runId: string, patch: Partia
       commitSha: patch.commitSha !== undefined ? patch.commitSha : previous.commitSha,
       prNumber: patch.prNumber !== undefined ? patch.prNumber : previous.prNumber,
       ciPassed: patch.ciPassed !== undefined ? patch.ciPassed : previous.ciPassed,
+      ciProvider: patch.ciProvider !== undefined ? patch.ciProvider : previous.ciProvider,
+      ciRunId: patch.ciRunId !== undefined ? patch.ciRunId : previous.ciRunId,
       merged: patch.merged !== undefined ? patch.merged : previous.merged,
       deploymentSuccessful: patch.deploymentSuccessful !== undefined ? patch.deploymentSuccessful : previous.deploymentSuccessful,
+      deploymentProvider: patch.deploymentProvider !== undefined ? patch.deploymentProvider : previous.deploymentProvider,
+      deploymentId: patch.deploymentId !== undefined ? patch.deploymentId : previous.deploymentId,
+      deploymentEnvironment: patch.deploymentEnvironment !== undefined ? patch.deploymentEnvironment : previous.deploymentEnvironment,
+      deployedAt: patch.deployedAt !== undefined ? patch.deployedAt : previous.deployedAt,
       associationConfidence: (patch.associationConfidence ?? Number(previous.associationConfidence ?? 0)).toString(),
       metadata: { ...(previous.metadata as JsonRecord), ...(patch.metadata ?? {}) },
       updatedAt: now,
@@ -53,8 +65,14 @@ async function mergeOutcome(organizationId: string, runId: string, patch: Partia
     commitSha: patch.commitSha ?? null,
     prNumber: patch.prNumber ?? null,
     ciPassed: patch.ciPassed ?? null,
+    ciProvider: patch.ciProvider ?? null,
+    ciRunId: patch.ciRunId ?? null,
     merged: patch.merged ?? null,
     deploymentSuccessful: patch.deploymentSuccessful ?? null,
+    deploymentProvider: patch.deploymentProvider ?? null,
+    deploymentId: patch.deploymentId ?? null,
+    deploymentEnvironment: patch.deploymentEnvironment ?? null,
+    deployedAt: patch.deployedAt ?? null,
     associationConfidence: (patch.associationConfidence ?? 0).toString(),
     metadata: patch.metadata ?? {},
   });
@@ -106,18 +124,45 @@ export async function POST(request: Request, context: { params: Promise<{ organi
     const check = record(payload.check_run);
     sha = string(check?.head_sha);
     const conclusion = string(check?.conclusion);
-    patch = { status: conclusion === "success" ? "ci_passed" : "ci_checked", commitSha: sha, ciPassed: conclusion === null ? null : conclusion === "success", metadata: { githubEvent: event, checkConclusion: conclusion } };
+    const actionsRunId = githubActionsRunIdFromUrl(check?.details_url);
+    const checkRunId = safeGitHubIdentity(check?.id);
+    patch = {
+      status: conclusion === "success" ? "ci_passed" : "ci_checked",
+      commitSha: sha,
+      ciPassed: conclusion === null ? null : conclusion === "success",
+      ciProvider: actionsRunId ? "github_actions" : checkRunId ? "github_check_run" : null,
+      ciRunId: actionsRunId ?? checkRunId,
+      metadata: { githubEvent: event, checkConclusion: conclusion, checkName: boundedString(check?.name, 240) },
+    };
   } else if (event === "check_suite") {
     const check = record(payload.check_suite);
     sha = string(check?.head_sha);
     const conclusion = string(check?.conclusion);
-    patch = { status: conclusion === "success" ? "ci_passed" : "ci_checked", commitSha: sha, ciPassed: conclusion === null ? null : conclusion === "success", metadata: { githubEvent: event, checkConclusion: conclusion } };
+    const suiteId = safeGitHubIdentity(check?.id);
+    patch = {
+      status: conclusion === "success" ? "ci_passed" : "ci_checked",
+      commitSha: sha,
+      ciPassed: conclusion === null ? null : conclusion === "success",
+      ciProvider: suiteId ? "github_check_suite" : null,
+      ciRunId: suiteId,
+      metadata: { githubEvent: event, checkConclusion: conclusion },
+    };
   } else if (event === "deployment_status") {
     const deployment = record(payload.deployment);
     const status = record(payload.deployment_status);
     sha = string(deployment?.sha);
     const state = string(status?.state);
-    patch = { status: state === "success" ? "deployed" : "deployment_updated", commitSha: sha, deploymentSuccessful: state === null ? null : state === "success", metadata: { githubEvent: event, deploymentState: state } };
+    const deploymentId = safeGitHubIdentity(deployment?.id);
+    patch = {
+      status: state === "success" ? "deployed" : "deployment_updated",
+      commitSha: sha,
+      deploymentSuccessful: state === null ? null : state === "success",
+      deploymentProvider: deploymentId ? "github_deployment" : null,
+      deploymentId,
+      deploymentEnvironment: boundedString(deployment?.environment, 80),
+      deployedAt: date(status?.created_at),
+      metadata: { githubEvent: event, deploymentState: state },
+    };
   } else if (event === "push") {
     sha = string(payload.after);
     const headCommit = record(payload.head_commit);
