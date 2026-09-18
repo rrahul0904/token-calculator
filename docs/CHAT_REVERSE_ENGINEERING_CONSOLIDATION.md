@@ -25,7 +25,7 @@ Token Intelligence is the system of record. Reuse its existing gateway, telemetr
 | Boomi Agentstudio | Governed agent/tool interoperability, MCP, auditability and approvals | MCP server, policy engine, approval queue, audit log, telemetry | Existing native primitives cover the reusable control-plane layer |
 | Salience | Human-controlled actions, policy gates and audit trail | Approval queue, policy actions, scoped audit events | Existing native primitives; richer action-risk taxonomy remains a possible product increment |
 | ForgeLab / Token Intelligence economics work | Workload economics, pricing provenance and scenario comparison | Pricing catalog/history, workload scenarios, economics endpoints, model comparisons, advisory logic and variance analysis | Already native |
-| Tame-style automation references | Scheduled checks and continuous verification | Natural fit is scheduled re-verification of Token Intelligence evidence, not a generic browser-automation product | Product roadmap only; full automation product excluded |
+| Tame-style automation references | Scheduled checks and continuous verification | Daily verified-savings revalidation, append-only freshness evidence, and versioned re-verification using existing experiment gates | Implemented in PR #29; generic browser automation remains excluded |
 | VoiceTutor | Provider abstraction, traces/evaluation patterns | Provider adapters, telemetry, evaluations and experiments | Reusable infrastructure already native; voice-learning UI excluded |
 | AI Engineering Studio | Evaluation/provider/trace primitives | Evaluation engine, datasets, experiments, telemetry and gateway | Existing native primitives; editor/course/workbench UX excluded |
 
@@ -92,8 +92,8 @@ No new duplicate implementation was created for:
 The following remain useful Token Intelligence product work but are not represented as already complete:
 
 - stream-aware result sizing and runtime termination with truthful partial-output receipts;
-- scheduled re-verification and evidence refresh;
-- versioned before/after verified-savings ledger;
+- broader continuous-ingestion scheduling beyond the implemented verified-savings revalidation cron;
+- local before/after savings snapshots for offline audit workflows;
 - richer explain → simulate → verify → apply UX on top of the existing experiment and policy engines;
 - action-risk taxonomy for approval policies;
 - additional real-provider history validation when explicit test data is available.

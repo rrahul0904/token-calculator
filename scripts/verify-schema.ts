@@ -12,7 +12,7 @@ const requiredTables = [
   "budgets", "policies", "approvals", "audit_events", "alert_endpoints", "alert_deliveries",
   "teams", "team_members", "project_teams", "cost_center_assignments", "pricing_snapshots",
   "provider_usage_imports", "provider_usage_import_rows", "anomalies", "prompt_config_versions", "run_config_attributions",
-  "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results", "verified_savings",
+  "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results", "verified_savings", "verified_savings_revalidations",
   "workos_directory_events", "workos_directory_users", "workos_directory_groups", "organization_data_controls",
   "platform_admins", "platform_admin_audit_events", "platform_cost_entries", "platform_daily_metrics",
   "inference_endpoints", "pricing_catalog_snapshots", "pricing_rates", "pricing_overrides", "scenario_versions",
@@ -31,6 +31,7 @@ const requiredMigrations = [
   "0008_workload_pricing_intelligence.sql",
   "0009_verified_savings_ledger.sql",
   "0010_stable_outcome_identities.sql",
+  "0011_verified_savings_revalidations.sql",
 ];
 
 const requiredTriggers = [
@@ -49,6 +50,8 @@ const requiredTriggers = [
   "ti_experiment_results_run_tenant",
   "ti_provider_usage_import_rows_import_tenant",
   "ti_verified_savings_experiment_tenant",
+  "ti_verified_savings_revalidations_experiment_tenant",
+  "ti_verified_savings_revalidations_snapshot_tenant",
 ];
 
 const requiredIndexes = [
@@ -64,6 +67,7 @@ const requiredIndexes = [
   "verified_savings_experiment_version_uq", "verified_savings_experiment_evidence_hash_uq",
   "verified_savings_org_verified_idx",
   "outcomes_ci_run_idx", "outcomes_deployment_idx",
+  "verified_savings_revalidations_org_checked_idx", "verified_savings_revalidations_experiment_checked_idx",
 ];
 
 async function main() {

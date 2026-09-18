@@ -94,6 +94,18 @@ test.describe("experiment lifecycle", () => {
     expect(ledger).toHaveLength(1);
     expect(ledger[0].evidenceType).toBe("experiment_verified");
 
+    const revalidationResponse = await request.post(`/api/v1/experiments/${experiment.id}/savings-revalidations`);
+    expect(revalidationResponse.status()).toBe(201);
+    const revalidationPayload = await revalidationResponse.json();
+    expect(revalidationPayload.status).toBe("verified_unchanged");
+    expect(revalidationPayload.verifiedSavings.id).toBe(savingsPayload.data.id);
+
+    const revalidationLedgerResponse = await request.get(`/api/v1/experiments/${experiment.id}/savings-revalidations`);
+    expect(revalidationLedgerResponse.status()).toBe(200);
+    const revalidationLedger = (await revalidationLedgerResponse.json()).data;
+    expect(revalidationLedger).toHaveLength(1);
+    expect(revalidationLedger[0].status).toBe("verified_unchanged");
+
     const detailResponse = await request.get(`/api/v1/experiments/${experiment.id}`);
     expect(detailResponse.status()).toBe(200);
     const detail = (await detailResponse.json()).data;
@@ -101,9 +113,13 @@ test.describe("experiment lifecycle", () => {
 
     const experimentsPage = await page.goto("/app/experiments", { waitUntil: "domcontentloaded" });
     expect(experimentsPage?.status()).toBeLessThan(400);
-    await expect(page.getByRole("heading", { name: experimentName })).toBeVisible();
-    expect(await page.getByText("Verified savings v1", { exact: true }).count()).toBeGreaterThan(0);
+    await expect(page.getByRole("heading", { name: experimentName, exact: true })).toBeVisible();
+    const experimentPanel = page.locator("section.app-panel").filter({
+      has: page.getByRole("heading", { name: experimentName, exact: true }),
+    });
+    await expect(experimentPanel.getByText("Verified savings v1", { exact: true })).toBeVisible();
     await expect(page.getByText("Verified savings snapshots", { exact: true })).toBeVisible();
+    await expect(experimentPanel.getByText("Latest revalidation:", { exact: true })).toBeVisible();
   });
 
   test("experiment metadata rejects retained prompt content", async ({ request }) => {

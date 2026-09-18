@@ -1,8 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
-import { experiments, verifiedSavings } from "@/db/gap-closure-schema";
+import { experiments, verifiedSavingsRevalidations } from "@/db/gap-closure-schema";
 import { requireTenant } from "@/lib/auth/session";
-import { verifyExperimentSavings } from "@/lib/evaluations/verified-savings";
+import { reverifyExperimentSavings } from "@/lib/evaluations/verified-savings";
 
 function reply(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -20,10 +20,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const tenant = await requireTenant("usage:read");
     const { id } = await context.params;
     if (!(await experimentExists(tenant.organizationId, id))) return reply({ error: "EXPERIMENT_NOT_FOUND" }, 404);
-    const entries = await getDb().select().from(verifiedSavings)
-      .where(and(eq(verifiedSavings.experimentId, id), eq(verifiedSavings.organizationId, tenant.organizationId)))
-      .orderBy(desc(verifiedSavings.version));
-    return reply({ data: entries });
+    const rows = await getDb().select().from(verifiedSavingsRevalidations)
+      .where(and(
+        eq(verifiedSavingsRevalidations.organizationId, tenant.organizationId),
+        eq(verifiedSavingsRevalidations.experimentId, id),
+      ))
+      .orderBy(desc(verifiedSavingsRevalidations.checkedAt));
+    return reply({ data: rows });
   } catch (error) {
     return reply({ error: error instanceof Error ? error.message : "AUTHORIZATION_FAILED" }, 403);
   }
@@ -34,11 +37,10 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   try {
     const tenant = await requireTenant("scenarios:write");
     const { id } = await context.params;
-    const outcome = await verifyExperimentSavings(getDb(), tenant.organizationId, id, "experiment_gate");
+    const outcome = await reverifyExperimentSavings(getDb(), tenant.organizationId, id, "manual_reverification");
     if (outcome.kind === "not_found") return reply({ error: "EXPERIMENT_NOT_FOUND" }, 404);
-    if (outcome.kind === "rejected") return reply({ error: "VERIFIED_SAVINGS_GATE_FAILED", data: outcome.verification }, 409);
-    if (outcome.kind === "existing") return reply({ data: outcome.record, created: false });
-    return reply({ data: outcome.record, created: true }, 201);
+    if (outcome.kind === "no_verified_savings") return reply({ error: "VERIFIED_SAVINGS_REQUIRED" }, 409);
+    return reply({ data: outcome.revalidation, status: outcome.status, verifiedSavings: outcome.record }, 201);
   } catch (error) {
     return reply({ error: error instanceof Error ? error.message : "AUTHORIZATION_FAILED" }, 403);
   }
