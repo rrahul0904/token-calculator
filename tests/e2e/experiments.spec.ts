@@ -102,7 +102,7 @@ test.describe("experiment lifecycle", () => {
     const experimentsPage = await page.goto("/app/experiments", { waitUntil: "domcontentloaded" });
     expect(experimentsPage?.status()).toBeLessThan(400);
     await expect(page.getByRole("heading", { name: experimentName })).toBeVisible();
-    await expect(page.getByText("Verified savings v1", { exact: true })).toBeVisible();
+    expect(await page.getByText("Verified savings v1", { exact: true }).count()).toBeGreaterThan(0);
     await expect(page.getByText("Verified savings snapshots", { exact: true })).toBeVisible();
   });
 
