@@ -115,10 +115,22 @@ describe("release workflow invariants", () => {
     expect(production).toContain('--workos-environment="environment_01M1G0NZHV4J3CNS2WQZB2JER4"');
   });
 
-  it("creates a GitHub release only after the certified SHA is on main", async () => {
+  it("creates a GitHub release only from the exact certified SHA and exact manifest evidence", async () => {
     const source = await workflow("release-finalize.yml");
+    expect(source).toContain("ref: ${{ inputs.sha }}");
     expect(source).toContain("git merge-base --is-ancestor");
     expect(source).toContain("release:verify:deployment");
+    expect(source).toContain("release-manifest.json");
+    expect(source).toContain("m.migrationRange.join");
     expect(source).toContain("gh release create");
+    expect(source).not.toContain("Migrations: 0000-0007");
+  });
+
+  it("uses fixed non-secret Vercel project identity for rollback", async () => {
+    const source = await workflow("release-rollback.yml");
+    expect(source).toContain("VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD");
+    expect(source).toContain("VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l");
+    expect(source).not.toContain("secrets.VERCEL_ORG_ID");
+    expect(source).not.toContain("secrets.VERCEL_PROJECT_ID");
   });
 });
