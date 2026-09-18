@@ -25,6 +25,9 @@ const manifest = JSON.parse(await readFile(path, "utf8")) as {
   workosEnvironment?: string;
 };
 const migrationInventory = await releaseMigrationInventory();
+const expectedWorkosEnvironment = expectedStatus === "production_certified"
+  ? "environment_01M1G0NZHV4J3CNS2WQZB2JER4"
+  : "environment_01M1G0NYZ6EX1MR9Z51Y7VZ15X";
 
 const checks = {
   sha: Boolean(expectedSha && manifest.gitSha === expectedSha),
@@ -35,7 +38,7 @@ const checks = {
   migrationCount: manifest.migrationCount === migrationInventory.count,
   migrationRange: JSON.stringify(manifest.migrationRange) === JSON.stringify(migrationInventory.range),
   migrationFiles: JSON.stringify(manifest.migrationFiles) === JSON.stringify(migrationInventory.files),
-  workosEnvironment: Boolean(manifest.workosEnvironment),
+  workosEnvironment: manifest.workosEnvironment === expectedWorkosEnvironment,
 };
 process.stdout.write(JSON.stringify({
   path,
