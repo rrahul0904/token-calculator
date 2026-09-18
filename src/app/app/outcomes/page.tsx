@@ -6,6 +6,9 @@ import { getOutcomeEconomicsData } from "@/lib/design-dashboard-data";
 function pct(value: number, total: number) {
   return total ? `${(value / total * 100).toFixed(1)}%` : "—";
 }
+function usd(value: number | null) {
+  return value === null ? "Unknown" : value < 0.01 ? `${value.toFixed(4)}` : `${value.toFixed(2)}`;
+}
 
 export default async function OutcomesPage() {
   const tenant = await getTenantContext();
@@ -23,8 +26,8 @@ export default async function OutcomesPage() {
     <section className="metric-grid">
       <MetricCard label="Attributed runs" value={data.attributedRuns.toLocaleString()} detail={`${data.highConfidenceRuns} high-confidence associations`} />
       <MetricCard tone="good" label="Merged PRs" value={data.mergedPullRequests.toLocaleString()} detail="Unique repo + PR among high-confidence outcomes" eyebrow="observed outcome" />
-      <MetricCard label="Known attributed AI cost" value={<Money value={data.knownAttributedCostUsd} />} detail={`${data.knownCostRuns} runs with actual or reconciled cost`} eyebrow="actual / reconciled" />
-      <MetricCard label="Known cost / merged PR" value={<Money value={data.knownCostPerMergedPrUsd} />} detail="Only high-confidence merged associations; estimated-only runs excluded" eyebrow="derived observed" />
+      <MetricCard label="Known attributed AI cost" value={usd(data.knownAttributedCostUsd)} detail={`${data.knownCostRuns} runs with actual or reconciled cost`} eyebrow="actual / reconciled" />
+      <MetricCard label="Known cost / merged PR" value={usd(data.knownCostPerMergedPrUsd)} detail="Only high-confidence merged associations; estimated-only runs excluded" eyebrow="derived observed" />
     </section>
 
     <div className="app-grid">
