@@ -1,5 +1,6 @@
 import process from "node:process";
 import postgres from "postgres";
+import { classifyDatabaseReleaseFailure } from "./database-failure";
 
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -24,12 +25,17 @@ const sql = postgres(databaseUrl, {
   connect_timeout: 15,
 });
 try {
-  const row = (await sql<{ project_id: string | null; branch_id: string | null; database_name: string }[]>`
-    select
-      current_setting('neon.project_id', true) as project_id,
-      current_setting('neon.branch_id', true) as branch_id,
-      current_database() as database_name
-  `)[0];
+  let row: { project_id: string | null; branch_id: string | null; database_name: string } | undefined;
+  try {
+    row = (await sql<{ project_id: string | null; branch_id: string | null; database_name: string }[]>`
+      select
+        current_setting('neon.project_id', true) as project_id,
+        current_setting('neon.branch_id', true) as branch_id,
+        current_database() as database_name
+    `)[0];
+  } catch (error) {
+    throw new Error(classifyDatabaseReleaseFailure(error));
+  }
 
   if (!row?.project_id || !row.branch_id) throw new Error("DATABASE_IS_NOT_IDENTIFIED_AS_NEON");
   if (row.project_id !== expectedProject) {
