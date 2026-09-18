@@ -14,8 +14,13 @@ function row(overrides: Partial<OutcomeEconomicsInput> = {}): OutcomeEconomicsIn
       testsPassed: true,
       prNumber: 42,
       ciPassed: true,
+      ciProvider: "github_actions",
+      ciRunId: "123456",
       merged: true,
       deploymentSuccessful: false,
+      deploymentProvider: null,
+      deploymentId: null,
+      deploymentEnvironment: null,
       associationConfidence: 0.95,
     },
     ...overrides,
@@ -58,13 +63,31 @@ describe("outcome economics", () => {
     expect(result.knownCostPerMergedPrUsd).toBe(2);
   });
 
-  it("reports deployment-linked cost without claiming unique deployment counts", () => {
+  it("keeps legacy deployment-linked cost separate from stable deployment economics", () => {
     const result = summarizeOutcomeEconomics([
       row({ runId: "run_deploy_1", actualCostUsd: 2, outcome: { ...row().outcome!, deploymentSuccessful: true } }),
       row({ runId: "run_deploy_2", actualCostUsd: 4, outcome: { ...row().outcome!, deploymentSuccessful: true, prNumber: 44 } }),
     ]);
 
     expect(result.deploymentLinkedRuns).toBe(2);
+    expect(result.identifiedDeployments).toBe(0);
     expect(result.knownCostPerDeploymentLinkedRunUsd).toBe(3);
+    expect(result.knownCostPerDeploymentUsd).toBeNull();
+  });
+
+  it("deduplicates stable deployment identities and requires complete known cost per deployment", () => {
+    const shared = { ...row().outcome!, deploymentSuccessful: true, deploymentProvider: "vercel", deploymentEnvironment: "production" };
+    const result = summarizeOutcomeEconomics([
+      row({ runId: "run_deploy_a1", actualCostUsd: 2, outcome: { ...shared, deploymentId: "dpl_a" } }),
+      row({ runId: "run_deploy_a2", actualCostUsd: 4, outcome: { ...shared, deploymentId: "dpl_a" } }),
+      row({ runId: "run_deploy_b", actualCostUsd: 3, outcome: { ...shared, deploymentId: "dpl_b" } }),
+      row({ runId: "run_deploy_c1", actualCostUsd: 5, outcome: { ...shared, deploymentId: "dpl_c" } }),
+      row({ runId: "run_deploy_c2", actualCostUsd: null, estimatedCostUsd: null, outcome: { ...shared, deploymentId: "dpl_c" } }),
+    ]);
+
+    expect(result.deploymentLinkedRuns).toBe(5);
+    expect(result.identifiedDeployments).toBe(3);
+    expect(result.deploymentIdentityCoveragePct).toBe(1);
+    expect(result.knownCostPerDeploymentUsd).toBe(4.5);
   });
 });
