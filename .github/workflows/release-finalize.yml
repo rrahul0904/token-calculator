@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v7
@@ -65,5 +66,9 @@ jobs:
             test "$(git rev-list -n 1 "$TAG")" = "${{ inputs.sha }}"
             echo "$TAG already exists at the certified SHA"
           else
-            gh release create "$TAG"               --target "${{ inputs.sha }}"               --title "Token Intelligence v$VERSION"               --notes "Production-certified release. SHA: ${{ inputs.sha }}. Migrations: 0000-0007. See docs/RELEASE_CLOSURE.md and docs/ROLLBACK.md."
+            MIGRATIONS="$(node -e 'const m=require("./release-evidence/release-manifest.json"); if(!Array.isArray(m.migrationRange)||m.migrationRange.length!==2) process.exit(2); process.stdout.write(m.migrationRange.join("-"))')"
+            gh release create "$TAG" \
+              --target "${{ inputs.sha }}" \
+              --title "Token Intelligence v$VERSION" \
+              --notes "Production-certified release. SHA: ${{ inputs.sha }}. Migrations: $MIGRATIONS. See docs/RELEASE_CLOSURE.md and docs/ROLLBACK.md."
           fi
