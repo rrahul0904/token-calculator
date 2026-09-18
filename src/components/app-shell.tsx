@@ -38,6 +38,7 @@ const groups = [
     { href: "/app/cost-lab", label: "Cost Lab", icon: "lab" },
     { href: "/app/usage", label: "Usage", icon: "usage" },
     { href: "/app/runs", label: "Runs", icon: "runs" },
+    { href: "/app/outcomes", label: "Outcomes", icon: "finops" },
     { href: "/app/findings", label: "Findings", icon: "runs" },
     { href: "/app/route-lab", label: "Route Lab", icon: "finops" },
     { href: "/app/experiments", label: "Experiments", icon: "lab" },
