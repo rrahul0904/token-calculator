@@ -21,6 +21,9 @@ export function PolicyApprovalManager({ canManage }: { canManage: boolean }) {
   const [maxProviderRounds, setMaxProviderRounds] = useState("6");
   const [maxResultBytes, setMaxResultBytes] = useState("1048576");
   const [disableFallback, setDisableFallback] = useState(false);
+  const [maxAutonomousActionRisk, setMaxAutonomousActionRisk] = useState<"low" | "medium" | "high" | "critical">("medium");
+  const [approvalActionCategories, setApprovalActionCategories] = useState("");
+  const [blockedActionCategories, setBlockedActionCategories] = useState("");
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,7 +39,7 @@ export function PolicyApprovalManager({ canManage }: { canManage: boolean }) {
   async function createPolicy() {
     setBusy(true); setMessage(null);
     try {
-      const rules: Record<string, number | boolean> = {};
+      const rules: Record<string, unknown> = {};
       const cost = Number(maxCost); const turns = Number(maxTurns); const retries = Number(maxRetries); const tools = Number(maxToolCalls);
       const elapsed = Number(maxElapsedMs); const rounds = Number(maxProviderRounds); const resultBytes = Number(maxResultBytes);
       if (Number.isFinite(cost) && cost >= 0) rules.maxCostUsd = cost;
@@ -47,6 +50,11 @@ export function PolicyApprovalManager({ canManage }: { canManage: boolean }) {
       if (Number.isInteger(rounds) && rounds >= 0) rules.maxProviderRounds = rounds;
       if (Number.isInteger(resultBytes) && resultBytes >= 0) rules.maxResultBytes = resultBytes;
       if (disableFallback) rules.disableFallback = true;
+      rules.maxAutonomousActionRisk = maxAutonomousActionRisk;
+      const approvalCategories = approvalActionCategories.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+      const blockedCategories = blockedActionCategories.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+      if (approvalCategories.length) rules.approvalActionCategories = Array.from(new Set(approvalCategories));
+      if (blockedCategories.length) rules.blockedActionCategories = Array.from(new Set(blockedCategories));
       const response = await fetch("/api/v1/budgets", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind: "policy", name: policyName, scopeType: "organization", priority: 100, enabled: true, rules }),
@@ -75,7 +83,7 @@ export function PolicyApprovalManager({ canManage }: { canManage: boolean }) {
   }
 
   return <div className="app-stack">
-    <section className="app-panel"><div className="app-panel__header"><div><h2>Create policy</h2><p>Author deterministic organization guardrails for cost, turns, retries, tools, runtime, provider rounds, result size and fallback behavior.</p></div></div><div className="app-panel__body">
+    <section className="app-panel"><div className="app-panel__header"><div><h2>Create policy</h2><p>Author deterministic organization guardrails for cost, runtime and explicit action risk. Risk is supplied by the caller; Token Intelligence does not inspect private task content to infer it.</p></div></div><div className="app-panel__body">
       {canManage ? <div className="form-grid">
         <div className="form-row"><label htmlFor="policy-name">Name</label><input id="policy-name" value={policyName} onChange={(event) => setPolicyName(event.target.value)} /></div>
         <div className="form-row"><label htmlFor="policy-cost">Max cost USD</label><input id="policy-cost" type="number" min="0" step="0.01" value={maxCost} onChange={(event) => setMaxCost(event.target.value)} /></div>
@@ -86,6 +94,9 @@ export function PolicyApprovalManager({ canManage }: { canManage: boolean }) {
         <div className="form-row"><label htmlFor="policy-rounds">Max provider rounds</label><input id="policy-rounds" type="number" min="0" value={maxProviderRounds} onChange={(event) => setMaxProviderRounds(event.target.value)} /></div>
         <div className="form-row"><label htmlFor="policy-result-bytes">Max result bytes</label><input id="policy-result-bytes" type="number" min="0" value={maxResultBytes} onChange={(event) => setMaxResultBytes(event.target.value)} /></div>
         <label className="form-row"><span>Fallback</span><select value={disableFallback ? "disabled" : "allowed"} onChange={(event) => setDisableFallback(event.target.value === "disabled")}><option value="allowed">Allowed</option><option value="disabled">Disabled</option></select></label>
+        <label className="form-row"><span>Max autonomous action risk</span><select value={maxAutonomousActionRisk} onChange={(event) => setMaxAutonomousActionRisk(event.target.value as "low" | "medium" | "high" | "critical")}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label>
+        <div className="form-row"><label htmlFor="policy-approval-categories">Approval categories</label><input id="policy-approval-categories" placeholder="database, browser" value={approvalActionCategories} onChange={(event) => setApprovalActionCategories(event.target.value)} /></div>
+        <div className="form-row"><label htmlFor="policy-blocked-categories">Blocked categories</label><input id="policy-blocked-categories" placeholder="destructive-admin" value={blockedActionCategories} onChange={(event) => setBlockedActionCategories(event.target.value)} /></div>
         <div className="form-actions"><button className="button button--primary" type="button" disabled={busy || policyName.trim().length < 2} onClick={() => void createPolicy()}>Create policy</button></div>
       </div> : <p>Your organization role can view policy state but cannot modify guardrails.</p>}
     </div></section>
