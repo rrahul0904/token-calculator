@@ -91,7 +91,7 @@ export const OPENAPI_DOCUMENT = {
         },
         required: ["mode", "modelId", "totalTokens", "budgetUsd", "inputPercent", "cacheHitPercent", "cacheableInputPercent", "requestsPerMonth"],
       },
-      GatewayRequest: { type: "object", properties: { providerConnectionId: { type: "string" }, projectId: { type: ["string", "null"] }, runId: { type: "string" }, agentName: { type: "string" }, workflowName: { type: ["string", "null"] }, environment: { type: "string" }, model: { type: "string" }, fallbackModel: { type: "string" }, input: {}, maxOutputTokens: { type: "integer" }, stream: { type: "boolean" } }, required: ["providerConnectionId", "model", "input"] },
+      GatewayRequest: { type: "object", properties: { providerConnectionId: { type: "string" }, projectId: { type: ["string", "null"] }, runId: { type: "string" }, agentName: { type: "string" }, workflowName: { type: ["string", "null"] }, environment: { type: "string" }, model: { type: "string" }, fallbackModel: { type: "string" }, actionRisk: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Explicit caller-supplied action risk; not inferred from prompt content." }, actionCategory: { type: "string", maxLength: 120 }, actionName: { type: "string", maxLength: 240 }, input: {}, maxOutputTokens: { type: "integer" }, stream: { type: "boolean" } }, required: ["providerConnectionId", "model", "input"] },
       ProviderCompatibleRequest: { type: "object", additionalProperties: true, description: "Provider-compatible request body. Supply x-ti-provider-connection-id; project/run metadata may be supplied with x-ti-* headers." },
       BudgetCheckRequest: {
         type: "object",
