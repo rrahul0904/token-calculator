@@ -65,3 +65,14 @@ After the certified SHA is merged into `main`, **Finalize Certified Release** ve
 **Release Rollback** requires an exact prior Production deployment URL and its expected Git SHA. It verifies the target, resolves its Vercel deployment ID, requests Vercel rollback to that ID, and verifies the stable Production deployment ID and SHA afterward. It does not roll back the database. The canonical release gate also refuses to run migrations against a non-loopback database unless `TOKEN_INTELLIGENCE_RELEASE_DISPOSABLE_DATABASE=1` is explicitly set.
 
 See `docs/ROLLBACK.md` for database/provider incident procedures.
+
+
+## Neon release connection troubleshooting
+
+Release database identity verification intentionally fails before migrations or traffic promotion when the configured PostgreSQL connection cannot authenticate.
+
+- Use the Neon branch intended for the release scope and keep the expected project/branch identity checks enabled.
+- For Vercel/serverless traffic, use Neon transaction pooling when the deployment is configured with the pooled hostname.
+- A release verifier failure of `DATABASE_AUTHENTICATION_FAILED:sqlstate=28P01` means the configured database credential is stale or invalid. Rotate the affected non-production credential or update the approved Production secret through secret management; never print or commit the URI.
+- `DATABASE_NOT_FOUND:sqlstate=3D000` and `DATABASE_PERMISSION_DENIED:sqlstate=42501` are also reported explicitly.
+- Other connection failures expose only a sanitized error code. Hostnames, usernames, passwords and raw driver error messages are never emitted by the verifier.
