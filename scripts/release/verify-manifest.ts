@@ -14,6 +14,7 @@ const path = argument("file") ?? "release-evidence/release-manifest.json";
 const expectedSha = argument("sha");
 const expectedStatus = argument("status") ?? "preview_certified";
 const manifest = JSON.parse(await readFile(path, "utf8")) as {
+  schemaVersion?: number;
   gitSha?: string;
   status?: string;
   vercelPreviewUrl?: string | null;
@@ -30,6 +31,7 @@ const expectedWorkosEnvironment = expectedStatus === "production_certified"
   : "environment_01M1G0NYZ6EX1MR9Z51Y7VZ15X";
 
 const checks = {
+  schemaVersion: manifest.schemaVersion === 2,
   sha: Boolean(expectedSha && manifest.gitSha === expectedSha),
   status: manifest.status === expectedStatus,
   previewUrl: !["preview_certified", "production_certified"].includes(expectedStatus) || Boolean(manifest.vercelPreviewUrl),
@@ -44,6 +46,7 @@ process.stdout.write(JSON.stringify({
   path,
   checks,
   manifest: {
+    schemaVersion: manifest.schemaVersion,
     gitSha: manifest.gitSha,
     status: manifest.status,
     vercelPreviewUrl: manifest.vercelPreviewUrl,
