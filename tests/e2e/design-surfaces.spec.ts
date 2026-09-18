@@ -9,6 +9,7 @@ test.describe("premium economics surfaces", () => {
   test.use({ extraHTTPHeaders: authHeaders });
 
   for (const item of [
+    { path: "/app/outcomes", title: /outcomes/i },
     { path: "/app/findings", title: /findings/i },
     { path: "/app/route-lab", title: /route lab/i },
     { path: "/app/experiments", title: /experiments/i },

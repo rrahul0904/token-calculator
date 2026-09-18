@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { budgetDecisions, budgets, policies } from "@/db/schema";
 import { getDb } from "@/db/client";
-import { evaluatePolicies, type EvaluatedPolicy, type PolicyRuleSet } from "@/lib/policy/engine";
+import { composeRestrictiveRules, evaluatePolicies, type EvaluatedPolicy, type PolicyRuleSet } from "@/lib/policy/engine";
 import { policyCheckSchema } from "@/lib/policy/schemas";
 
 export type PolicyCheck = ReturnType<typeof policyCheckSchema.parse>;
@@ -51,6 +51,7 @@ export async function evaluateOrganizationPolicy(organizationId: string, checkIn
     });
   }
 
+  const effectiveRules = composeRestrictiveRules(applicable);
   const decision = evaluatePolicies(applicable, {
     observedCostUsd: check.observedCostUsd,
     projectedNextCallCostUsd: check.projectedNextCallCostUsd,
@@ -59,6 +60,9 @@ export async function evaluateOrganizationPolicy(organizationId: string, checkIn
     retries: check.retries,
     failedToolCalls: check.failedToolCalls,
     toolCalls: check.toolCalls,
+    elapsedMs: check.elapsedMs,
+    providerRounds: check.providerRounds,
+    resultBytes: check.resultBytes,
     contextUtilizationPct: check.contextUtilizationPct,
     provider: check.provider,
     model: check.model,
@@ -82,6 +86,7 @@ export async function evaluateOrganizationPolicy(organizationId: string, checkIn
 
   return {
     decision,
+    effectiveRules,
     enforcement: decision.action === "ALLOW" || decision.action === "WARN" || decision.action === "NOTIFY"
       ? "continue"
       : decision.action === "REQUIRE_APPROVAL"

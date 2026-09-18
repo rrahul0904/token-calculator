@@ -12,7 +12,7 @@ const requiredTables = [
   "budgets", "policies", "approvals", "audit_events", "alert_endpoints", "alert_deliveries",
   "teams", "team_members", "project_teams", "cost_center_assignments", "pricing_snapshots",
   "provider_usage_imports", "provider_usage_import_rows", "anomalies", "prompt_config_versions", "run_config_attributions",
-  "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results",
+  "evaluation_datasets", "evaluation_cases", "experiments", "experiment_results", "verified_savings",
   "workos_directory_events", "workos_directory_users", "workos_directory_groups", "organization_data_controls",
   "platform_admins", "platform_admin_audit_events", "platform_cost_entries", "platform_daily_metrics",
   "inference_endpoints", "pricing_catalog_snapshots", "pricing_rates", "pricing_overrides", "scenario_versions",
@@ -29,6 +29,7 @@ const requiredMigrations = [
   "0006_data_controls.sql",
   "0007_platform_admin_operations.sql",
   "0008_workload_pricing_intelligence.sql",
+  "0009_verified_savings_ledger.sql",
 ];
 
 const requiredTriggers = [
@@ -46,6 +47,7 @@ const requiredTriggers = [
   "ti_experiment_results_experiment_tenant",
   "ti_experiment_results_run_tenant",
   "ti_provider_usage_import_rows_import_tenant",
+  "ti_verified_savings_experiment_tenant",
 ];
 
 const requiredIndexes = [
@@ -58,6 +60,8 @@ const requiredIndexes = [
   "pricing_catalog_snapshots_source_published_idx", "pricing_rates_snapshot_endpoint_uq",
   "pricing_rates_endpoint_idx", "pricing_overrides_endpoint_idx",
   "scenario_versions_scenario_version_uq", "scenario_versions_pricing_snapshot_idx",
+  "verified_savings_experiment_version_uq", "verified_savings_experiment_evidence_hash_uq",
+  "verified_savings_org_verified_idx",
 ];
 
 async function main() {

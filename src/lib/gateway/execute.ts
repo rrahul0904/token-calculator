@@ -8,6 +8,14 @@ import { calculateCost } from "@/lib/cost";
 import { decryptProviderCredential } from "@/lib/gateway/provider-credential";
 import type { GatewayProviderName } from "@/lib/gateway/provider-connectivity";
 import { parseSseUsage, providerForName, type GatewayProviderAdapter, type GatewayRequest, type GatewayUsage } from "@/lib/gateway/providers";
+import {
+  createGatewayRuntimeMeter,
+  markProviderRound,
+  remainingRuntimeTimeoutMs,
+  snapshotGatewayRuntime,
+  utf8ResultBytes,
+  type GatewayRuntimeMeter,
+} from "@/lib/gateway/runtime-budget";
 import { MODEL_CATALOG } from "@/lib/models";
 import { exportGatewayTrace } from "@/lib/otel/export";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
@@ -316,9 +324,11 @@ async function evaluateCallPolicy(args: {
   model: string;
   estimatedCost: number | null;
   retryCount: number;
+  runtime: GatewayRuntimeMeter;
   isFallback: boolean;
   fallbackPremiumUsd?: number;
 }) {
+  const runtime = snapshotGatewayRuntime(args.runtime);
   return evaluateOrganizationPolicy(args.principal.organizationId, {
     projectId: args.projectId,
     environment: args.input.environment,
@@ -334,10 +344,47 @@ async function evaluateCallPolicy(args: {
     retries: args.retryCount,
     failedToolCalls: 0,
     toolCalls: 0,
+    elapsedMs: runtime.elapsedMs,
+    providerRounds: runtime.providerRounds,
+    resultBytes: 0,
     provider: args.provider,
     model: args.model,
     isFallback: args.isFallback,
     fallbackPremiumUsd: args.fallbackPremiumUsd,
+  });
+}
+
+async function evaluateDeliveryPolicy(args: {
+  principal: ApiPrincipal;
+  input: GovernedGatewayRequest;
+  projectId: string | null;
+  runId: string;
+  provider: string;
+  model: string;
+  elapsedMs: number;
+  resultBytes: number;
+  isFallback: boolean;
+}) {
+  return evaluateOrganizationPolicy(args.principal.organizationId, {
+    projectId: args.projectId,
+    environment: args.input.environment,
+    serviceAccountId: args.principal.serviceAccountId ?? undefined,
+    apiKeyId: args.principal.apiKeyId,
+    agent: args.input.agentName,
+    workflow: args.input.workflowName ?? undefined,
+    runId: args.runId,
+    observedCostUsd: 0,
+    tokens: 0,
+    turns: 0,
+    retries: 0,
+    failedToolCalls: 0,
+    toolCalls: 0,
+    elapsedMs: args.elapsedMs,
+    providerRounds: 0,
+    resultBytes: args.resultBytes,
+    provider: args.provider,
+    model: args.model,
+    isFallback: args.isFallback,
   });
 }
 
@@ -352,6 +399,7 @@ async function callProviderWithPolicy(args: {
   model: string;
   estimatedCost: number | null;
   initialRetryCount: number;
+  runtime: GatewayRuntimeMeter;
   isFallback: boolean;
   fallbackPremiumUsd?: number;
   fallbackFromCallId?: string | null;
@@ -370,6 +418,7 @@ async function callProviderWithPolicy(args: {
       model: args.model,
       estimatedCost: args.estimatedCost,
       retryCount,
+      runtime: args.runtime,
       isFallback: args.isFallback,
       fallbackPremiumUsd: args.fallbackPremiumUsd,
     });
@@ -386,12 +435,17 @@ async function callProviderWithPolicy(args: {
       metadata: args.input.metadata,
     };
     const upstream = args.adapter.buildRequest(request, args.credential);
+    const runtimeBeforeRequest = snapshotGatewayRuntime(args.runtime);
+    const timeoutMs = args.input.stream
+      ? 120_000
+      : remainingRuntimeTimeoutMs(policy.effectiveRules.maxElapsedMs, runtimeBeforeRequest.elapsedMs);
+    markProviderRound(args.runtime);
     const startedAt = new Date();
     let response: Response;
     try {
       response = await fetch(upstream.url, {
         ...upstream.init,
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
       });
     } catch (error) {
@@ -451,7 +505,9 @@ async function callProviderWithPolicy(args: {
   throw new Error("GATEWAY_RETRY_EXHAUSTED");
 }
 
-function policyBlockedResponse(runId: string, policy: PolicyResult, error: string) {
+function policyBlockedResponse(runId: string, policy: PolicyResult, error: string, extraHeaders?: Record<string, string>) {
+  const headers = new Headers({ "Cache-Control": "no-store", "x-ti-run-id": runId });
+  for (const [key, value] of Object.entries(extraHeaders ?? {})) headers.set(key, value);
   return Response.json({
     error,
     action: policy.decision.action,
@@ -459,7 +515,7 @@ function policyBlockedResponse(runId: string, policy: PolicyResult, error: strin
     runId,
   }, {
     status: policy.enforcement === "await_approval" ? 409 : 402,
-    headers: { "Cache-Control": "no-store", "x-ti-run-id": runId },
+    headers,
   });
 }
 
@@ -487,6 +543,7 @@ export async function executeGovernedGateway(
 
   const runId = input.runId ?? `run_${randomUUID()}`;
   const startedAt = new Date();
+  const runtime = createGatewayRuntimeMeter(startedAt.getTime());
   const estimatedInputTokens = estimateTokens(input.input);
   const estimatedCost = estimateModelCost(connection.provider, input.model, estimatedInputTokens, input.maxOutputTokens);
   await ensureRun({
@@ -531,6 +588,7 @@ export async function executeGovernedGateway(
       model: activeModel,
       estimatedCost,
       initialRetryCount: 0,
+      runtime,
       isFallback: false,
     });
   } catch (error) {
@@ -547,11 +605,15 @@ export async function executeGovernedGateway(
       usageSource: attempt.unknownPriorCharge ? "estimated" : "provider_measured",
       updatedAt: new Date(),
     }).where(and(eq(runs.id, runId), eq(runs.organizationId, principal.organizationId)));
+    const blockedRuntime = snapshotGatewayRuntime(runtime);
     return {
       runId,
       callId: attempt.lastAttemptId,
       policyAction: attempt.policy.decision.action,
-      response: policyBlockedResponse(runId, attempt.policy, "GATEWAY_POLICY_BLOCKED"),
+      response: policyBlockedResponse(runId, attempt.policy, "GATEWAY_POLICY_BLOCKED", {
+        "x-ti-provider-rounds": String(blockedRuntime.providerRounds),
+        "x-ti-elapsed-ms": String(blockedRuntime.elapsedMs),
+      }),
     };
   }
 
@@ -596,6 +658,7 @@ export async function executeGovernedGateway(
         model: activeModel,
         estimatedCost: fallbackEstimate,
         initialRetryCount: totalRetryCount,
+        runtime,
         isFallback: true,
         fallbackPremiumUsd: premium,
         fallbackFromCallId,
@@ -612,11 +675,15 @@ export async function executeGovernedGateway(
           usageSource: "estimated",
           updatedAt: new Date(),
         }).where(and(eq(runs.id, runId), eq(runs.organizationId, principal.organizationId)));
+        const blockedRuntime = snapshotGatewayRuntime(runtime);
         return {
           runId,
           callId: fallbackAttempt.lastAttemptId,
           policyAction: fallbackAttempt.policy.decision.action,
-          response: policyBlockedResponse(runId, fallbackAttempt.policy, "GATEWAY_FALLBACK_BLOCKED"),
+          response: policyBlockedResponse(runId, fallbackAttempt.policy, "GATEWAY_FALLBACK_BLOCKED", {
+            "x-ti-provider-rounds": String(blockedRuntime.providerRounds),
+            "x-ti-elapsed-ms": String(blockedRuntime.elapsedMs),
+          }),
         };
       }
       attempt = fallbackAttempt;
@@ -633,12 +700,15 @@ export async function executeGovernedGateway(
   const attemptIndex = attempt.attemptIndex;
   const finalPolicy = attempt.policy;
   const latencyAtHeaders = Date.now() - upstreamStarted;
+  const runtimeAtHeaders = snapshotGatewayRuntime(runtime);
   const baseHeaders = new Headers(upstreamResponse.headers);
   baseHeaders.set("Cache-Control", "no-store");
   baseHeaders.set("x-ti-run-id", runId);
   baseHeaders.set("x-ti-policy-action", finalPolicy.decision.action);
   baseHeaders.set("x-ti-model-resolved", activeModel);
   baseHeaders.set("x-ti-cost-certainty", unknownPriorCharge ? "partial_unknown" : "provider_reconciled");
+  baseHeaders.set("x-ti-provider-rounds", String(runtimeAtHeaders.providerRounds));
+  baseHeaders.set("x-ti-elapsed-ms-at-headers", String(runtimeAtHeaders.elapsedMs));
   baseHeaders.delete("content-length");
 
   if (input.stream && upstreamResponse.body) {
@@ -709,6 +779,7 @@ export async function executeGovernedGateway(
   }
 
   const rawText = await upstreamResponse.text();
+  const resultBytes = utf8ResultBytes(rawText);
   let payload: unknown = null;
   try { payload = rawText ? JSON.parse(rawText) : null; } catch { payload = null; }
   const endedAt = new Date();
@@ -716,6 +787,18 @@ export async function executeGovernedGateway(
   const resolvedModel = payload === null ? activeModel : adapter.resolvedModel(payload, activeModel);
   const requestId = payload === null ? providerRequestId(upstreamResponse) : adapter.providerRequestId(payload, upstreamResponse);
   const cost = costForUsage(connection.provider, resolvedModel, usage);
+  const deliveryRuntime = snapshotGatewayRuntime(runtime, endedAt.getTime(), resultBytes);
+  const deliveryPolicy = await evaluateDeliveryPolicy({
+    principal,
+    input,
+    projectId,
+    runId,
+    provider: connection.provider,
+    model: resolvedModel,
+    elapsedMs: deliveryRuntime.elapsedMs,
+    resultBytes,
+    isFallback: fallbackUsed,
+  });
   const callId = await persistCall({
     organizationId: principal.organizationId,
     runId,
@@ -753,20 +836,45 @@ export async function executeGovernedGateway(
     ttftMs: latencyAtHeaders,
     attemptIndex,
     fallbackUsed,
-    policyAction: finalPolicy.decision.action,
+    policyAction: deliveryPolicy.decision.action,
     usage,
     costUsd: cost,
   }).catch(() => "failed");
 
+  if (deliveryPolicy.enforcement !== "continue") {
+    await db.update(runs).set({
+      status: "budget_blocked",
+      endedAt,
+      terminationReason: deliveryPolicy.decision.action,
+      retryCount: totalRetryCount,
+      fallbackCount: fallbackUsed ? 1 : 0,
+      updatedAt: new Date(),
+    }).where(and(eq(runs.id, runId), eq(runs.organizationId, principal.organizationId)));
+    return {
+      runId,
+      callId,
+      policyAction: deliveryPolicy.decision.action,
+      response: policyBlockedResponse(runId, deliveryPolicy, "GATEWAY_RESULT_POLICY_BLOCKED", {
+        "x-ti-call-id": callId,
+        "x-ti-provider-rounds": String(deliveryRuntime.providerRounds),
+        "x-ti-elapsed-ms": String(deliveryRuntime.elapsedMs),
+        "x-ti-result-bytes": String(deliveryRuntime.resultBytes),
+      }),
+    };
+  }
+
   baseHeaders.set("x-ti-call-id", callId);
+  baseHeaders.set("x-ti-policy-action", deliveryPolicy.decision.action);
   baseHeaders.set("x-ti-usage-source", unknownPriorCharge ? "partial_unknown" : "provider_measured");
+  baseHeaders.set("x-ti-elapsed-ms", String(deliveryRuntime.elapsedMs));
+  baseHeaders.set("x-ti-result-bytes", String(deliveryRuntime.resultBytes));
   if (cost !== null) baseHeaders.set("x-ti-final-call-cost-usd", cost.toFixed(8));
   if (cost !== null && !unknownPriorCharge) baseHeaders.set("x-ti-reconciled-cost-usd", cost.toFixed(8));
   baseHeaders.set("content-type", upstreamResponse.headers.get("content-type") ?? "application/json");
   return {
     runId,
     callId,
-    policyAction: finalPolicy.decision.action,
+    policyAction: deliveryPolicy.decision.action,
     response: new Response(rawText, { status: upstreamResponse.status, headers: baseHeaders }),
   };
 }

@@ -1,8 +1,9 @@
 import { and, desc, eq, gte } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { findings, llmCalls, projects, runs } from "@/db/schema";
-import { evaluationDatasets, experimentResults, experiments } from "@/db/gap-closure-schema";
+import { findings, llmCalls, outcomes, projects, runs } from "@/db/schema";
+import { evaluationDatasets, experimentResults, experiments, verifiedSavings } from "@/db/gap-closure-schema";
 import { experimentEvidence } from "@/lib/evaluations/experiment-evidence";
+import { summarizeOutcomeEconomics } from "@/lib/outcomes/economics";
 
 function money(value: string | null) {
   if (value === null) return null;
@@ -96,12 +97,15 @@ export async function getRouteLabData(organizationId: string) {
 
 export async function getExperimentsDashboardData(organizationId: string) {
   const db = getDb();
-  const [experimentRows, resultRows, datasetRows] = await Promise.all([
+  const [experimentRows, resultRows, datasetRows, savingsRows] = await Promise.all([
     db.select().from(experiments).where(eq(experiments.organizationId, organizationId)).orderBy(desc(experiments.updatedAt)).limit(100),
     db.select().from(experimentResults).where(eq(experimentResults.organizationId, organizationId)).orderBy(desc(experimentResults.createdAt)).limit(5000),
     db.select().from(evaluationDatasets).where(eq(evaluationDatasets.organizationId, organizationId)).orderBy(desc(evaluationDatasets.updatedAt)).limit(250),
+    db.select().from(verifiedSavings).where(eq(verifiedSavings.organizationId, organizationId)).orderBy(desc(verifiedSavings.verifiedAt)).limit(500),
   ]);
   const datasetById = new Map(datasetRows.map((dataset) => [dataset.id, dataset]));
+  const latestSavingsByExperiment = new Map<string, (typeof savingsRows)[number]>();
+  for (const savings of savingsRows) if (!latestSavingsByExperiment.has(savings.experimentId)) latestSavingsByExperiment.set(savings.experimentId, savings);
   const items = experimentRows.map((experiment) => {
     const results = resultRows.filter((result) => result.experimentId === experiment.id);
     const byVariant = new Map<string, { count: number; successful: number; costs: number[]; qualities: number[]; latencies: number[] }>();
@@ -118,6 +122,7 @@ export async function getExperimentsDashboardData(organizationId: string) {
     }
     const variants = [...byVariant.entries()].map(([variant, group]) => ({ variant, count: group.count, successRate: group.count ? group.successful / group.count : null, medianCostUsd: median(group.costs), medianQuality: median(group.qualities), medianLatencyMs: median(group.latencies) }));
     const variantByName = new Map(variants.map((variant) => [variant.variant.toLowerCase(), variant]));
+    const latestSavings = latestSavingsByExperiment.get(experiment.id);
     return {
       ...experiment,
       dataset: datasetById.get(experiment.datasetId) ?? null,
@@ -130,7 +135,53 @@ export async function getExperimentsDashboardData(organizationId: string) {
         candidate: variantByName.get("candidate"),
         minimumQualityScore: money(experiment.qualityThreshold),
       }),
+      latestVerifiedSavings: latestSavings ? {
+        id: latestSavings.id,
+        version: latestSavings.version,
+        savingsPerObservationUsd: money(latestSavings.savingsPerObservationUsd),
+        savingsPct: money(latestSavings.savingsPct),
+        baselineSampleSize: latestSavings.baselineSampleSize,
+        candidateSampleSize: latestSavings.candidateSampleSize,
+        verifiedAt: latestSavings.verifiedAt,
+      } : null,
     };
   });
-  return { items, datasetCount: datasetRows.length, resultCount: resultRows.length };
+  return { items, datasetCount: datasetRows.length, resultCount: resultRows.length, verifiedSavingsCount: savingsRows.length };
+}
+
+
+export async function getOutcomeEconomicsData(organizationId: string) {
+  const db = getDb();
+  const [runRows, outcomeRows] = await Promise.all([
+    db.select({
+      id: runs.id,
+      repo: runs.repo,
+      agentName: runs.agentName,
+      reconciledCostUsd: runs.reconciledCostUsd,
+      actualCostUsd: runs.actualCostUsd,
+      estimatedCostUsd: runs.estimatedCostUsd,
+    }).from(runs).where(eq(runs.organizationId, organizationId)).orderBy(desc(runs.startedAt)).limit(5000),
+    db.select().from(outcomes).where(eq(outcomes.organizationId, organizationId)).limit(5000),
+  ]);
+  const outcomeByRunId = new Map(outcomeRows.map((outcome) => [outcome.runId, outcome]));
+  return summarizeOutcomeEconomics(runRows.map((run) => {
+    const outcome = outcomeByRunId.get(run.id);
+    return {
+      runId: run.id,
+      repo: run.repo,
+      agentName: run.agentName,
+      reconciledCostUsd: money(run.reconciledCostUsd),
+      actualCostUsd: money(run.actualCostUsd),
+      estimatedCostUsd: money(run.estimatedCostUsd),
+      outcome: outcome ? {
+        taskCompleted: outcome.taskCompleted,
+        testsPassed: outcome.testsPassed,
+        prNumber: outcome.prNumber,
+        ciPassed: outcome.ciPassed,
+        merged: outcome.merged,
+        deploymentSuccessful: outcome.deploymentSuccessful,
+        associationConfidence: money(outcome.associationConfidence),
+      } : null,
+    };
+  }));
 }

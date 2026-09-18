@@ -17,6 +17,9 @@ const baseline = {
   retries: 0,
   failedToolCalls: 0,
   toolCalls: 3,
+  elapsedMs: 1_000,
+  providerRounds: 1,
+  resultBytes: 2_048,
 };
 
 describe("policy evaluation", () => {
@@ -32,6 +35,19 @@ describe("policy evaluation", () => {
       { ...baseline, observedCostUsd: 1.1, projectedNextCallCostUsd: 0.2 },
     );
     expect(result.action).toBe("BLOCK_NEXT_CALL");
+  });
+
+  it("kills runs that reach hard runtime ceilings", () => {
+    expect(evaluatePolicies([policy("time", { maxElapsedMs: 1_000 })], baseline)).toMatchObject({ action: "KILL_RUN", constraints: ["maxElapsedMs"] });
+    expect(evaluatePolicies([policy("rounds", { maxProviderRounds: 1 })], baseline)).toMatchObject({ action: "KILL_RUN", constraints: ["maxProviderRounds"] });
+    expect(evaluatePolicies([policy("bytes", { maxResultBytes: 2_048 })], baseline)).toMatchObject({ action: "KILL_RUN", constraints: ["maxResultBytes"] });
+  });
+
+  it("allows runtime state while it remains below every ceiling", () => {
+    const result = evaluatePolicies([
+      policy("runtime", { maxElapsedMs: 2_000, maxProviderRounds: 2, maxResultBytes: 4_096 }),
+    ], baseline);
+    expect(result.action).toBe("ALLOW");
   });
 
   it("requires approval for a costly fallback unless a stronger rule blocks it", () => {
@@ -61,11 +77,14 @@ describe("policy evaluation", () => {
 describe("restrictive policy composition", () => {
   it("takes the lowest hard limits and intersections of allowlists", () => {
     const result = composeRestrictiveRules([
-      policy("org", { maxCostUsd: 10, maxRetries: 4, allowedProviders: ["OpenAI", "Anthropic"], allowedModels: ["a", "b"] }),
-      policy("project", { maxCostUsd: 5, maxRetries: 2, allowedProviders: ["Anthropic", "Google"], allowedModels: ["b", "c"], disableFallback: true }),
+      policy("org", { maxCostUsd: 10, maxRetries: 4, maxElapsedMs: 60_000, maxProviderRounds: 8, maxResultBytes: 2_000_000, allowedProviders: ["OpenAI", "Anthropic"], allowedModels: ["a", "b"] }),
+      policy("project", { maxCostUsd: 5, maxRetries: 2, maxElapsedMs: 30_000, maxProviderRounds: 4, maxResultBytes: 1_000_000, allowedProviders: ["Anthropic", "Google"], allowedModels: ["b", "c"], disableFallback: true }),
     ]);
     expect(result.maxCostUsd).toBe(5);
     expect(result.maxRetries).toBe(2);
+    expect(result.maxElapsedMs).toBe(30_000);
+    expect(result.maxProviderRounds).toBe(4);
+    expect(result.maxResultBytes).toBe(1_000_000);
     expect(result.allowedProviders).toEqual(["Anthropic"]);
     expect(result.allowedModels).toEqual(["b"]);
     expect(result.disableFallback).toBe(true);

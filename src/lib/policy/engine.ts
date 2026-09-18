@@ -8,6 +8,9 @@ export interface PolicyRuleSet {
   maxRetries?: number;
   maxFailedToolCalls?: number;
   maxToolCalls?: number;
+  maxElapsedMs?: number;
+  maxProviderRounds?: number;
+  maxResultBytes?: number;
   maxContextUtilizationPct?: number;
   allowedProviders?: string[];
   allowedModels?: string[];
@@ -32,6 +35,9 @@ export interface PolicyRuntimeState {
   retries: number;
   failedToolCalls: number;
   toolCalls: number;
+  elapsedMs: number;
+  providerRounds: number;
+  resultBytes: number;
   contextUtilizationPct?: number;
   provider?: string;
   model?: string;
@@ -99,6 +105,9 @@ export function evaluatePolicies(policies: EvaluatedPolicy[], state: PolicyRunti
     if (rules.maxRetries !== undefined && state.retries >= rules.maxRetries) decisions.push(decision("KILL_RUN", policy, "Maximum retries reached.", "maxRetries"));
     if (rules.maxFailedToolCalls !== undefined && state.failedToolCalls >= rules.maxFailedToolCalls) decisions.push(decision("KILL_RUN", policy, "Maximum failed tool calls reached.", "maxFailedToolCalls"));
     if (rules.maxToolCalls !== undefined && state.toolCalls >= rules.maxToolCalls) decisions.push(decision("KILL_RUN", policy, "Maximum tool calls reached.", "maxToolCalls"));
+    if (rules.maxElapsedMs !== undefined && state.elapsedMs >= rules.maxElapsedMs) decisions.push(decision("KILL_RUN", policy, "Maximum elapsed runtime reached.", "maxElapsedMs"));
+    if (rules.maxProviderRounds !== undefined && state.providerRounds >= rules.maxProviderRounds) decisions.push(decision("KILL_RUN", policy, "Maximum provider rounds reached.", "maxProviderRounds"));
+    if (rules.maxResultBytes !== undefined && state.resultBytes >= rules.maxResultBytes) decisions.push(decision("KILL_RUN", policy, "Maximum result size reached.", "maxResultBytes"));
     if (rules.maxContextUtilizationPct !== undefined && (state.contextUtilizationPct ?? 0) >= rules.maxContextUtilizationPct) {
       decisions.push(decision("BLOCK_NEXT_CALL", policy, "Context utilization reached the configured ceiling.", "maxContextUtilizationPct"));
     }
@@ -113,8 +122,8 @@ export function evaluatePolicies(policies: EvaluatedPolicy[], state: PolicyRunti
 
 export function composeRestrictiveRules(policies: EvaluatedPolicy[]): PolicyRuleSet {
   const result: PolicyRuleSet = {};
-  const mins: Array<keyof Pick<PolicyRuleSet, "maxCostUsd" | "warnCostUsd" | "maxTokens" | "maxTurns" | "maxRetries" | "maxFailedToolCalls" | "maxToolCalls" | "maxContextUtilizationPct" | "fallbackPremiumApprovalUsd">> = [
-    "maxCostUsd", "warnCostUsd", "maxTokens", "maxTurns", "maxRetries", "maxFailedToolCalls", "maxToolCalls", "maxContextUtilizationPct", "fallbackPremiumApprovalUsd",
+  const mins: Array<keyof Pick<PolicyRuleSet, "maxCostUsd" | "warnCostUsd" | "maxTokens" | "maxTurns" | "maxRetries" | "maxFailedToolCalls" | "maxToolCalls" | "maxElapsedMs" | "maxProviderRounds" | "maxResultBytes" | "maxContextUtilizationPct" | "fallbackPremiumApprovalUsd">> = [
+    "maxCostUsd", "warnCostUsd", "maxTokens", "maxTurns", "maxRetries", "maxFailedToolCalls", "maxToolCalls", "maxElapsedMs", "maxProviderRounds", "maxResultBytes", "maxContextUtilizationPct", "fallbackPremiumApprovalUsd",
   ];
   for (const key of mins) {
     const values = policies.map((policy) => policy.rules[key]).filter((value): value is number => typeof value === "number");

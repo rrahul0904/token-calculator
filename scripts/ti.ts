@@ -8,6 +8,8 @@ import { stdin as input, stdout as output } from "node:process";
 import { commitCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
 import { collectorCapabilities, getCollector } from "@/lib/collectors/registry";
 import type { CollectorName } from "@/lib/collectors/types";
+import { auditCollectorResult, formatLocalUsageAuditReport } from "@/lib/optimization/local-usage-audit";
+import { formatLocalUsageScanReport, scanLocalUsage } from "@/lib/optimization/local-usage-scan";
 import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
 
 interface CliConfig { baseUrl?: string; apiKey?: string; projectId?: string; environment?: string }
@@ -99,6 +101,37 @@ async function compare(args: string[]) {
   print(await requestJson("/api/v1/compare", args, payload, false));
 }
 
+async function parseLocalCollector(name: CollectorName, file: string, args: string[]) {
+  const collector = getCollector(name);
+  if (!collector) throw new Error(`Unknown collector ${name}`);
+  const current = await auth(args);
+  const text = await readFile(resolve(file), "utf8");
+  const parsed = collector.parseJsonLines(text.split(/\r?\n/), { projectId: current.projectId, environment: current.environment });
+  return { ...parsed, events: filterSince(parsed.events, sinceCutoff(argValue(args, "--since"))) };
+}
+
+async function audit(name: CollectorName, file: string, args: string[]) {
+  const parsed = await parseLocalCollector(name, file, args);
+  const report = auditCollectorResult(parsed);
+  if (has(args, "--json")) print(report);
+  else process.stdout.write(formatLocalUsageAuditReport(report));
+}
+
+async function scan(name: CollectorName, root: string | undefined, args: string[]) {
+  const current = await auth(args);
+  const maxFiles = numberArg(args, "--max-files");
+  const report = await scanLocalUsage({
+    collector: name,
+    roots: root ? [root] : undefined,
+    projectId: current.projectId,
+    environment: current.environment,
+    since: sinceCutoff(argValue(args, "--since")),
+    maxFiles: maxFiles === undefined ? undefined : Math.max(1, Math.trunc(maxFiles)),
+  });
+  if (has(args, "--json")) print(report);
+  else process.stdout.write(formatLocalUsageScanReport(report));
+}
+
 async function collect(name: CollectorName, file: string, args: string[], upload: boolean) {
   const collector = getCollector(name);
   if (!collector) throw new Error(`Unknown collector ${name}`);
@@ -151,7 +184,7 @@ async function watch(name: CollectorName, file: string, args: string[]) {
 }
 
 function help() {
-  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--provider P] [--model M]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nSync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
+  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--tokens N] [--turns N] [--retries N] [--tools N] [--elapsed-ms N] [--provider-rounds N] [--result-bytes N] [--provider P] [--model M]\n  audit <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--json]\n  scan <codex|claude|cursor|antigravity> [ROOT] [--project ID] [--since 7d] [--max-files N] [--json]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nAudit and scan are strictly local: they analyze normalized metadata and do not require an API key or make a Token Intelligence API request. Scan auto-discovers repository-certified Codex/Claude history paths; Cursor/Antigravity require an explicit ROOT until stable on-disk paths are certified. Scan deduplicates sessions and emits daily/weekly/monthly session-end rollups without adding overlapping findings into a fake savings total. Sync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
 }
 
 async function main() {
@@ -166,7 +199,27 @@ async function main() {
   if (command === "runs" && args[1] === "show" && args[2]) return print(await requestJson(`/api/v1/runs/${encodeURIComponent(args[2])}`, args.slice(3)));
   if (command === "budget" && args[1] === "check") {
     const rest = args.slice(2); const current = await auth(rest);
-    return print(await requestJson("/api/v1/budgets/check", rest, { projectId: current.projectId, observedCostUsd: numberArg(rest, "--observed-cost", 0), projectedNextCallCostUsd: numberArg(rest, "--projected-cost"), tokens: numberArg(rest, "--tokens", 0), turns: numberArg(rest, "--turns", 0), retries: numberArg(rest, "--retries", 0), failedToolCalls: 0, toolCalls: numberArg(rest, "--tools", 0), provider: argValue(rest, "--provider"), model: argValue(rest, "--model") }));
+    return print(await requestJson("/api/v1/budgets/check", rest, {
+      projectId: current.projectId,
+      observedCostUsd: numberArg(rest, "--observed-cost", 0),
+      projectedNextCallCostUsd: numberArg(rest, "--projected-cost"),
+      tokens: numberArg(rest, "--tokens", 0),
+      turns: numberArg(rest, "--turns", 0),
+      retries: numberArg(rest, "--retries", 0),
+      failedToolCalls: 0,
+      toolCalls: numberArg(rest, "--tools", 0),
+      elapsedMs: numberArg(rest, "--elapsed-ms", 0),
+      providerRounds: numberArg(rest, "--provider-rounds", 0),
+      resultBytes: numberArg(rest, "--result-bytes", 0),
+      provider: argValue(rest, "--provider"),
+      model: argValue(rest, "--model"),
+    }));
+  }
+  if (command === "audit" && args[1] && args[2]) return audit(args[1] as CollectorName, args[2], args.slice(3));
+  if (command === "scan" && args[1]) {
+    const root = args[2] && !args[2].startsWith("--") ? args[2] : undefined;
+    const rest = root ? args.slice(3) : args.slice(2);
+    return scan(args[1] as CollectorName, root, rest);
   }
   if (command === "collect" && args[1] && args[2]) return collect(args[1] as CollectorName, args[2], args.slice(3), !has(args, "--dry-run"));
   if (command === "sync" && args[1] && args[2]) return sync(args[1] as CollectorName, args[2], args.slice(3));
