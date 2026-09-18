@@ -51,8 +51,10 @@ jobs:
               echo "The exact-SHA release workflow is implemented, but the GitHub Actions secret VERCEL_TOKEN is not configured."
               echo "Ephemeral WorkOS release users are provisioned inside the workflow and require no stored user credentials."
               echo ""
-              echo "No deployment was attempted."
+              echo "No deployment was attempted. The workflow fails closed so a skipped deployment can never appear release-green."
             } >> "$GITHUB_STEP_SUMMARY"
+            echo "missing required GitHub Actions secret: VERCEL_TOKEN" >&2
+            exit 2
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
