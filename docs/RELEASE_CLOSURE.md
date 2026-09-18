@@ -1,6 +1,6 @@
 # Token Intelligence Release Closure
 
-Last reconciled: 2026-09-12 UTC
+Last reconciled: 2026-09-18 UTC
 
 This file records release evidence and blockers. Missing provider/account evidence is never converted into PASS.
 
@@ -8,7 +8,6 @@ This file records release evidence and blockers. Missing provider/account eviden
 
 - Repository: `rrahul0904/token-calculator`
 - Canonical release branch: `release-candidate-full-site`
-- Canonical release PR: #14 — `release: full-site integration candidate`
 - Stable Production: `https://token-intelligence-eight.vercel.app`
 - Vercel project: `token-intelligence` (`prj_ADoR3dW8VcpJOaQcagZXOpioyM7l`)
 - Vercel team: `team_zmEezpOKGZy2sH5nqTfO44LD`
@@ -19,7 +18,7 @@ This file records release evidence and blockers. Missing provider/account eviden
 - WorkOS Production: `environment_01M1G0NZHV4J3CNS2WQZB2JER4`
 - Stripe live account: `acct_1QrNa7RB8OGmEnBw`
 
-The exact final SHA and CI run are recorded in PR #14 only after the final branch head completes the full matrix.
+The canonical release source is the exact SHA on `main`, mirrored to `release-candidate-full-site`. Exact-SHA CI and external blocker evidence are tracked by the release workflows plus issues #28 and #35.
 
 ## Repository implementation state
 
@@ -37,7 +36,7 @@ The launch product is implemented end to end at the repository level, including:
 - WorkOS/AuthKit session/callback/sign-out hardening;
 - Stripe Checkout/portal/webhook entitlement implementation;
 - ephemeral WorkOS release-certification users created, masked and deleted by Preview/Production workflows;
-- forward migrations through `0008_workload_pricing_intelligence`;
+- forward migrations through `0011_verified_savings_revalidations`;
 - exact-SHA Preview certification, staged Production certification/promotion and automatic rollback controls.
 
 Authenticated browser acceptance now covers the experiment lifecycle, saved scenario history, budget/policy/approval control plane and the existing tenant/API-key/privacy/workspace journeys. Prompt content remains non-durable in Cost Lab and evaluation workflows.
@@ -48,10 +47,10 @@ Issue #1 is closed as completed. Issue #3 remains open only for broader post-lau
 
 | Area | Status | Evidence |
 |---|---|---|
-| Repository implementation | PENDING_FINAL_EXACT_HEAD_CI | Functional wave passed lint/typecheck/unit/migrations/DB integration/build and Playwright on the implementation head; documentation reconciliation moved the branch and requires one final exact-head run |
-| Migration chain | PASS | CI applies `0000` through `0008` on disposable PostgreSQL and verifies checksums/schema/triggers |
-| Neon validation branch | PASS | `0008` applied and verified on `br-small-haze-aeqj7d25` |
-| Neon Production baseline | PASS_BASELINE | Production remains intentionally through `0007`; `0008` is reserved for the gated Production workflow |
+| Repository implementation | PASS | Canonical `main` and release-candidate paths require full CI, production build and Playwright smoke on the exact release SHA; no open code PR may be treated as release evidence |
+| Migration chain | PASS | CI applies `0000` through `0011` on disposable PostgreSQL and verifies checksums/schema/triggers; release manifests derive this inventory from checked-in SQL |
+| Neon validation branch | PASS | Schema through `0011` is present on `br-small-haze-aeqj7d25`; transaction pooling is enabled |
+| Neon Production baseline | PASS | Production `br-muddy-sun-aeyodc4h` records migrations `0000` through `0011`; required tables, outcome identity columns, indexes and tenant triggers were verified; transaction pooling is enabled |
 | WorkOS Staging | PASS_PROVIDER | AuthKit/API key, Preview origins, MCP OAuth resources, Directory Sync webhook and ephemeral-user create/delete smoke verified |
 | Stripe live catalog/webhook | PASS_PROVIDER | Pro $15/month, Team $29/seat/month and exact Production lifecycle webhook verified |
 | Vercel deployment credential | BLOCKED_EXTERNAL | GitHub Actions `VERCEL_TOKEN` is still absent; fresh Preview preflight re-check confirmed it |
@@ -62,7 +61,6 @@ Issue #1 is closed as completed. Issue #3 remains open only for broader post-lau
 | Vercel Production runtime | BLOCKED_EXTERNAL | Stable deployment is old and does not yet contain the launch-critical Production runtime contract |
 | Exact-SHA Preview certification | BLOCKED_EXTERNAL | Cannot deploy until Vercel credential/runtime gates above are resolved |
 | Production certification | NOT_RUN | Must consume a certified Preview manifest; no Production traffic change is allowed before staged certification |
-| PR #14 merge | BLOCKED | Remains draft until Preview + Production are certified |
 
 GitHub outcome attribution, OTEL and Redis are optional and are not launch-critical release checks.
 
@@ -105,12 +103,11 @@ Live Stripe provider resources are already correct. Preview billing certificatio
 2. Install `VERCEL_TOKEN` and correct Preview runtime values.
 3. Release Preview verifies Neon identity/migrations, provisions temporary WorkOS Staging users, deploys the exact SHA, certifies AuthKit/onboarding/Stripe TEST/MCP/health/5xx, cleans temporary users and emits `preview_certified` evidence.
 4. Activate WorkOS Production with real billing information and install the Production runtime contract.
-5. Release Production downloads/re-certifies the Preview manifest, verifies WorkOS/live Stripe/Neon and applies forward-only `0008` to the verified Production branch.
+5. Release Production downloads/re-certifies the Preview manifest, verifies WorkOS/live Stripe/Neon and runs the forward-only migration verifier against the verified Production branch. With the current schema, `0000` through `0011` must already checksum-match; future migrations are applied only by this gated path.
 6. The workflow creates a staged Production deployment without moving traffic, provisions a temporary Production AuthKit user, and certifies build identity/health/auth/MCP/5xx.
 7. It promotes the already-certified staged deployment and proves the stable domain serves the same deployment ID.
 8. Any failed post-promotion certification triggers automatic rollback; temporary auth users are cleaned up.
-9. Only after stable Production certification may PR #14 be marked ready and merged.
-10. Finalization verifies the certified SHA is on `main` and creates the release/tag record.
+9. Finalization verifies the Production-certified SHA is on `main` and creates the release/tag record from the exact manifest evidence.
 
 ## Final determination
 
