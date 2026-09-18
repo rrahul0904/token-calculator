@@ -13,6 +13,9 @@ test.describe("budget policy and approval control plane", () => {
     expect(response?.status()).toBeLessThan(400);
     await expect(page.getByRole("heading", { name: "Create policy" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Approval queue" })).toBeVisible();
+    await expect(page.getByText("Max autonomous action risk", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Approval categories")).toBeVisible();
+    await expect(page.getByLabel("Blocked categories")).toBeVisible();
     await expect(page.getByText("Max autonomous action risk")).toBeVisible();
   });
 
