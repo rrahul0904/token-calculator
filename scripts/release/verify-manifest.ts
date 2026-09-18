@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import process from "node:process";
+import { releaseMigrationInventory } from "./migration-inventory";
 
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -18,7 +19,12 @@ const manifest = JSON.parse(await readFile(path, "utf8")) as {
   vercelPreviewUrl?: string | null;
   productionUrl?: string | null;
   vercelDeploymentId?: string | null;
+  migrationCount?: number;
+  migrationRange?: [string, string];
+  migrationFiles?: string[];
+  workosEnvironment?: string;
 };
+const migrationInventory = await releaseMigrationInventory();
 
 const checks = {
   sha: Boolean(expectedSha && manifest.gitSha === expectedSha),
@@ -26,6 +32,10 @@ const checks = {
   previewUrl: !["preview_certified", "production_certified"].includes(expectedStatus) || Boolean(manifest.vercelPreviewUrl),
   productionUrl: expectedStatus !== "production_certified" || Boolean(manifest.productionUrl),
   deploymentId: !["preview_certified", "production_certified"].includes(expectedStatus) || Boolean(manifest.vercelDeploymentId),
+  migrationCount: manifest.migrationCount === migrationInventory.count,
+  migrationRange: JSON.stringify(manifest.migrationRange) === JSON.stringify(migrationInventory.range),
+  migrationFiles: JSON.stringify(manifest.migrationFiles) === JSON.stringify(migrationInventory.files),
+  workosEnvironment: Boolean(manifest.workosEnvironment),
 };
 process.stdout.write(JSON.stringify({
   path,
@@ -36,6 +46,9 @@ process.stdout.write(JSON.stringify({
     vercelPreviewUrl: manifest.vercelPreviewUrl,
     productionUrl: manifest.productionUrl,
     vercelDeploymentId: manifest.vercelDeploymentId,
+    migrationCount: manifest.migrationCount,
+    migrationRange: manifest.migrationRange,
+    workosEnvironment: manifest.workosEnvironment,
   },
 }, null, 2) + "\n");
 if (!Object.values(checks).every(Boolean)) process.exitCode = 2;
