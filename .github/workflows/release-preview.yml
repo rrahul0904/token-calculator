@@ -295,6 +295,7 @@ jobs:
           --preview-url="${{ steps.deploy.outputs.url }}"
           --neon-branch="release-validation-full-site"
           --status="preview_certified"
+          --workos-environment="environment_01M1G0NYZ6EX1MR9Z51Y7VZ15X"
 
       - run: npm run release:report
 
