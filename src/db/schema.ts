@@ -445,13 +445,24 @@ export const outcomes = pgTable(
     commitSha: text("commit_sha"),
     prNumber: integer("pr_number"),
     ciPassed: boolean("ci_passed"),
+    ciProvider: text("ci_provider"),
+    ciRunId: text("ci_run_id"),
     merged: boolean("merged"),
     deploymentSuccessful: boolean("deployment_successful"),
+    deploymentProvider: text("deployment_provider"),
+    deploymentId: text("deployment_id"),
+    deploymentEnvironment: text("deployment_environment"),
+    deployedAt: timestamp("deployed_at", { withTimezone: true }),
     associationConfidence: numeric("association_confidence", { precision: 6, scale: 4 }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     ...timestamps,
   },
-  (table) => [uniqueIndex("outcomes_run_uq").on(table.runId), index("outcomes_org_idx").on(table.organizationId)],
+  (table) => [
+    uniqueIndex("outcomes_run_uq").on(table.runId),
+    index("outcomes_org_idx").on(table.organizationId),
+    index("outcomes_ci_run_idx").on(table.organizationId, table.ciProvider, table.ciRunId),
+    index("outcomes_deployment_idx").on(table.organizationId, table.deploymentProvider, table.deploymentId),
+  ],
 );
 
 export const findings = pgTable(

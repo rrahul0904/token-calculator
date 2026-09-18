@@ -178,8 +178,13 @@ export async function getOutcomeEconomicsData(organizationId: string) {
         testsPassed: outcome.testsPassed,
         prNumber: outcome.prNumber,
         ciPassed: outcome.ciPassed,
+        ciProvider: outcome.ciProvider,
+        ciRunId: outcome.ciRunId,
         merged: outcome.merged,
         deploymentSuccessful: outcome.deploymentSuccessful,
+        deploymentProvider: outcome.deploymentProvider,
+        deploymentId: outcome.deploymentId,
+        deploymentEnvironment: outcome.deploymentEnvironment,
         associationConfidence: money(outcome.associationConfidence),
       } : null,
     };

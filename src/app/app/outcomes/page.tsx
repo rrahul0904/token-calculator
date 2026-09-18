@@ -41,6 +41,7 @@ export default async function OutcomesPage() {
             <div className="breakdown-row"><span>Tests-passed runs</span><div className="breakdown-row__bar"><span style={{ width: pct(data.testsPassedRuns, data.highConfidenceRuns) }} /></div><strong>{data.testsPassedRuns}</strong></div>
             <div className="breakdown-row"><span>Task-completed runs</span><div className="breakdown-row__bar"><span style={{ width: pct(data.taskCompletedRuns, data.highConfidenceRuns) }} /></div><strong>{data.taskCompletedRuns}</strong></div>
             <div className="breakdown-row"><span>Successful-deployment linked runs</span><div className="breakdown-row__bar"><span style={{ width: pct(data.deploymentLinkedRuns, data.highConfidenceRuns) }} /></div><strong>{data.deploymentLinkedRuns}</strong></div>
+            <div className="breakdown-row"><span>Unique deployments identified</span><div className="breakdown-row__bar"><span style={{ width: pct(data.identifiedDeployments, Math.max(data.deploymentLinkedRuns, 1)) }} /></div><strong>{data.identifiedDeployments}</strong></div>
           </div>}
         </div>
       </section>
@@ -51,7 +52,7 @@ export default async function OutcomesPage() {
           <div className="finding-list">
             <div className="finding"><div className="finding__top"><h3>Association confidence</h3><SourceBadge source="historically_observed" /></div><p>{data.highConfidenceRuns} of {data.attributedRuns} attributed runs meet the ≥0.80 confidence boundary. {data.lowOrUnknownConfidenceRuns} remain excluded from outcome unit economics.</p></div>
             <div className="finding"><div className="finding__top"><h3>Cost evidence</h3><SourceBadge source="reconciled" /></div><p>{data.knownCostRuns} runs have actual or reconciled cost. {data.estimatedOnlyRuns} are estimated-only and {data.unknownCostRuns} have no usable cost evidence.</p></div>
-            <div className="finding"><div className="finding__top"><h3>Deployment unit</h3><SourceBadge source="historically_observed" /></div><p><Money value={data.knownCostPerDeploymentLinkedRunUsd} /> per high-confidence run linked to a successful deployment. This is deliberately not labeled cost per unique deployment until a stable deployment identity is present.</p></div>
+            <div className="finding"><div className="finding__top"><h3>Deployment unit</h3><SourceBadge source="historically_observed" /></div><p>{data.identifiedDeployments > 0 ? <><Money value={data.knownCostPerDeploymentUsd} /> per fully cost-known unique deployment across {data.identifiedDeployments} identified deployments. Identity coverage is {data.deploymentIdentityCoveragePct === null ? "unknown" : `${(data.deploymentIdentityCoveragePct * 100).toFixed(1)}%`} of successful deployment-linked runs.</> : <><Money value={data.knownCostPerDeploymentLinkedRunUsd} /> per high-confidence run linked to a successful deployment. Stable deployment identity has not been supplied yet, so Token Intelligence does not claim cost per unique deployment.</>}</p></div>
           </div>
         </div>
       </section>

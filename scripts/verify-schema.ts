@@ -30,6 +30,7 @@ const requiredMigrations = [
   "0007_platform_admin_operations.sql",
   "0008_workload_pricing_intelligence.sql",
   "0009_verified_savings_ledger.sql",
+  "0010_stable_outcome_identities.sql",
 ];
 
 const requiredTriggers = [
@@ -62,6 +63,7 @@ const requiredIndexes = [
   "scenario_versions_scenario_version_uq", "scenario_versions_pricing_snapshot_idx",
   "verified_savings_experiment_version_uq", "verified_savings_experiment_evidence_hash_uq",
   "verified_savings_org_verified_idx",
+  "outcomes_ci_run_idx", "outcomes_deployment_idx",
 ];
 
 async function main() {
