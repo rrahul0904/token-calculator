@@ -17,18 +17,25 @@ describeIntegration("retention cron", () => {
   const freshEvent = `ret_fresh_event_${suffix}`;
   const oldAudit = `ret_old_audit_${suffix}`;
   const freshAudit = `ret_fresh_audit_${suffix}`;
+  const oldFinding = `ret_old_finding_${suffix}`;
+  const freshFinding = `ret_fresh_finding_${suffix}`;
+  const otherOrg = `ret_other_org_${suffix}`;
+  const otherRun = `ret_other_run_${suffix}`;
   const policy = `ret_policy_${suffix}`;
   const previousSecret = process.env.CRON_SECRET;
 
   beforeAll(async () => {
     process.env.CRON_SECRET = "integration-retention-secret";
-    await sql`insert into organizations (id, name, slug) values (${org}, 'Retention Org', ${`retention-${suffix}`})`;
+    await sql`insert into organizations (id, name, slug) values
+      (${org}, 'Retention Org', ${`retention-${suffix}`}),
+      (${otherOrg}, 'Other Retention Org', ${`retention-other-${suffix}`})`;
     await sql`insert into retention_policies
       (id, organization_id, telemetry_days, run_days, finding_days, audit_days, enabled)
       values (${policy}, ${org}, 30, 30, 30, 30, true)`;
     await sql`insert into runs (id, organization_id, agent_name, started_at, status, metadata) values
       (${oldRun}, ${org}, 'retention-test', now() - interval '60 days', 'completed', '{}'::jsonb),
-      (${freshRun}, ${org}, 'retention-test', now() - interval '1 day', 'completed', '{}'::jsonb)`;
+      (${freshRun}, ${org}, 'retention-test', now() - interval '1 day', 'completed', '{}'::jsonb),
+      (${otherRun}, ${otherOrg}, 'other-retention-test', now() - interval '60 days', 'completed', '{}'::jsonb)`;
     await sql`insert into usage_events
       (id, organization_id, run_id, source_event_id, source, event_type, occurred_at, payload) values
       (${oldEvent}, ${org}, ${oldRun}, ${`ret-old-${suffix}`}, 'integration', 'retention.test', now() - interval '60 days', '{}'::jsonb),
@@ -37,14 +44,26 @@ describeIntegration("retention cron", () => {
       (id, organization_id, actor_type, action, resource_type, occurred_at, details) values
       (${oldAudit}, ${org}, 'system', 'retention.old', 'test', now() - interval '60 days', '{}'::jsonb),
       (${freshAudit}, ${org}, 'system', 'retention.fresh', 'test', now() - interval '1 day', '{}'::jsonb)`;
+    await sql`insert into findings
+      (id, organization_id, run_id, rule_id, severity, title, evidence, confidence, recommendation, verification_recipe, created_at) values
+      (${oldFinding}, ${org}, ${oldRun}, 'retention.old', 'low', 'Old finding', '{}'::jsonb, 'high', 'Delete when expired', 'Run retention', now() - interval '60 days'),
+      (${freshFinding}, ${org}, ${freshRun}, 'retention.fresh', 'low', 'Fresh finding', '{}'::jsonb, 'high', 'Keep while retained', 'Run retention', now() - interval '1 day')`;
   });
 
   afterAll(async () => {
     await closeDb();
-    await sql`delete from organizations where id = ${org}`;
+    await sql`delete from organizations where id in (${org}, ${otherOrg})`;
     await sql.end({ timeout: 3 });
     if (previousSecret === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = previousSecret;
+  });
+
+  it("reports a configuration error when CRON_SECRET is absent", async () => {
+    delete process.env.CRON_SECRET;
+    const response = await runRetention(new Request("http://test.local/api/internal/retention"));
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ error: "RETENTION_CRON_NOT_CONFIGURED" });
+    process.env.CRON_SECRET = "integration-retention-secret";
   });
 
   it("rejects an invalid cron secret", async () => {
@@ -63,6 +82,7 @@ describeIntegration("retention cron", () => {
     const result = body.data.results.find((item: { organizationId: string }) => item.organizationId === org);
     expect(result).toBeTruthy();
     expect(result.deleted.telemetry).toBeGreaterThanOrEqual(1);
+    expect(result.deleted.findings).toBeGreaterThanOrEqual(1);
     expect(result.deleted.runs).toBeGreaterThanOrEqual(1);
     expect(result.deleted.auditEvents).toBeGreaterThanOrEqual(1);
 
@@ -71,14 +91,20 @@ describeIntegration("retention cron", () => {
         select id from runs where organization_id = ${org}
         union all select id from usage_events where organization_id = ${org}
         union all select id from audit_events where organization_id = ${org}
+        union all select id from findings where organization_id = ${org}
       ) retained
     `;
     const ids = new Set(rows.map((row) => row.id));
     expect(ids.has(oldRun)).toBe(false);
     expect(ids.has(oldEvent)).toBe(false);
     expect(ids.has(oldAudit)).toBe(false);
+    expect(ids.has(oldFinding)).toBe(false);
     expect(ids.has(freshRun)).toBe(true);
     expect(ids.has(freshEvent)).toBe(true);
     expect(ids.has(freshAudit)).toBe(true);
+    expect(ids.has(freshFinding)).toBe(true);
+
+    const otherTenant = await sql<{ id: string }[]>`select id from runs where organization_id = ${otherOrg}`;
+    expect(otherTenant.map((row) => row.id)).toContain(otherRun);
   });
 });
