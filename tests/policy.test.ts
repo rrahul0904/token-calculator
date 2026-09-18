@@ -64,6 +64,29 @@ describe("policy evaluation", () => {
     expect(blocked.action).toBe("BLOCK_NEXT_CALL");
   });
 
+  it("requires approval when explicit action risk exceeds the autonomous ceiling", () => {
+    const result = evaluatePolicies(
+      [policy("risk", { maxAutonomousActionRisk: "medium" })],
+      { ...baseline, actionRisk: "high", actionCategory: "database", actionName: "Apply migration" },
+    );
+    expect(result).toMatchObject({ action: "REQUIRE_APPROVAL", constraints: ["maxAutonomousActionRisk"] });
+    expect(result.reason).toContain("high risk");
+  });
+
+  it("uses explicit action categories for approval and blocking without inspecting content", () => {
+    const approval = evaluatePolicies(
+      [policy("category", { approvalActionCategories: ["browser"] })],
+      { ...baseline, actionCategory: "browser", actionName: "Publish release" },
+    );
+    expect(approval.action).toBe("REQUIRE_APPROVAL");
+
+    const blocked = evaluatePolicies(
+      [policy("category", { approvalActionCategories: ["browser"], blockedActionCategories: ["destructive-admin"] })],
+      { ...baseline, actionRisk: "critical", actionCategory: "destructive-admin", actionName: "Delete tenant" },
+    );
+    expect(blocked.action).toBe("BLOCK_NEXT_CALL");
+  });
+
   it("uses the strongest action while retaining all constraints", () => {
     const result = evaluatePolicies(
       [policy("warn", { warnCostUsd: 0.5 }), policy("provider", { allowedProviders: ["OpenAI"] })],
@@ -88,5 +111,15 @@ describe("restrictive policy composition", () => {
     expect(result.allowedProviders).toEqual(["Anthropic"]);
     expect(result.allowedModels).toEqual(["b"]);
     expect(result.disableFallback).toBe(true);
+  });
+
+  it("composes the most restrictive action-risk ceiling and unions governed categories", () => {
+    const result = composeRestrictiveRules([
+      policy("org", { maxAutonomousActionRisk: "high", approvalActionCategories: ["browser"], blockedActionCategories: ["destructive-admin"] }),
+      policy("project", { maxAutonomousActionRisk: "medium", approvalActionCategories: ["database"], blockedActionCategories: ["credential-export"] }),
+    ]);
+    expect(result.maxAutonomousActionRisk).toBe("medium");
+    expect(result.approvalActionCategories).toEqual(expect.arrayContaining(["browser", "database"]));
+    expect(result.blockedActionCategories).toEqual(expect.arrayContaining(["destructive-admin", "credential-export"]));
   });
 });
