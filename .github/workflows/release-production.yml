@@ -302,6 +302,7 @@ jobs:
           --production-url="$PRODUCTION_URL"
           --neon-branch="main"
           --status="production_certified"
+          --workos-environment="environment_01M1G0NZHV4J3CNS2WQZB2JER4"
 
       - run: npm run release:report
 
