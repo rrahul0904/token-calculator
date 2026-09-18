@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
+import { releaseMigrationInventory } from "./migration-inventory";
 
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -17,6 +18,7 @@ function required(name: string, fallback?: string) {
 
 const status = required("status");
 const output = resolve(argument("output") ?? "release-evidence/release-manifest.json");
+const migrationInventory = await releaseMigrationInventory();
 const manifest = {
   schemaVersion: 1,
   application: "token-intelligence",
@@ -31,9 +33,10 @@ const manifest = {
   productionUrl: argument("production-url") ?? null,
   neonProjectId: "restless-queen-06517393",
   neonBranch: argument("neon-branch") ?? (status === "production_certified" ? "main" : "release-validation-full-site"),
-  migrationCount: 8,
-  migrationRange: ["0000", "0007"],
-  workosEnvironment: "environment_01M1G0NZHV4J3CNS2WQZB2JER4",
+  migrationCount: migrationInventory.count,
+  migrationRange: migrationInventory.range,
+  migrationFiles: migrationInventory.files,
+  workosEnvironment: required("workos-environment"),
   stripeAccount: "acct_1QrNa7RB8OGmEnBw",
   certifiedAt: new Date().toISOString(),
   status,
