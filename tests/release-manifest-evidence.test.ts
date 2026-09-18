@@ -15,7 +15,7 @@ describe("release migration evidence", () => {
 
   it("keeps release documentation aligned with the checked-in migration range", async () => {
     const inventory = await releaseMigrationInventory();
-    const expectedRange = `${inventory.range[0]} through \`${inventory.range[1]}\``;
+    const expectedRange = `\`${inventory.range[0]}\` through \`${inventory.range[1]}\``;
     const closure = await readFile(new URL("../docs/RELEASE_CLOSURE.md", import.meta.url), "utf8");
     const rollback = await readFile(new URL("../docs/ROLLBACK.md", import.meta.url), "utf8");
 
