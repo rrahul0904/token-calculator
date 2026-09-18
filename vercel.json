@@ -7,6 +7,10 @@
     {
       "path": "/api/internal/pricing/refresh",
       "schedule": "17 */6 * * *"
+    },
+    {
+      "path": "/api/internal/verified-savings/reverify",
+      "schedule": "43 4 * * *"
     }
   ]
 }
