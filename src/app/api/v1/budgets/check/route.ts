@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       serviceAccountId: principal.kind === "api_key" ? principal.serviceAccountId ?? check.serviceAccountId : check.serviceAccountId,
       userId: principal.kind === "session" ? principal.tenant.internalUserId : check.userId,
     });
-    return reply({ data: result.decision, enforcement: result.enforcement });
+    return reply({ data: result.decision, enforcement: result.enforcement, approvalId: result.approvalId });
   } catch (error) {
     return reply({ error: error instanceof Error ? error.message : "POLICY_EVALUATION_FAILED" }, 400);
   }
