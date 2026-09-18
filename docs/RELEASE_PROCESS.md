@@ -54,7 +54,7 @@ The workflow downloads the certified Preview manifest and re-certifies that exac
 
 Next it pulls the Production Vercel settings, builds the exact SHA with `vercel build --prod`, deploys it as a **staged Production deployment** with `vercel deploy --prebuilt --prod --skip-domain`, configures the staged WorkOS redirect/CORS origin, and certifies the staged deployment's build identity, health, MCP OAuth, real AuthKit sign-in/callback/sign-out and recent 5xx logs **before traffic is moved**. Only then does it promote the staged Production URL. After promotion it verifies the stable domain and requires its Vercel deployment ID to equal the staged deployment ID. If any post-promotion certification step fails, the workflow requests Vercel rollback to the captured previous Production deployment ID and verifies the stable domain points back to that exact ID. The temporary Production WorkOS user is deleted afterward, including on failed runs.
 
-PR #14 remains draft until this gate passes plus real provider/account checks have been completed.
+Historical integration PRs are closed/merged. The canonical release source is the exact SHA on `main` mirrored to `release-candidate-full-site`; only a `preview_certified` manifest may advance to Production.
 
 ## Finalization
 
