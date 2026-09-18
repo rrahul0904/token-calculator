@@ -12,8 +12,13 @@ export interface OutcomeEconomicsInput {
     testsPassed: boolean | null;
     prNumber: number | null;
     ciPassed: boolean | null;
+    ciProvider: string | null;
+    ciRunId: string | null;
     merged: boolean | null;
     deploymentSuccessful: boolean | null;
+    deploymentProvider: string | null;
+    deploymentId: string | null;
+    deploymentEnvironment: string | null;
     associationConfidence: number | null;
   } | null;
 }
@@ -37,11 +42,14 @@ export interface OutcomeEconomicsSummary {
   estimatedAttributedCostUsd: number | null;
   mergedPullRequests: number;
   deploymentLinkedRuns: number;
+  identifiedDeployments: number;
+  deploymentIdentityCoveragePct: number | null;
   ciPassedRuns: number;
   testsPassedRuns: number;
   taskCompletedRuns: number;
   knownCostPerMergedPrUsd: number | null;
   knownCostPerDeploymentLinkedRunUsd: number | null;
+  knownCostPerDeploymentUsd: number | null;
   agents: OutcomeEconomicsAgentRow[];
 }
 
@@ -108,6 +116,21 @@ export function summarizeOutcomeEconomics(rows: readonly OutcomeEconomicsInput[]
     const cost = selectRunCost(row);
     return cost.value !== null && cost.evidence !== "estimated" ? [cost.value] : [];
   });
+  const identifiedDeploymentRows = deploymentLinked.filter((row) => Boolean(row.outcome?.deploymentId));
+  const deploymentGroups = new Map<string, OutcomeEconomicsInput[]>();
+  for (const row of identifiedDeploymentRows) {
+    const key = `${row.outcome?.deploymentProvider ?? "unknown-provider"}:${row.outcome!.deploymentId}`;
+    const bucket = deploymentGroups.get(key) ?? [];
+    bucket.push(row);
+    deploymentGroups.set(key, bucket);
+  }
+  const fullyKnownDeploymentTotals: number[] = [];
+  for (const rowsForDeployment of deploymentGroups.values()) {
+    const costsForDeployment = rowsForDeployment.map((row) => selectRunCost(row));
+    if (costsForDeployment.every((cost) => cost.value !== null && cost.evidence !== "estimated")) {
+      fullyKnownDeploymentTotals.push(costsForDeployment.reduce((sum, cost) => sum + (cost.value ?? 0), 0));
+    }
+  }
 
   const byAgent = new Map<string, OutcomeEconomicsInput[]>();
   for (const row of attributed) {
@@ -145,6 +168,8 @@ export function summarizeOutcomeEconomics(rows: readonly OutcomeEconomicsInput[]
     estimatedAttributedCostUsd,
     mergedPullRequests: mergedKeys.size,
     deploymentLinkedRuns: deploymentLinked.length,
+    identifiedDeployments: deploymentGroups.size,
+    deploymentIdentityCoveragePct: deploymentLinked.length ? identifiedDeploymentRows.length / deploymentLinked.length : null,
     ciPassedRuns: highConfidence.filter((row) => row.outcome?.ciPassed === true).length,
     testsPassedRuns: highConfidence.filter((row) => row.outcome?.testsPassed === true).length,
     taskCompletedRuns: highConfidence.filter((row) => row.outcome?.taskCompleted === true).length,
@@ -153,6 +178,9 @@ export function summarizeOutcomeEconomics(rows: readonly OutcomeEconomicsInput[]
       : null,
     knownCostPerDeploymentLinkedRunUsd: deploymentKnownCosts.length
       ? deploymentKnownCosts.reduce((sum, value) => sum + value, 0) / deploymentKnownCosts.length
+      : null,
+    knownCostPerDeploymentUsd: fullyKnownDeploymentTotals.length
+      ? fullyKnownDeploymentTotals.reduce((sum, value) => sum + value, 0) / fullyKnownDeploymentTotals.length
       : null,
     agents,
   };
