@@ -113,10 +113,13 @@ test.describe("experiment lifecycle", () => {
 
     const experimentsPage = await page.goto("/app/experiments", { waitUntil: "domcontentloaded" });
     expect(experimentsPage?.status()).toBeLessThan(400);
-    await expect(page.getByRole("heading", { name: experimentName })).toBeVisible();
-    expect(await page.getByText("Verified savings v1", { exact: true }).count()).toBeGreaterThan(0);
+    await expect(page.getByRole("heading", { name: experimentName, exact: true })).toBeVisible();
+    const experimentPanel = page.locator("section.app-panel").filter({
+      has: page.getByRole("heading", { name: experimentName, exact: true }),
+    });
+    await expect(experimentPanel.getByText("Verified savings v1", { exact: true })).toBeVisible();
     await expect(page.getByText("Verified savings snapshots", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Latest revalidation:/)).toBeVisible();
+    await expect(experimentPanel.getByText("Latest revalidation:", { exact: true })).toBeVisible();
   });
 
   test("experiment metadata rejects retained prompt content", async ({ request }) => {
