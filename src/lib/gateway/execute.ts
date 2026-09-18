@@ -19,6 +19,7 @@ import {
 import { MODEL_CATALOG } from "@/lib/models";
 import { exportGatewayTrace } from "@/lib/otel/export";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
+import { actionRiskSchema } from "@/lib/policy/schemas";
 
 const metadataSchema = z.record(z.string(), z.string()).refine((value) => Object.keys(value).length <= 20, "At most 20 metadata entries are allowed.");
 const contentSchema = z.unknown().refine((value) => value !== undefined, "input is required");
@@ -32,6 +33,9 @@ export const gatewayRequestSchema = z.object({
   environment: z.string().trim().min(1).max(80).default("production"),
   model: z.string().trim().min(1).max(200),
   fallbackModel: z.string().trim().min(1).max(200).optional(),
+  actionRisk: actionRiskSchema.optional(),
+  actionCategory: z.string().trim().min(1).max(120).transform((value) => value.toLowerCase()).optional(),
+  actionName: z.string().trim().min(1).max(240).optional(),
   input: contentSchema,
   maxOutputTokens: z.number().int().positive().max(1_000_000).optional(),
   stream: z.boolean().default(false),
@@ -351,6 +355,9 @@ async function evaluateCallPolicy(args: {
     model: args.model,
     isFallback: args.isFallback,
     fallbackPremiumUsd: args.fallbackPremiumUsd,
+    actionRisk: args.input.actionRisk,
+    actionCategory: args.input.actionCategory,
+    actionName: args.input.actionName,
   });
 }
 
@@ -385,6 +392,9 @@ async function evaluateDeliveryPolicy(args: {
     provider: args.provider,
     model: args.model,
     isFallback: args.isFallback,
+    actionRisk: args.input.actionRisk,
+    actionCategory: args.input.actionCategory,
+    actionName: args.input.actionName,
   });
 }
 
