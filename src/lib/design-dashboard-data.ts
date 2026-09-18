@@ -1,8 +1,9 @@
 import { and, desc, eq, gte } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { findings, llmCalls, projects, runs } from "@/db/schema";
+import { findings, llmCalls, outcomes, projects, runs } from "@/db/schema";
 import { evaluationDatasets, experimentResults, experiments, verifiedSavings } from "@/db/gap-closure-schema";
 import { experimentEvidence } from "@/lib/evaluations/experiment-evidence";
+import { summarizeOutcomeEconomics } from "@/lib/outcomes/economics";
 
 function money(value: string | null) {
   if (value === null) return null;
@@ -146,4 +147,41 @@ export async function getExperimentsDashboardData(organizationId: string) {
     };
   });
   return { items, datasetCount: datasetRows.length, resultCount: resultRows.length, verifiedSavingsCount: savingsRows.length };
+}
+
+
+export async function getOutcomeEconomicsData(organizationId: string) {
+  const db = getDb();
+  const [runRows, outcomeRows] = await Promise.all([
+    db.select({
+      id: runs.id,
+      repo: runs.repo,
+      agentName: runs.agentName,
+      reconciledCostUsd: runs.reconciledCostUsd,
+      actualCostUsd: runs.actualCostUsd,
+      estimatedCostUsd: runs.estimatedCostUsd,
+    }).from(runs).where(eq(runs.organizationId, organizationId)).orderBy(desc(runs.startedAt)).limit(5000),
+    db.select().from(outcomes).where(eq(outcomes.organizationId, organizationId)).limit(5000),
+  ]);
+  const outcomeByRunId = new Map(outcomeRows.map((outcome) => [outcome.runId, outcome]));
+  return summarizeOutcomeEconomics(runRows.map((run) => {
+    const outcome = outcomeByRunId.get(run.id);
+    return {
+      runId: run.id,
+      repo: run.repo,
+      agentName: run.agentName,
+      reconciledCostUsd: money(run.reconciledCostUsd),
+      actualCostUsd: money(run.actualCostUsd),
+      estimatedCostUsd: money(run.estimatedCostUsd),
+      outcome: outcome ? {
+        taskCompleted: outcome.taskCompleted,
+        testsPassed: outcome.testsPassed,
+        prNumber: outcome.prNumber,
+        ciPassed: outcome.ciPassed,
+        merged: outcome.merged,
+        deploymentSuccessful: outcome.deploymentSuccessful,
+        associationConfidence: money(outcome.associationConfidence),
+      } : null,
+    };
+  }));
 }
