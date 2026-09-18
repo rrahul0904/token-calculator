@@ -19,6 +19,7 @@ import {
 import { MODEL_CATALOG } from "@/lib/models";
 import { exportGatewayTrace } from "@/lib/otel/export";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
+import { actionRiskSchema } from "@/lib/policy/schemas";
 
 const metadataSchema = z.record(z.string(), z.string()).refine((value) => Object.keys(value).length <= 20, "At most 20 metadata entries are allowed.");
 const contentSchema = z.unknown().refine((value) => value !== undefined, "input is required");
@@ -32,6 +33,9 @@ export const gatewayRequestSchema = z.object({
   environment: z.string().trim().min(1).max(80).default("production"),
   model: z.string().trim().min(1).max(200),
   fallbackModel: z.string().trim().min(1).max(200).optional(),
+  actionRisk: actionRiskSchema.optional(),
+  actionCategory: z.string().trim().min(1).max(120).transform((value) => value.toLowerCase()).optional(),
+  actionName: z.string().trim().min(1).max(240).optional(),
   input: contentSchema,
   maxOutputTokens: z.number().int().positive().max(1_000_000).optional(),
   stream: z.boolean().default(false),
@@ -238,6 +242,7 @@ async function persistCall(args: {
   fallbackFromCallId?: string | null;
   fallbackUsed?: boolean;
   unknownPriorCharge?: boolean;
+  transportResultBytes?: number | null;
 }) {
   const callId = `llm_${randomUUID()}`;
   const db = getDb();
@@ -270,6 +275,8 @@ async function persistCall(args: {
         gateway: true,
         fallbackUsed: args.fallbackUsed === true,
         runCostAmbiguous: args.unknownPriorCharge === true,
+        transportResultBytes: args.transportResultBytes ?? null,
+        resultByteMeasurement: args.transportResultBytes === undefined || args.transportResultBytes === null ? "unavailable" : "transport_bytes",
       },
     });
     const terminalStatus = args.statusCode >= 200 && args.statusCode < 400 ? "completed" : "failed";
@@ -351,6 +358,9 @@ async function evaluateCallPolicy(args: {
     model: args.model,
     isFallback: args.isFallback,
     fallbackPremiumUsd: args.fallbackPremiumUsd,
+    actionRisk: args.input.actionRisk,
+    actionCategory: args.input.actionCategory,
+    actionName: args.input.actionName,
   });
 }
 
@@ -385,6 +395,9 @@ async function evaluateDeliveryPolicy(args: {
     provider: args.provider,
     model: args.model,
     isFallback: args.isFallback,
+    actionRisk: args.input.actionRisk,
+    actionCategory: args.input.actionCategory,
+    actionName: args.input.actionName,
   });
 }
 
@@ -513,6 +526,7 @@ function policyBlockedResponse(runId: string, policy: PolicyResult, error: strin
     action: policy.decision.action,
     reason: policy.decision.reason,
     runId,
+    approvalId: policy.approvalId,
   }, {
     status: policy.enforcement === "await_approval" ? 409 : 402,
     headers,
@@ -714,11 +728,13 @@ export async function executeGovernedGateway(
   if (input.stream && upstreamResponse.body) {
     const decoder = new TextDecoder();
     let buffered = "";
+    let streamedTransportBytes = 0;
     let firstChunkAt: number | null = null;
     const requestId = providerRequestId(upstreamResponse);
     const transformed = upstreamResponse.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         if (firstChunkAt === null) firstChunkAt = Date.now();
+        streamedTransportBytes += chunk.byteLength;
         if (buffered.length < 4_000_000) buffered += decoder.decode(chunk, { stream: true });
         controller.enqueue(chunk);
       },
@@ -746,6 +762,7 @@ export async function executeGovernedGateway(
           fallbackFromCallId,
           fallbackUsed,
           unknownPriorCharge,
+          transportResultBytes: streamedTransportBytes,
         });
         void callId;
         await exportGatewayTrace({
@@ -818,6 +835,7 @@ export async function executeGovernedGateway(
     fallbackFromCallId,
     fallbackUsed,
     unknownPriorCharge,
+    transportResultBytes: resultBytes,
   });
 
   await exportGatewayTrace({
