@@ -13,6 +13,7 @@ test.describe("budget policy and approval control plane", () => {
     expect(response?.status()).toBeLessThan(400);
     await expect(page.getByRole("heading", { name: "Create policy" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Approval queue" })).toBeVisible();
+    await expect(page.getByText("Max autonomous action risk")).toBeVisible();
   });
 
   test("policy creation, policy check, approval request and decision work end to end", async ({ request }) => {
@@ -24,7 +25,7 @@ test.describe("budget policy and approval control plane", () => {
         scopeType: "organization",
         priority: 100,
         enabled: true,
-        rules: { maxCostUsd: 5, maxTurns: 50, maxRetries: 3, maxToolCalls: 100, disableFallback: true },
+        rules: { maxCostUsd: 5, maxTurns: 50, maxRetries: 3, maxToolCalls: 100, disableFallback: true, maxAutonomousActionRisk: "medium" },
       },
     });
     expect(policyResponse.status()).toBe(201);
@@ -36,6 +37,15 @@ test.describe("budget policy and approval control plane", () => {
     expect(check.status()).toBe(200);
     const checkBody = await check.json();
     expect(checkBody.data).toBeTruthy();
+
+    const riskCheck = await request.post("/api/v1/budgets/check", {
+      data: { observedCostUsd: 1, turns: 1, retries: 0, toolCalls: 1, tokens: 100, actionRisk: "high", actionCategory: "database", actionName: "Apply migration" },
+    });
+    expect(riskCheck.status()).toBe(200);
+    const riskBody = await riskCheck.json();
+    expect(riskBody.data.action).toBe("REQUIRE_APPROVAL");
+    expect(riskBody.enforcement).toBe("await_approval");
+    expect(riskBody.approvalId).toBeNull();
 
     const requested = await request.post("/api/v1/approvals", {
       data: { policyId, reason: "Release certification approval request" },
