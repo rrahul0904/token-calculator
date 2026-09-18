@@ -20,7 +20,7 @@ const status = required("status");
 const output = resolve(argument("output") ?? "release-evidence/release-manifest.json");
 const migrationInventory = await releaseMigrationInventory();
 const manifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   application: "token-intelligence",
   version: process.env.npm_package_version ?? "0.3.0",
   gitSha: required("sha", process.env.GITHUB_SHA),
