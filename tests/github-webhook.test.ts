@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { explicitRunIdFromText, safeGitHubDelivery, safeRepositoryName, verifyGitHubWebhook } from "@/lib/github/webhook";
+import { explicitRunIdFromText, githubActionsRunIdFromUrl, safeGitHubDelivery, safeGitHubIdentity, safeRepositoryName, verifyGitHubWebhook } from "@/lib/github/webhook";
 
 describe("GitHub webhook boundary", () => {
   it("accepts only the correct HMAC SHA-256 signature", () => {
@@ -29,5 +29,21 @@ describe("GitHub webhook boundary", () => {
     expect(safeRepositoryName({ repository: { full_name: "example/repo" } })).toBe("example/repo");
     expect(safeRepositoryName({ repository: "example/repo" })).toBeNull();
     expect(safeRepositoryName({})).toBeNull();
+  });
+
+  it("normalizes bounded GitHub identities without accepting arbitrary text", () => {
+    expect(safeGitHubIdentity(35304030865)).toBe("35304030865");
+    expect(safeGitHubIdentity("dpl_123.example:prod")).toBe("dpl_123.example:prod");
+    expect(safeGitHubIdentity(-1)).toBeNull();
+    expect(safeGitHubIdentity("contains spaces")).toBeNull();
+    expect(safeGitHubIdentity("x".repeat(241))).toBeNull();
+  });
+
+  it("extracts GitHub Actions run IDs only from canonical GitHub run URLs", () => {
+    expect(githubActionsRunIdFromUrl("https://github.com/example/repo/actions/runs/35304030865/job/105472425009")).toBe("35304030865");
+    expect(githubActionsRunIdFromUrl("https://github.com/example/repo/actions/runs/742")).toBe("742");
+    expect(githubActionsRunIdFromUrl("https://example.com/example/repo/actions/runs/742")).toBeNull();
+    expect(githubActionsRunIdFromUrl("https://github.com/example/repo/checks/742")).toBeNull();
+    expect(githubActionsRunIdFromUrl("not-a-url")).toBeNull();
   });
 });
