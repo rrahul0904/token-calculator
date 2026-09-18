@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import { budgetDecisions, budgets, policies } from "@/db/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { approvals, budgetDecisions, budgets, policies } from "@/db/schema";
 import { getDb } from "@/db/client";
 import { composeRestrictiveRules, evaluatePolicies, type EvaluatedPolicy, type PolicyRuleSet } from "@/lib/policy/engine";
 import { policyCheckSchema } from "@/lib/policy/schemas";
@@ -68,24 +68,72 @@ export async function evaluateOrganizationPolicy(organizationId: string, checkIn
     model: check.model,
     fallbackPremiumUsd: check.fallbackPremiumUsd,
     isFallback: check.isFallback,
+    actionRisk: check.actionRisk,
+    actionCategory: check.actionCategory,
+    actionName: check.actionName,
   });
 
+  let approvalId: string | null = null;
   if (persistDecision && check.runId) {
-    await db.insert(budgetDecisions).values({
-      id: `dec_${randomUUID()}`,
-      organizationId,
-      runId: check.runId,
-      policyId: decision.policyIds.length === 1 ? decision.policyIds[0] : null,
-      action: decision.action,
-      reason: decision.reason,
-      projectedCostUsd: check.projectedNextCallCostUsd?.toString() ?? null,
-      observedCostUsd: check.observedCostUsd.toString(),
-      decisionData: { policyIds: decision.policyIds, constraints: decision.constraints },
+    await db.transaction(async (tx) => {
+      await tx.insert(budgetDecisions).values({
+        id: `dec_${randomUUID()}`,
+        organizationId,
+        runId: check.runId,
+        policyId: decision.policyIds.length === 1 ? decision.policyIds[0] : null,
+        action: decision.action,
+        reason: decision.reason,
+        projectedCostUsd: check.projectedNextCallCostUsd?.toString() ?? null,
+        observedCostUsd: check.observedCostUsd.toString(),
+        decisionData: {
+          policyIds: decision.policyIds,
+          constraints: decision.constraints,
+          actionRisk: check.actionRisk ?? null,
+          actionCategory: check.actionCategory ?? null,
+          actionName: check.actionName ?? null,
+        },
+      });
+
+      if (decision.action === "REQUIRE_APPROVAL") {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${organizationId}), hashtext(${check.runId!}))`);
+        const pending = await tx.select().from(approvals).where(and(
+          eq(approvals.organizationId, organizationId),
+          eq(approvals.runId, check.runId!),
+          eq(approvals.status, "pending"),
+        ));
+        const now = new Date();
+        const policyId = decision.policyIds.length === 1 ? decision.policyIds[0] : null;
+        const active = pending.find((row) =>
+          (!row.expiresAt || row.expiresAt.getTime() > now.getTime())
+          && row.policyId === policyId
+          && row.reason === decision.reason
+        );
+        const expired = pending.filter((row) => row.expiresAt && row.expiresAt.getTime() <= now.getTime());
+        for (const row of expired) {
+          await tx.update(approvals).set({ status: "expired", updatedAt: now }).where(eq(approvals.id, row.id));
+        }
+        if (active) {
+          approvalId = active.id;
+        } else {
+          approvalId = `apr_${randomUUID()}`;
+          await tx.insert(approvals).values({
+            id: approvalId,
+            organizationId,
+            runId: check.runId!,
+            policyId,
+            status: "pending",
+            requestedBy: "policy_engine",
+            reason: decision.reason,
+            expiresAt: new Date(now.getTime() + 15 * 60 * 1000),
+          });
+        }
+      }
     });
   }
 
   return {
     decision,
+    approvalId,
     effectiveRules,
     enforcement: decision.action === "ALLOW" || decision.action === "WARN" || decision.action === "NOTIFY"
       ? "continue"

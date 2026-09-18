@@ -5,6 +5,7 @@ import { closeDb } from "@/db/client";
 import { checkApiKeyQuota } from "@/lib/gateway/quota";
 import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
 import { rollupPlatformDay } from "@/lib/admin/data";
+import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 
 const integrationEnabled = process.env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS === "1";
 const describeIntegration = integrationEnabled ? describe : describe.skip;
@@ -171,6 +172,43 @@ describeIntegration("database release invariants", () => {
     } catch (error) {
       expectPgCode(error, "23505");
     }
+  });
+
+  it("queues one active approval for an equivalent high-risk policy decision", async () => {
+    const policyId = `it_policy_risk_${suffix}`;
+    await sql`insert into policies (id, organization_id, name, scope_type, priority, enabled, rules)
+      values (${policyId}, ${orgA}, 'Risk policy', 'organization', 10, true, ${sql.json({ maxAutonomousActionRisk: "medium" })})`;
+
+    const check = {
+      runId: runA,
+      observedCostUsd: 0,
+      tokens: 0,
+      turns: 0,
+      retries: 0,
+      failedToolCalls: 0,
+      toolCalls: 0,
+      elapsedMs: 0,
+      providerRounds: 0,
+      resultBytes: 0,
+      actionRisk: "high",
+      actionCategory: "database",
+      actionName: "Apply production migration",
+    };
+
+    const first = await evaluateOrganizationPolicy(orgA, check);
+    const second = await evaluateOrganizationPolicy(orgA, check);
+    expect(first.decision.action).toBe("REQUIRE_APPROVAL");
+    expect(first.enforcement).toBe("await_approval");
+    expect(first.approvalId).toBeTruthy();
+    expect(second.approvalId).toBe(first.approvalId);
+
+    const rows = await sql<{ id: string; requested_by: string; status: string }[]>`
+      select id, requested_by, status from approvals
+      where organization_id = ${orgA} and run_id = ${runA} and policy_id = ${policyId} and status = 'pending'
+    `;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(first.approvalId);
+    expect(rows[0]?.requested_by).toBe("policy_engine");
   });
 
   it("writes an idempotent daily platform metrics snapshot", async () => {
