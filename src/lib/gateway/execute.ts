@@ -242,6 +242,7 @@ async function persistCall(args: {
   fallbackFromCallId?: string | null;
   fallbackUsed?: boolean;
   unknownPriorCharge?: boolean;
+  transportResultBytes?: number | null;
 }) {
   const callId = `llm_${randomUUID()}`;
   const db = getDb();
@@ -274,6 +275,8 @@ async function persistCall(args: {
         gateway: true,
         fallbackUsed: args.fallbackUsed === true,
         runCostAmbiguous: args.unknownPriorCharge === true,
+        transportResultBytes: args.transportResultBytes ?? null,
+        resultByteMeasurement: args.transportResultBytes === undefined || args.transportResultBytes === null ? "unavailable" : "transport_bytes",
       },
     });
     const terminalStatus = args.statusCode >= 200 && args.statusCode < 400 ? "completed" : "failed";
@@ -725,11 +728,13 @@ export async function executeGovernedGateway(
   if (input.stream && upstreamResponse.body) {
     const decoder = new TextDecoder();
     let buffered = "";
+    let streamedTransportBytes = 0;
     let firstChunkAt: number | null = null;
     const requestId = providerRequestId(upstreamResponse);
     const transformed = upstreamResponse.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         if (firstChunkAt === null) firstChunkAt = Date.now();
+        streamedTransportBytes += chunk.byteLength;
         if (buffered.length < 4_000_000) buffered += decoder.decode(chunk, { stream: true });
         controller.enqueue(chunk);
       },
@@ -757,6 +762,7 @@ export async function executeGovernedGateway(
           fallbackFromCallId,
           fallbackUsed,
           unknownPriorCharge,
+          transportResultBytes: streamedTransportBytes,
         });
         void callId;
         await exportGatewayTrace({
@@ -829,6 +835,7 @@ export async function executeGovernedGateway(
     fallbackFromCallId,
     fallbackUsed,
     unknownPriorCharge,
+    transportResultBytes: resultBytes,
   });
 
   await exportGatewayTrace({
