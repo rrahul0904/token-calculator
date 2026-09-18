@@ -23,3 +23,24 @@ export function safeGitHubDelivery(headers: Headers): string | null {
   const value = headers.get("x-github-delivery");
   return value && /^[A-Za-z0-9-]{6,120}$/.test(value) ? value : null;
 }
+
+
+export function safeGitHubIdentity(value: unknown): string | null {
+  const candidate = typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? String(value)
+    : typeof value === "string"
+      ? value
+      : null;
+  return candidate && /^[A-Za-z0-9._:-]{1,240}$/.test(candidate) ? candidate : null;
+}
+
+export function githubActionsRunIdFromUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "github.com") return null;
+    return /\/actions\/runs\/(\d+)(?:\/|$)/.exec(url.pathname)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
