@@ -102,7 +102,12 @@ export async function evaluateOrganizationPolicy(organizationId: string, checkIn
           eq(approvals.status, "pending"),
         ));
         const now = new Date();
-        const active = pending.find((row) => !row.expiresAt || row.expiresAt.getTime() > now.getTime());
+        const policyId = decision.policyIds.length === 1 ? decision.policyIds[0] : null;
+        const active = pending.find((row) =>
+          (!row.expiresAt || row.expiresAt.getTime() > now.getTime())
+          && row.policyId === policyId
+          && row.reason === decision.reason
+        );
         const expired = pending.filter((row) => row.expiresAt && row.expiresAt.getTime() <= now.getTime());
         for (const row of expired) {
           await tx.update(approvals).set({ status: "expired", updatedAt: now }).where(eq(approvals.id, row.id));
@@ -115,7 +120,7 @@ export async function evaluateOrganizationPolicy(organizationId: string, checkIn
             id: approvalId,
             organizationId,
             runId: check.runId!,
-            policyId: decision.policyIds.length === 1 ? decision.policyIds[0] : null,
+            policyId,
             status: "pending",
             requestedBy: "policy_engine",
             reason: decision.reason,
