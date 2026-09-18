@@ -107,6 +107,14 @@ describe("release workflow invariants", () => {
     expect(production).toContain("steps.previous.outputs.id");
   });
 
+  it("records the correct WorkOS environment in each release manifest", async () => {
+    const preview = await workflow("release-preview.yml");
+    const production = await workflow("release-production.yml");
+
+    expect(preview).toContain('--workos-environment="environment_01M1G0NYZ6EX1MR9Z51Y7VZ15X"');
+    expect(production).toContain('--workos-environment="environment_01M1G0NZHV4J3CNS2WQZB2JER4"');
+  });
+
   it("creates a GitHub release only after the certified SHA is on main", async () => {
     const source = await workflow("release-finalize.yml");
     expect(source).toContain("git merge-base --is-ancestor");
