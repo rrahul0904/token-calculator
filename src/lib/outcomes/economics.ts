@@ -93,10 +93,15 @@ export function summarizeOutcomeEconomics(rows: readonly OutcomeEconomicsInput[]
 
   const merged = highConfidence.filter((row) => row.outcome?.merged === true && row.outcome.prNumber !== null);
   const mergedKeys = new Set(merged.map((row) => `${row.repo ?? "unknown-repo"}#${row.outcome!.prNumber}`));
-  const mergedKnownCosts = merged.flatMap((row) => {
+  const mergedKnownCosts: number[] = [];
+  const mergedKnownKeys = new Set<string>();
+  for (const row of merged) {
     const cost = selectRunCost(row);
-    return cost.value !== null && cost.evidence !== "estimated" ? [cost.value] : [];
-  });
+    if (cost.value !== null && cost.evidence !== "estimated") {
+      mergedKnownCosts.push(cost.value);
+      mergedKnownKeys.add(`${row.repo ?? "unknown-repo"}#${row.outcome!.prNumber}`);
+    }
+  }
 
   const deploymentLinked = highConfidence.filter((row) => row.outcome?.deploymentSuccessful === true);
   const deploymentKnownCosts = deploymentLinked.flatMap((row) => {
@@ -143,11 +148,11 @@ export function summarizeOutcomeEconomics(rows: readonly OutcomeEconomicsInput[]
     ciPassedRuns: highConfidence.filter((row) => row.outcome?.ciPassed === true).length,
     testsPassedRuns: highConfidence.filter((row) => row.outcome?.testsPassed === true).length,
     taskCompletedRuns: highConfidence.filter((row) => row.outcome?.taskCompleted === true).length,
-    knownCostPerMergedPrUsd: mergedKeys.size && mergedKnownCosts.length
-      ? mergedKnownCosts.reduce((sum, value) => sum + value, 0) / mergedKeys.size
+    knownCostPerMergedPrUsd: mergedKnownKeys.size
+      ? mergedKnownCosts.reduce((sum, value) => sum + value, 0) / mergedKnownKeys.size
       : null,
-    knownCostPerDeploymentLinkedRunUsd: deploymentLinked.length && deploymentKnownCosts.length
-      ? deploymentKnownCosts.reduce((sum, value) => sum + value, 0) / deploymentLinked.length
+    knownCostPerDeploymentLinkedRunUsd: deploymentKnownCosts.length
+      ? deploymentKnownCosts.reduce((sum, value) => sum + value, 0) / deploymentKnownCosts.length
       : null,
     agents,
   };
