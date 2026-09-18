@@ -17,6 +17,7 @@ const line = (label: string, value: unknown) => `- **${label}:** ${value ?? "not
 const report = [
   "# Token Intelligence Release Evidence",
   "",
+  line("Manifest schema", manifest.schemaVersion),
   line("Status", manifest.status),
   line("Git SHA", manifest.gitSha),
   line("Git branch", manifest.gitBranch),
@@ -27,6 +28,7 @@ const report = [
   line("Production URL", manifest.productionUrl),
   line("Neon project", manifest.neonProjectId),
   line("Neon branch", manifest.neonBranch),
+  line("Migration count", manifest.migrationCount),
   line("Migration range", Array.isArray(manifest.migrationRange) ? manifest.migrationRange.join(" → ") : null),
   line("WorkOS environment", manifest.workosEnvironment),
   line("Stripe account", manifest.stripeAccount),
