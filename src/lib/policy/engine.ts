@@ -1,4 +1,5 @@
 export type PolicyAction = "ALLOW" | "WARN" | "NOTIFY" | "REQUIRE_APPROVAL" | "DISABLE_FALLBACK" | "BLOCK_NEXT_CALL" | "KILL_RUN";
+export type ActionRisk = "low" | "medium" | "high" | "critical";
 
 export interface PolicyRuleSet {
   maxCostUsd?: number;
@@ -16,6 +17,9 @@ export interface PolicyRuleSet {
   allowedModels?: string[];
   fallbackPremiumApprovalUsd?: number;
   disableFallback?: boolean;
+  maxAutonomousActionRisk?: ActionRisk;
+  approvalActionCategories?: string[];
+  blockedActionCategories?: string[];
 }
 
 export interface EvaluatedPolicy {
@@ -43,6 +47,9 @@ export interface PolicyRuntimeState {
   model?: string;
   fallbackPremiumUsd?: number;
   isFallback?: boolean;
+  actionRisk?: ActionRisk;
+  actionCategory?: string;
+  actionName?: string;
 }
 
 export interface PolicyDecision {
@@ -51,6 +58,8 @@ export interface PolicyDecision {
   policyIds: string[];
   constraints: string[];
 }
+
+const RISK_RANK: Record<ActionRisk, number> = { low: 0, medium: 1, high: 2, critical: 3 };
 
 const ACTION_RANK: Record<PolicyAction, number> = {
   ALLOW: 0,
@@ -111,6 +120,16 @@ export function evaluatePolicies(policies: EvaluatedPolicy[], state: PolicyRunti
     if (rules.maxContextUtilizationPct !== undefined && (state.contextUtilizationPct ?? 0) >= rules.maxContextUtilizationPct) {
       decisions.push(decision("BLOCK_NEXT_CALL", policy, "Context utilization reached the configured ceiling.", "maxContextUtilizationPct"));
     }
+    const actionCategory = state.actionCategory?.toLowerCase();
+    if (actionCategory && rules.blockedActionCategories?.includes(actionCategory)) {
+      decisions.push(decision("BLOCK_NEXT_CALL", policy, `${state.actionName ?? actionCategory} is in a blocked action category.`, "blockedActionCategories"));
+    }
+    if (actionCategory && rules.approvalActionCategories?.includes(actionCategory)) {
+      decisions.push(decision("REQUIRE_APPROVAL", policy, `${state.actionName ?? actionCategory} requires human approval for this action category.`, "approvalActionCategories"));
+    }
+    if (state.actionRisk && rules.maxAutonomousActionRisk !== undefined && RISK_RANK[state.actionRisk] > RISK_RANK[rules.maxAutonomousActionRisk]) {
+      decisions.push(decision("REQUIRE_APPROVAL", policy, `${state.actionName ?? "Action"} is ${state.actionRisk} risk, above the ${rules.maxAutonomousActionRisk} autonomous-risk ceiling.`, "maxAutonomousActionRisk"));
+    }
     if (rules.disableFallback && state.isFallback) decisions.push(decision("DISABLE_FALLBACK", policy, "Fallbacks are disabled by policy.", "disableFallback"));
     if (rules.fallbackPremiumApprovalUsd !== undefined && state.isFallback && (state.fallbackPremiumUsd ?? 0) >= rules.fallbackPremiumApprovalUsd) {
       decisions.push(decision("REQUIRE_APPROVAL", policy, "Fallback premium requires explicit approval.", "fallbackPremiumApprovalUsd"));
@@ -129,6 +148,12 @@ export function composeRestrictiveRules(policies: EvaluatedPolicy[]): PolicyRule
     const values = policies.map((policy) => policy.rules[key]).filter((value): value is number => typeof value === "number");
     if (values.length) result[key] = Math.min(...values) as never;
   }
+  const riskCeilings = policies.map((policy) => policy.rules.maxAutonomousActionRisk).filter((value): value is ActionRisk => value !== undefined);
+  if (riskCeilings.length) result.maxAutonomousActionRisk = riskCeilings.reduce((lowest, current) => RISK_RANK[current] < RISK_RANK[lowest] ? current : lowest);
+  const approvalCategories = policies.flatMap((policy) => policy.rules.approvalActionCategories ?? []);
+  if (approvalCategories.length) result.approvalActionCategories = Array.from(new Set(approvalCategories));
+  const blockedCategories = policies.flatMap((policy) => policy.rules.blockedActionCategories ?? []);
+  if (blockedCategories.length) result.blockedActionCategories = Array.from(new Set(blockedCategories));
   const providerSets = policies.map((policy) => policy.rules.allowedProviders).filter((value): value is string[] => Array.isArray(value));
   if (providerSets.length) result.allowedProviders = providerSets.reduce((intersection, current) => intersection.filter((item) => current.includes(item)));
   const modelSets = policies.map((policy) => policy.rules.allowedModels).filter((value): value is string[] => Array.isArray(value));
