@@ -226,3 +226,20 @@ export const verifiedSavings = pgTable("verified_savings", {
   uniqueIndex("verified_savings_experiment_evidence_hash_uq").on(table.experimentId, table.evidenceHash),
   index("verified_savings_org_verified_idx").on(table.organizationId, table.verifiedAt),
 ]);
+
+
+export const verifiedSavingsRevalidations = pgTable("verified_savings_revalidations", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  experimentId: text("experiment_id").notNull().references(() => experiments.id, { onDelete: "cascade" }),
+  verifiedSavingsId: text("verified_savings_id").notNull().references(() => verifiedSavings.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  evidenceType: text("evidence_type").notNull(),
+  currentEvidenceHash: text("current_evidence_hash").notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+  ...timestamps,
+}, (table) => [
+  index("verified_savings_revalidations_org_checked_idx").on(table.organizationId, table.checkedAt),
+  index("verified_savings_revalidations_experiment_checked_idx").on(table.experimentId, table.checkedAt),
+]);
