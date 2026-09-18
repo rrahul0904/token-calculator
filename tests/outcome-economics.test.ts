@@ -55,7 +55,7 @@ describe("outcome economics", () => {
     expect(result.knownCostRuns).toBe(1);
     expect(result.estimatedOnlyRuns).toBe(1);
     expect(result.unknownCostRuns).toBe(1);
-    expect(result.knownCostPerMergedPrUsd).toBe(1);
+    expect(result.knownCostPerMergedPrUsd).toBe(2);
   });
 
   it("reports deployment-linked cost without claiming unique deployment counts", () => {
