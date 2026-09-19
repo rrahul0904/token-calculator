@@ -1,5 +1,6 @@
 import { hasConfiguredWorkosRedirectUri } from "@/lib/auth/redirect-uri";
 import { hasRuntimeMcpResourceUri } from "@/lib/auth/deployment-origin";
+import { workosWebhookTargetUrl } from "@/lib/workos/webhook-endpoint";
 
 export type IntegrationState = "live" | "code_complete_configuration_blocked" | "not_enabled";
 
@@ -38,7 +39,7 @@ export function getConfigurationStatus() {
       hasWorkosAuthConfiguration() || hasExplicitE2eAuthAdapter()
         ? "live"
         : "code_complete_configuration_blocked",
-    workosWebhook: all("WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET")
+    workosWebhook: all("WORKOS_API_KEY") && (all("WORKOS_WEBHOOK_SECRET") || Boolean(workosWebhookTargetUrl(process.env)))
       ? "live"
       : "code_complete_configuration_blocked",
     mcpOAuth: all("WORKOS_AUTHKIT_DOMAIN") && hasRuntimeMcpResourceUri()
@@ -62,7 +63,7 @@ export function requiredConfiguration(feature: keyof ReturnType<typeof getConfig
   const map: Record<keyof ReturnType<typeof getConfigurationStatus>, string[]> = {
     database: ["DATABASE_URL"],
     auth: ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "WORKOS_COOKIE_PASSWORD", "NEXT_PUBLIC_WORKOS_REDIRECT_URI or Vercel system URL"],
-    workosWebhook: ["WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET"],
+    workosWebhook: ["WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET or provider-managed endpoint for deployment origin"],
     mcpOAuth: ["WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"],
     stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_TEAM"],
     credentialVault: ["TOKEN_INTELLIGENCE_ENCRYPTION_KEY"],
