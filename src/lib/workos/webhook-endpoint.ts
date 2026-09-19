@@ -89,6 +89,7 @@ export function clearWorkosWebhookCache() {
 export async function inspectWorkosWebhookProvider(options: {
   apiKey?: string;
   targetUrl?: string | null;
+  explicitSecret?: string;
   fetchImpl?: FetchLike;
 } = {}) {
   const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY?.trim();
@@ -98,6 +99,7 @@ export async function inspectWorkosWebhookProvider(options: {
       ready: false,
       targetUrl: targetUrl ?? null,
       endpointId: null,
+      secretMatchesExplicit: options.explicitSecret?.trim() ? false : null,
       error: !apiKey ? "WORKOS_API_KEY_MISSING" : "WORKOS_WEBHOOK_TARGET_MISSING",
     };
   }
@@ -105,17 +107,25 @@ export async function inspectWorkosWebhookProvider(options: {
   try {
     const endpoints = await listEndpoints(apiKey, options.fetchImpl ?? fetch);
     const endpoint = readyEndpoint(endpoints, targetUrl);
+    const explicit = options.explicitSecret?.trim();
+    const secretMatchesExplicit = explicit
+      ? Boolean(endpoint?.secret && endpoint.secret === explicit)
+      : null;
     return {
-      ready: Boolean(endpoint),
+      ready: Boolean(endpoint) && (secretMatchesExplicit ?? true),
       targetUrl,
       endpointId: endpoint?.id ?? null,
-      error: endpoint ? null : "WORKOS_WEBHOOK_ENDPOINT_NOT_READY",
+      secretMatchesExplicit,
+      error: endpoint
+        ? (secretMatchesExplicit === false ? "WORKOS_WEBHOOK_SECRET_MISMATCH" : null)
+        : "WORKOS_WEBHOOK_ENDPOINT_NOT_READY",
     };
   } catch (error) {
     return {
       ready: false,
       targetUrl,
       endpointId: null,
+      secretMatchesExplicit: options.explicitSecret?.trim() ? false : null,
       error: error instanceof Error ? error.message : "WORKOS_WEBHOOK_LOOKUP_FAILED",
     };
   }
@@ -146,4 +156,89 @@ export async function resolveWorkosWebhookSecret(options: {
 
   secretCache.set(targetUrl, { secret: endpoint.secret, expiresAt: Date.now() + CACHE_MS });
   return endpoint.secret;
+}
+
+
+export async function ensureWorkosWebhookEndpoint(options: {
+  apiKey?: string;
+  targetUrl: string;
+  endpointId?: string;
+  fetchImpl?: FetchLike;
+}) {
+  const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY?.trim();
+  if (!apiKey) throw new Error("WORKOS_API_KEY_MISSING");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const endpoints = await listEndpoints(apiKey, fetchImpl);
+  const selected = options.endpointId
+    ? endpoints.find((endpoint) => endpoint.id === options.endpointId)
+    : endpoints.find((endpoint) => endpoint.endpoint_url === options.targetUrl);
+
+  if (options.endpointId && !selected) {
+    throw new Error("WORKOS_WEBHOOK_ENDPOINT_ID_NOT_FOUND");
+  }
+
+  const body = {
+    endpoint_url: options.targetUrl,
+    events: [...REQUIRED_WORKOS_DIRECTORY_EVENTS],
+    status: "enabled",
+  };
+
+  if (!selected) {
+    const response = await fetchImpl("https://api.workos.com/webhook_endpoints", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        endpoint_url: options.targetUrl,
+        events: [...REQUIRED_WORKOS_DIRECTORY_EVENTS],
+      }),
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!response.ok) throw new Error(`WORKOS_WEBHOOK_CREATE_HTTP_${response.status}`);
+    const created = await response.json() as WorkosWebhookEndpoint;
+    if (!created.id || created.endpoint_url !== options.targetUrl || !created.secret) {
+      throw new Error("WORKOS_WEBHOOK_CREATE_INCOMPLETE");
+    }
+    secretCache.set(options.targetUrl, { secret: created.secret, expiresAt: Date.now() + CACHE_MS });
+    return { action: "created" as const, endpointId: created.id, targetUrl: options.targetUrl };
+  }
+
+  const alreadyReady = (
+    selected.endpoint_url === options.targetUrl
+    && selected.status === "enabled"
+    && exactWorkosDirectoryEventSet(selected.events)
+    && typeof selected.secret === "string"
+    && selected.secret.length > 0
+  );
+  if (alreadyReady) {
+    secretCache.set(options.targetUrl, { secret: selected.secret!, expiresAt: Date.now() + CACHE_MS });
+    return { action: "already_configured" as const, endpointId: selected.id ?? null, targetUrl: options.targetUrl };
+  }
+
+  if (!selected.id) throw new Error("WORKOS_WEBHOOK_ENDPOINT_ID_MISSING");
+  const response = await fetchImpl(`https://api.workos.com/webhook_endpoints/${encodeURIComponent(selected.id)}`, {
+    method: "PATCH",
+    headers: {
+      accept: "application/json",
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(7000),
+  });
+  if (!response.ok) throw new Error(`WORKOS_WEBHOOK_UPDATE_HTTP_${response.status}`);
+  const updated = await response.json() as WorkosWebhookEndpoint;
+  if (
+    updated.endpoint_url !== options.targetUrl
+    || updated.status !== "enabled"
+    || !exactWorkosDirectoryEventSet(updated.events)
+    || !updated.secret
+  ) {
+    throw new Error("WORKOS_WEBHOOK_UPDATE_INCOMPLETE");
+  }
+  secretCache.set(options.targetUrl, { secret: updated.secret, expiresAt: Date.now() + CACHE_MS });
+  return { action: "updated" as const, endpointId: updated.id ?? selected.id, targetUrl: options.targetUrl };
 }
