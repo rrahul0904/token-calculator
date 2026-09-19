@@ -1,6 +1,6 @@
 import { WorkOS } from "@workos-inc/node";
 import { processDirectoryLifecycleEvent } from "@/lib/enterprise/directory-sync";
-import { resolveWorkosWebhookSecret } from "@/lib/workos/webhook-endpoint";
+import { resolveWorkosWebhookSecret, workosWebhookTargetForRequestUrl } from "@/lib/workos/webhook-endpoint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +17,8 @@ export async function POST(request: Request) {
   const payload = await request.text();
   let normalized: { id: string; event: string; data: Record<string, unknown> };
   const explicitSecret = process.env.WORKOS_WEBHOOK_SECRET?.trim();
+  const targetUrl = workosWebhookTargetForRequestUrl(request.url);
+  if (!targetUrl) return Response.json({ error: "WORKOS_WEBHOOK_NOT_CONFIGURED" }, { status: 503, headers: noStore });
   const workos = new WorkOS(apiKey);
 
   async function verify(secret: string) {
@@ -29,12 +31,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const secret = await resolveWorkosWebhookSecret({ apiKey, explicitSecret });
+    const secret = await resolveWorkosWebhookSecret({ apiKey, explicitSecret, targetUrl });
     try {
       normalized = await verify(secret);
     } catch (error) {
       if (explicitSecret) throw error;
-      const refreshed = await resolveWorkosWebhookSecret({ apiKey, forceRefresh: true });
+      const refreshed = await resolveWorkosWebhookSecret({ apiKey, targetUrl, forceRefresh: true });
       normalized = await verify(refreshed);
     }
   } catch (error) {
