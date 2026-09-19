@@ -38,6 +38,11 @@ export function exactWorkosDirectoryEventSet(events: string[] | undefined) {
   return JSON.stringify(actual) === JSON.stringify(expected);
 }
 
+export function workosWebhookTargetForRequestUrl(requestUrl: string) {
+  const origin = normalizeOrigin(requestUrl);
+  return origin ? `${origin}/api/webhooks/workos` : null;
+}
+
 export function workosWebhookTargetUrl(env: Readonly<Record<string, string | undefined>> = process.env) {
   let origin: string | null = null;
 
