@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { getConfigurationStatus } from "@/lib/config";
-import { inspectWorkosWebhookProvider } from "@/lib/workos/webhook-endpoint";
+import { inspectWorkosWebhookProvider, workosWebhookTargetForRequestUrl } from "@/lib/workos/webhook-endpoint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ async function databaseHealth(): Promise<{ status: DatabaseStatus; identity: Dat
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const configuration = getConfigurationStatus();
   const databaseHealthResult = await databaseHealth();
   const database = databaseHealthResult.status;
@@ -52,7 +52,9 @@ export async function GET() {
     && process.env.WORKOS_API_KEY
     && !process.env.WORKOS_WEBHOOK_SECRET
   ) {
-    const provider = await inspectWorkosWebhookProvider();
+    const provider = await inspectWorkosWebhookProvider({
+      targetUrl: workosWebhookTargetForRequestUrl(request.url),
+    });
     if (!provider.ready) workosWebhook = "code_complete_configuration_blocked";
   }
   const releaseChecks = {
