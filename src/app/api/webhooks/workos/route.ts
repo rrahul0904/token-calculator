@@ -12,6 +12,7 @@ export async function POST(request: Request) {
   if (!apiKey) return Response.json({ error: "WORKOS_WEBHOOK_NOT_CONFIGURED" }, { status: 503, headers: noStore });
   const sigHeader = request.headers.get("workos-signature");
   if (!sigHeader) return Response.json({ error: "WORKOS_SIGNATURE_REQUIRED" }, { status: 401, headers: noStore });
+  const verifiedSigHeader = sigHeader;
 
   const payload = await request.text();
   let normalized: { id: string; event: string; data: Record<string, unknown> };
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const workos = new WorkOS(apiKey);
 
   async function verify(secret: string) {
-    const event = await workos.webhooks.constructEvent({ payload, sigHeader, secret });
+    const event = await workos.webhooks.constructEvent({ payload, sigHeader: verifiedSigHeader, secret });
     return {
       id: String(event.id),
       event: String(event.event),
