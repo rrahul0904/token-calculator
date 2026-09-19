@@ -1,6 +1,7 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { normalizedScope } from "./env-contract";
+import { ensureWorkosWebhookEndpoint } from "../../src/lib/workos/webhook-endpoint";
 
 type ListedRedirect = { id?: string; uri?: string; default?: boolean };
 type ListedOrigin = { id?: string; origin?: string };
@@ -60,6 +61,7 @@ export async function configureWorkos() {
     throw new Error("WORKOS_PRODUCTION_REQUIRES_HTTPS");
   }
   const redirectUri = `${origin}/auth/callback`;
+  const webhookUrl = `${origin}/api/webhooks/workos`;
 
   const redirects = await list<ListedRedirect>("/user_management/redirect_uris?limit=100");
   const redirectCover = redirects.find((item) => typeof item.uri === "string" && wildcardCovers(item.uri, redirectUri));
@@ -72,6 +74,12 @@ export async function configureWorkos() {
   const originAction = originCover
     ? "already_allowed"
     : await create("/user_management/cors_origins", { origin });
+
+  const webhook = await ensureWorkosWebhookEndpoint({
+    apiKey: required("api-key", process.env.WORKOS_API_KEY),
+    targetUrl: webhookUrl,
+    endpointId: argument("webhook-endpoint-id")?.trim() || undefined,
+  });
 
   process.stdout.write(JSON.stringify({
     provider: "workos",
@@ -86,6 +94,11 @@ export async function configureWorkos() {
       origin,
       action: originAction,
       coveredBy: originCover?.origin ?? origin,
+    },
+    webhook: {
+      url: webhookUrl,
+      action: webhook.action,
+      endpointId: webhook.endpointId,
     },
   }, null, 2) + "\n");
 
