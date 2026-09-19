@@ -68,6 +68,7 @@ jobs:
       TARGET_SHA: ${{ needs.preflight.outputs.sha }}
       VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD
       VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l
+      WORKOS_STAGING_WEBHOOK_ENDPOINT_ID: we_01M22710048TQRMA6YQSX3HEGW
       NEXT_TELEMETRY_DISABLED: "1"
     services:
       postgres:
@@ -206,6 +207,7 @@ jobs:
           npm run workos:configure --
           --scope=preview
           --base-url="${{ steps.deploy.outputs.url }}"
+          --webhook-endpoint-id="$WORKOS_STAGING_WEBHOOK_ENDPOINT_ID"
 
       - name: Certify Preview runtime
         env:

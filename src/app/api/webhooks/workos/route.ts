@@ -1,5 +1,6 @@
 import { WorkOS } from "@workos-inc/node";
 import { processDirectoryLifecycleEvent } from "@/lib/enterprise/directory-sync";
+import { resolveWorkosWebhookSecret, workosWebhookTargetForRequestUrl } from "@/lib/workos/webhook-endpoint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,23 +8,45 @@ export const dynamic = "force-dynamic";
 const noStore = { "Cache-Control": "no-store" };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.WORKOS_API_KEY;
-  const secret = process.env.WORKOS_WEBHOOK_SECRET;
-  if (!apiKey || !secret) return Response.json({ error: "WORKOS_WEBHOOK_NOT_CONFIGURED" }, { status: 503, headers: noStore });
+  const apiKey = process.env.WORKOS_API_KEY?.trim();
+  if (!apiKey) return Response.json({ error: "WORKOS_WEBHOOK_NOT_CONFIGURED" }, { status: 503, headers: noStore });
   const sigHeader = request.headers.get("workos-signature");
   if (!sigHeader) return Response.json({ error: "WORKOS_SIGNATURE_REQUIRED" }, { status: 401, headers: noStore });
+  const verifiedSigHeader = sigHeader;
 
   const payload = await request.text();
   let normalized: { id: string; event: string; data: Record<string, unknown> };
-  try {
-    const workos = new WorkOS(apiKey);
-    const event = await workos.webhooks.constructEvent({ payload, sigHeader, secret });
-    normalized = {
+  const explicitSecret = process.env.WORKOS_WEBHOOK_SECRET?.trim();
+  const targetUrl = workosWebhookTargetForRequestUrl(request.url);
+  if (!targetUrl) return Response.json({ error: "WORKOS_WEBHOOK_NOT_CONFIGURED" }, { status: 503, headers: noStore });
+  const workos = new WorkOS(apiKey);
+
+  async function verify(secret: string) {
+    const event = await workos.webhooks.constructEvent({ payload, sigHeader: verifiedSigHeader, secret });
+    return {
       id: String(event.id),
       event: String(event.event),
       data: event.data as unknown as Record<string, unknown>,
     };
-  } catch {
+  }
+
+  try {
+    const secret = await resolveWorkosWebhookSecret({ apiKey, explicitSecret, targetUrl });
+    try {
+      normalized = await verify(secret);
+    } catch (error) {
+      if (explicitSecret) throw error;
+      const refreshed = await resolveWorkosWebhookSecret({ apiKey, targetUrl, forceRefresh: true });
+      normalized = await verify(refreshed);
+    }
+  } catch (error) {
+    if (error instanceof Error && (
+      error.message === "WORKOS_WEBHOOK_NOT_CONFIGURED"
+      || error.message === "WORKOS_WEBHOOK_ENDPOINT_NOT_READY"
+      || error.message.startsWith("WORKOS_WEBHOOK_LIST_HTTP_")
+    )) {
+      return Response.json({ error: "WORKOS_WEBHOOK_NOT_CONFIGURED" }, { status: 503, headers: noStore });
+    }
     return Response.json({ error: "WORKOS_WEBHOOK_SIGNATURE_INVALID" }, { status: 401, headers: noStore });
   }
 

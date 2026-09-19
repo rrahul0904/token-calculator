@@ -6,7 +6,7 @@ describe("release environment contract", () => {
     const status = releaseEnvStatus("production", {});
     expect(status.ready).toBe(false);
     expect(status.missing).toContain("DATABASE_URL");
-    expect(status.missing).toContain("WORKOS_WEBHOOK_SECRET");
+    expect(status.missing).not.toContain("WORKOS_WEBHOOK_SECRET");
     expect(status.missing).toContain("MCP_RESOURCE_URI");
     expect(status.missing).toContain("STRIPE_WEBHOOK_SECRET");
     expect(status.missing).toContain("TOKEN_INTELLIGENCE_ENCRYPTION_KEY");
@@ -20,7 +20,6 @@ describe("release environment contract", () => {
       WORKOS_API_KEY: "configured-api-key",
       WORKOS_CLIENT_ID: "configured-client-id",
       WORKOS_COOKIE_PASSWORD: "configured-cookie-password",
-      WORKOS_WEBHOOK_SECRET: "configured-webhook-secret",
       WORKOS_AUTHKIT_DOMAIN: "https://auth.example.test",
       MCP_RESOURCE_URI: "https://preview.example.test/mcp",
       STRIPE_SECRET_KEY: "configured-stripe-key",

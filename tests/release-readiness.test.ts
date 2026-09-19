@@ -2,7 +2,7 @@ import process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
 import { getConfigurationStatus } from "@/lib/config";
 
-const keys = ["WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET", "WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"] as const;
+const keys = ["APP_BASE_URL", "WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET", "WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"] as const;
 const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
 afterEach(() => {
@@ -23,6 +23,15 @@ describe("production release integration readiness", () => {
     const configuration = getConfigurationStatus();
     expect(configuration.workosWebhook).toBe("code_complete_configuration_blocked");
     expect(configuration.mcpOAuth).toBe("code_complete_configuration_blocked");
+  });
+
+  it("recognizes provider-managed WorkOS webhook verification when an endpoint origin is derivable", () => {
+    process.env.APP_BASE_URL = "https://app.example.test";
+    process.env.WORKOS_API_KEY = "configured-api-key";
+    delete process.env.WORKOS_WEBHOOK_SECRET;
+
+    const configuration = getConfigurationStatus();
+    expect(configuration.workosWebhook).toBe("live");
   });
 
   it("reports WorkOS webhook and MCP OAuth live only when their complete server configuration is present", () => {

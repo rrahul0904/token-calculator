@@ -11,6 +11,7 @@ The exact Git SHA is certified first in the non-production Preview environment. 
 - `npm run env:validate -- --scope=production|preview|local-test`
 - `npm run workos:configure -- --scope=production|preview --base-url=...` — idempotently ensures the WorkOS redirect URI and CORS origin through the environment API key.
 - `npm run workos:verify -- --scope=production|preview [--base-url=...]` — Production also verifies the real WorkOS webhook URL, enabled state, exact implemented Directory Sync event set and signing-secret match without disclosing the secret.
+- WorkOS webhook verification prefers an explicit `WORKOS_WEBHOOK_SECRET`. When it is absent, the runtime may resolve the secret through `WORKOS_API_KEY` only after the exact deployment webhook endpoint is confirmed enabled with the exact Directory Sync event set; Preview updates the designated Staging endpoint instead of creating one per deployment.
 - `npx tsx scripts/release/workos-release-users.ts --action=provision|cleanup` — creates/deletes masked ephemeral WorkOS identities used only by release certification.
 - `npm run stripe:verify [-- --require]`
 - `npm run mcp:verify -- --base-url=... [--require]`
