@@ -6,6 +6,7 @@ import {
   exactWorkosDirectoryEventSet,
   inspectWorkosWebhookProvider,
   resolveWorkosWebhookSecret,
+  workosWebhookTargetForRequestUrl,
   workosWebhookTargetUrl,
 } from "../src/lib/workos/webhook-endpoint";
 
@@ -26,6 +27,11 @@ describe("WorkOS webhook endpoint management", () => {
   });
 
   it("derives the exact deployment webhook target", () => {
+    expect(workosWebhookTargetForRequestUrl("https://stable.example.test/api/health?check=1"))
+      .toBe("https://stable.example.test/api/webhooks/workos");
+    expect(workosWebhookTargetForRequestUrl("https://staged.vercel.app/api/webhooks/workos"))
+      .toBe("https://staged.vercel.app/api/webhooks/workos");
+
     expect(workosWebhookTargetUrl({
       VERCEL_ENV: "preview",
       VERCEL_URL: "preview-abc.vercel.app",
