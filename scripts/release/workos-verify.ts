@@ -58,6 +58,7 @@ const redirect = scope === "preview" && origin
 const productionState = process.env.WORKOS_PRODUCTION_STATE?.trim().toLowerCase() || "unknown";
 const billingAddress = boolEvidence("WORKOS_BILLING_ADDRESS_CONFIGURED");
 const paymentMethod = boolEvidence("WORKOS_PAYMENT_METHOD_CONFIGURED");
+const explicitWebhookSecret = process.env.WORKOS_WEBHOOK_SECRET?.trim() || null;
 
 const expected = origin ? {
   redirectUri: `${origin}/auth/callback`,
@@ -92,7 +93,7 @@ const runtime = {
   apiKey: Boolean(process.env.WORKOS_API_KEY),
   clientId: Boolean(process.env.WORKOS_CLIENT_ID),
   cookiePassword: Boolean(process.env.WORKOS_COOKIE_PASSWORD),
-  webhookSecret: Boolean(process.env.WORKOS_WEBHOOK_SECRET),
+  webhookSecret: Boolean(explicitWebhookSecret || process.env.WORKOS_API_KEY),
   authkitDomain: Boolean(issuer),
   redirectUri: Boolean(redirect),
 };
@@ -107,7 +108,7 @@ let productionWebhook = {
   error: null as string | null,
 };
 
-if (scope === "production" && origin && process.env.WORKOS_API_KEY) {
+if (origin && process.env.WORKOS_API_KEY) {
   productionWebhook.checked = true;
   try {
     const response = await fetch("https://api.workos.com/webhook_endpoints?limit=100", {
@@ -131,11 +132,9 @@ if (scope === "production" && origin && process.env.WORKOS_API_KEY) {
         endpointId: endpoint?.id ?? null,
         enabled: endpoint?.status === "enabled",
         exactEventSet: JSON.stringify(actualEvents) === JSON.stringify(requiredEvents),
-        secretMatches: Boolean(
-          endpoint?.secret
-          && process.env.WORKOS_WEBHOOK_SECRET
-          && endpoint.secret === process.env.WORKOS_WEBHOOK_SECRET
-        ),
+        secretMatches: explicitWebhookSecret
+          ? Boolean(endpoint?.secret && endpoint.secret === explicitWebhookSecret)
+          : Boolean(endpoint?.secret),
         error: null,
       };
     }
@@ -144,14 +143,13 @@ if (scope === "production" && origin && process.env.WORKOS_API_KEY) {
   }
 }
 
-const webhookProviderReady = scope !== "production"
-  || (
-    productionWebhook.checked
-    && productionWebhook.configured
-    && productionWebhook.enabled
-    && productionWebhook.exactEventSet
-    && productionWebhook.secretMatches
-  );
+const webhookProviderReady = (
+  productionWebhook.checked
+  && productionWebhook.configured
+  && productionWebhook.enabled
+  && productionWebhook.exactEventSet
+  && productionWebhook.secretMatches
+);
 const runtimeReady = Object.values(runtime).every(Boolean) && issuerReachable && webhookProviderReady;
 const redirectMatches = Boolean(expected && redirect === expected.redirectUri);
 const mcpResourceMatches = scope === "preview"
