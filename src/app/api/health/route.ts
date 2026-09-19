@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { getConfigurationStatus } from "@/lib/config";
+import { inspectWorkosWebhookProvider } from "@/lib/workos/webhook-endpoint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,10 +46,19 @@ export async function GET() {
   const configuration = getConfigurationStatus();
   const databaseHealthResult = await databaseHealth();
   const database = databaseHealthResult.status;
+  let workosWebhook = configuration.workosWebhook;
+  if (
+    workosWebhook === "live"
+    && process.env.WORKOS_API_KEY
+    && !process.env.WORKOS_WEBHOOK_SECRET
+  ) {
+    const provider = await inspectWorkosWebhookProvider();
+    if (!provider.ready) workosWebhook = "code_complete_configuration_blocked";
+  }
   const releaseChecks = {
     database: database === "ok",
     auth: configuration.auth === "live",
-    workosWebhook: configuration.workosWebhook === "live",
+    workosWebhook: workosWebhook === "live",
     mcpOAuth: configuration.mcpOAuth === "live",
     billing: configuration.stripe === "live",
     credentialVault: configuration.credentialVault === "live",
@@ -72,7 +82,7 @@ export async function GET() {
       otel: configuration.otel,
       redis: configuration.redis,
       mcp: "ok",
-      workosWebhook: configuration.workosWebhook,
+      workosWebhook,
       mcpOAuth: configuration.mcpOAuth,
       releaseReady,
       releaseChecks,
