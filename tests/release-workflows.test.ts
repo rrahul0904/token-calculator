@@ -30,6 +30,12 @@ describe("release workflow invariants", () => {
     expect(source).toContain("TOKEN_INTELLIGENCE_EXPECTED_NEON_BRANCH_ID=br-small-haze-aeqj7d25");
   });
 
+  it("reuses the designated Staging WorkOS webhook endpoint for exact Preview origins", async () => {
+    const preview = await workflow("release-preview.yml");
+    expect(preview).toContain("WORKOS_STAGING_WEBHOOK_ENDPOINT_ID: we_01M22710048TQRMA6YQSX3HEGW");
+    expect(preview).toContain('--webhook-endpoint-id="$WORKOS_STAGING_WEBHOOK_ENDPOINT_ID"');
+  });
+
   it("uses masked ephemeral WorkOS users instead of long-lived release-user secrets", async () => {
     const preview = await workflow("release-preview.yml");
     const production = await workflow("release-production.yml");
