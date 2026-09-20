@@ -6,6 +6,7 @@ import { runs } from "@/db/schema";
 import { evaluationCases, experimentResults, experiments } from "@/db/gap-closure-schema";
 import { requireTenant } from "@/lib/auth/session";
 import { evaluateSuite, type EvaluatorSpec } from "@/lib/evaluations/engine";
+import { resolveExperimentEconomics, type LinkedRunEconomics } from "@/lib/evaluations/run-economics";
 import { assertMetadataOnly } from "@/lib/telemetry/privacy";
 
 const evaluatorSchema = z.discriminatedUnion("kind", [
@@ -89,10 +90,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!caseRow) return reply({ error: "CASE_NOT_FOUND" }, 404);
       if (caseRow.organizationId !== tenant.organizationId || caseRow.datasetId !== experiment.datasetId) return reply({ error: "CROSS_TENANT_OR_DATASET_REFERENCE" }, 403);
     }
+    let linkedRun: (LinkedRunEconomics & { organizationId: string }) | null = null;
     if (parsed.data.runId) {
-      const run = (await db.select({ organizationId: runs.organizationId }).from(runs).where(eq(runs.id, parsed.data.runId)).limit(1))[0];
+      const run = (await db.select({
+        organizationId: runs.organizationId,
+        reconciledCostUsd: runs.reconciledCostUsd,
+        usageSource: runs.usageSource,
+        freshInputTokens: runs.freshInputTokens,
+        cacheReadTokens: runs.cacheReadTokens,
+        cacheWriteTokens: runs.cacheWriteTokens,
+        reasoningTokens: runs.reasoningTokens,
+        outputTokens: runs.outputTokens,
+        retryCount: runs.retryCount,
+        fallbackCount: runs.fallbackCount,
+      }).from(runs).where(eq(runs.id, parsed.data.runId)).limit(1))[0];
       if (!run) return reply({ error: "RUN_NOT_FOUND" }, 404);
       if (run.organizationId !== tenant.organizationId) return reply({ error: "CROSS_TENANT_REFERENCE" }, 403);
+      linkedRun = run;
     }
 
     let qualityScore = parsed.data.qualityScore ?? null;
@@ -106,6 +120,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       evaluatorResults = evaluated.results.map((result) => ({ ...result }));
     }
 
+    const economics = resolveExperimentEconomics({
+      run: linkedRun,
+      submitted: {
+        costUsd: parsed.data.costUsd ?? null,
+        tokens: parsed.data.tokens ?? null,
+        retries: parsed.data.retries,
+        fallbacks: parsed.data.fallbacks,
+      },
+    });
+
     const row = (await db.insert(experimentResults).values({
       id: `exr_${randomUUID()}`,
       organizationId: tenant.organizationId,
@@ -114,11 +138,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       caseId: parsed.data.caseId ?? null,
       runId: parsed.data.runId ?? null,
       qualityScore: qualityScore === null ? null : String(qualityScore),
-      costUsd: parsed.data.costUsd === null || parsed.data.costUsd === undefined ? null : String(parsed.data.costUsd),
-      tokens: parsed.data.tokens ?? null,
+      costUsd: economics.costUsd === null ? null : String(economics.costUsd),
+      tokens: economics.tokens,
       latencyMs: parsed.data.latencyMs ?? null,
-      retries: parsed.data.retries,
-      fallbacks: parsed.data.fallbacks,
+      retries: economics.retries,
+      fallbacks: economics.fallbacks,
       success,
       evaluatorResults,
     }).returning())[0];
