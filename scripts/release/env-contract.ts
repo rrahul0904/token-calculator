@@ -72,5 +72,19 @@ export function releaseEnvStatus(scope: ReleaseScope, env: ReleaseEnvironment = 
     };
   });
   const missing = variables.filter((item) => item.required && item.status === "missing").map((item) => item.name);
-  return { scope, ready: missing.length === 0, missing, variables };
+  const violations: string[] = [];
+
+  if (scope !== "local-test" && env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED?.trim() === "1") {
+    violations.push("E2E_AUTH_ENABLED_OUTSIDE_LOCAL_TEST");
+  }
+
+  if ((scope === "production" || scope === "preview") && hasValue(env, "APP_BASE_URL")) {
+    try {
+      if (new URL(env.APP_BASE_URL as string).protocol !== "https:") violations.push("APP_BASE_URL_MUST_USE_HTTPS");
+    } catch {
+      violations.push("APP_BASE_URL_INVALID");
+    }
+  }
+
+  return { scope, ready: missing.length === 0 && violations.length === 0, missing, violations, variables };
 }
