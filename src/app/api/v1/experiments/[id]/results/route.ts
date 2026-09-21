@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import * as z from "zod";
 import { getDb, isDatabaseConfigured } from "@/db/client";
-import { runs } from "@/db/schema";
+import { llmCalls, runs } from "@/db/schema";
 import { evaluationCases, experimentResults, experiments } from "@/db/gap-closure-schema";
 import { requireTenant } from "@/lib/auth/session";
 import { evaluateSuite, type EvaluatorSpec } from "@/lib/evaluations/engine";
-import { resolveExperimentEconomics, type LinkedRunEconomics } from "@/lib/evaluations/run-economics";
+import { resolveExperimentEconomics, resolveOrchestrationExperimentEconomics, type LinkedRunEconomics } from "@/lib/evaluations/run-economics";
 import { assertMetadataOnly } from "@/lib/telemetry/privacy";
 
 const evaluatorSchema = z.discriminatedUnion("kind", [
@@ -90,12 +90,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!caseRow) return reply({ error: "CASE_NOT_FOUND" }, 404);
       if (caseRow.organizationId !== tenant.organizationId || caseRow.datasetId !== experiment.datasetId) return reply({ error: "CROSS_TENANT_OR_DATASET_REFERENCE" }, 403);
     }
-    let linkedRun: (LinkedRunEconomics & { organizationId: string }) | null = null;
+    let linkedRun: (LinkedRunEconomics & { organizationId: string; metadata: Record<string, unknown> }) | null = null;
     if (parsed.data.runId) {
       const run = (await db.select({
         organizationId: runs.organizationId,
         reconciledCostUsd: runs.reconciledCostUsd,
+        actualCostUsd: runs.actualCostUsd,
         usageSource: runs.usageSource,
+        agentVendor: runs.agentVendor,
         freshInputTokens: runs.freshInputTokens,
         cacheReadTokens: runs.cacheReadTokens,
         cacheWriteTokens: runs.cacheWriteTokens,
@@ -103,6 +105,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         outputTokens: runs.outputTokens,
         retryCount: runs.retryCount,
         fallbackCount: runs.fallbackCount,
+        metadata: runs.metadata,
       }).from(runs).where(eq(runs.id, parsed.data.runId)).limit(1))[0];
       if (!run) return reply({ error: "RUN_NOT_FOUND" }, 404);
       if (run.organizationId !== tenant.organizationId) return reply({ error: "CROSS_TENANT_REFERENCE" }, 403);
@@ -120,15 +123,49 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       evaluatorResults = evaluated.results.map((result) => ({ ...result }));
     }
 
-    const economics = resolveExperimentEconomics({
-      run: linkedRun,
-      submitted: {
-        costUsd: parsed.data.costUsd ?? null,
-        tokens: parsed.data.tokens ?? null,
-        retries: parsed.data.retries,
-        fallbacks: parsed.data.fallbacks,
-      },
-    });
+    const orchestrationRunId = linkedRun && typeof linkedRun.metadata["orchestration.run_id"] === "string"
+      ? linkedRun.metadata["orchestration.run_id"].trim()
+      : "";
+    let economics;
+    if (linkedRun && orchestrationRunId) {
+      const [orchestrationCalls, orchestrationRuns] = await Promise.all([
+        db.select({
+          provider: llmCalls.provider,
+          costUsd: llmCalls.costUsd,
+          costSource: llmCalls.costSource,
+          freshInputTokens: llmCalls.freshInputTokens,
+          cacheReadTokens: llmCalls.cacheReadTokens,
+          cacheWriteTokens: llmCalls.cacheWriteTokens,
+          reasoningTokens: llmCalls.reasoningTokens,
+          outputTokens: llmCalls.outputTokens,
+        }).from(llmCalls).where(and(
+          eq(llmCalls.organizationId, tenant.organizationId),
+          sql`${llmCalls.metadata} ->> 'orchestration.run_id' = ${orchestrationRunId}`,
+        )),
+        db.select({
+          retryCount: runs.retryCount,
+          fallbackCount: runs.fallbackCount,
+        }).from(runs).where(and(
+          eq(runs.organizationId, tenant.organizationId),
+          sql`${runs.metadata} ->> 'orchestration.run_id' = ${orchestrationRunId}`,
+        )),
+      ]);
+      economics = resolveOrchestrationExperimentEconomics({
+        calls: orchestrationCalls,
+        retries: orchestrationRuns.reduce((sum, run) => sum + (run.retryCount ?? 0), 0),
+        fallbacks: orchestrationRuns.reduce((sum, run) => sum + (run.fallbackCount ?? 0), 0),
+      });
+    } else {
+      economics = resolveExperimentEconomics({
+        run: linkedRun,
+        submitted: {
+          costUsd: parsed.data.costUsd ?? null,
+          tokens: parsed.data.tokens ?? null,
+          retries: parsed.data.retries,
+          fallbacks: parsed.data.fallbacks,
+        },
+      });
+    }
 
     const row = (await db.insert(experimentResults).values({
       id: `exr_${randomUUID()}`,
