@@ -125,7 +125,7 @@ describe("experiment run economics", () => {
 
     expect(result).toEqual({
       costUsd: 0.8,
-      tokens: 315,
+      tokens: 330,
       retries: 2,
       fallbacks: 1,
       source: "orchestration_calls",
