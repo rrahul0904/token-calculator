@@ -1,9 +1,10 @@
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { findings, llmCalls, outcomes, projects, runs } from "@/db/schema";
 import { evaluationDatasets, experimentResults, experiments, verifiedSavings, verifiedSavingsRevalidations } from "@/db/gap-closure-schema";
 import { experimentEvidence } from "@/lib/evaluations/experiment-evidence";
 import { summarizeOutcomeEconomics } from "@/lib/outcomes/economics";
+import { summarizeOrchestrationEconomics } from "@/lib/orchestration/route-lab";
 
 function money(value: string | null) {
   if (value === null) return null;
@@ -66,6 +67,23 @@ export async function getRouteLabData(organizationId: string) {
     db.select({ id: runs.id, status: runs.status, outcomeStatus: runs.outcomeStatus, workflowName: runs.workflowName }).from(runs).where(and(eq(runs.organizationId, organizationId), gte(runs.startedAt, since))).limit(2500),
   ]);
   const runById = new Map(runRows.map((run) => [run.id, run]));
+  const orchestrationRunIds = [...new Set(callRows.flatMap((call) => {
+    const value = call.metadata["orchestration.run_id"];
+    return typeof value === "string" && value.trim() ? [value.trim()] : [];
+  }))];
+  const orchestrationCallRows = orchestrationRunIds.length
+    ? await db.select({
+      id: llmCalls.id,
+      runId: llmCalls.runId,
+      costUsd: llmCalls.costUsd,
+      costSource: llmCalls.costSource,
+      startedAt: llmCalls.startedAt,
+      metadata: llmCalls.metadata,
+    }).from(llmCalls).where(and(
+      eq(llmCalls.organizationId, organizationId),
+      inArray(sql<string>`${llmCalls.metadata} ->> 'orchestration.run_id'`, orchestrationRunIds),
+    ))
+    : [];
   const groups = new Map<string, { provider: string; model: string; calls: number; runIds: Set<string>; successfulRunIds: Set<string>; costs: number[]; latencies: number[]; retries: number }>();
   for (const call of callRows) {
     const model = call.modelResolved ?? call.modelRequested ?? "Unknown model";
@@ -92,7 +110,14 @@ export async function getRouteLabData(organizationId: string) {
     retryRate: group.calls ? group.retries / group.calls : null,
     evidence: group.runIds.size >= 5 ? "historically_observed" as const : "insufficient_sample" as const,
   })).sort((a, b) => b.runCount - a.runCount || (a.medianCallCostUsd ?? Number.POSITIVE_INFINITY) - (b.medianCallCostUsd ?? Number.POSITIVE_INFINITY));
-  return { cohorts, totalCalls: callRows.length, totalRuns: runRows.length, observedCohorts: cohorts.filter((cohort) => cohort.evidence === "historically_observed").length };
+  const orchestration = summarizeOrchestrationEconomics(orchestrationCallRows);
+  return {
+    cohorts,
+    totalCalls: callRows.length,
+    totalRuns: runRows.length,
+    observedCohorts: cohorts.filter((cohort) => cohort.evidence === "historically_observed").length,
+    orchestration,
+  };
 }
 
 export async function getExperimentsDashboardData(organizationId: string) {
