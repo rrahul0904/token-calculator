@@ -15,8 +15,24 @@ function all(...names: string[]): boolean {
  * adapter was intentionally configured.  Normal deployments remain fail
  * closed on missing WorkOS configuration.
  */
-function hasExplicitE2eAuthAdapter(): boolean {
+function isLoopbackBaseUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The explicit browser-test auth adapter is allowed only on a loopback origin.
+ * This prevents an accidentally copied E2E secret from becoming an auth bypass
+ * in Preview or Production.
+ */
+export function hasExplicitE2eAuthAdapter(): boolean {
   return (
+    isLoopbackBaseUrl(process.env.APP_BASE_URL) &&
     process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED === "1" &&
     all(
       "TOKEN_INTELLIGENCE_E2E_AUTH_SECRET",
