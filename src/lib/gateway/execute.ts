@@ -17,6 +17,7 @@ import {
   type GatewayRuntimeMeter,
 } from "@/lib/gateway/runtime-budget";
 import { MODEL_CATALOG } from "@/lib/models";
+import { orchestrationGatewayContextSchema, orchestrationReceiptMetadata } from "@/lib/orchestration/contracts";
 import { exportGatewayTrace } from "@/lib/otel/export";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 import { actionRiskSchema } from "@/lib/policy/schemas";
@@ -33,6 +34,7 @@ export const gatewayRequestSchema = z.object({
   environment: z.string().trim().min(1).max(80).default("production"),
   model: z.string().trim().min(1).max(200),
   fallbackModel: z.string().trim().min(1).max(200).optional(),
+  orchestration: orchestrationGatewayContextSchema.optional(),
   actionRisk: actionRiskSchema.optional(),
   actionCategory: z.string().trim().min(1).max(120).transform((value) => value.toLowerCase()).optional(),
   actionName: z.string().trim().min(1).max(240).optional(),
@@ -41,6 +43,30 @@ export const gatewayRequestSchema = z.object({
   stream: z.boolean().default(false),
   temperature: z.number().min(0).max(2).optional(),
   metadata: metadataSchema.optional(),
+}).superRefine((value, ctx) => {
+  const orchestration = value.orchestration;
+  if (!orchestration?.requireExactRoute) return;
+  if (value.fallbackModel) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["fallbackModel"],
+      message: "fallbackModel is not allowed when exact orchestration routing is required.",
+    });
+  }
+  if (value.providerConnectionId !== orchestration.expectedProviderConnectionId) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["providerConnectionId"],
+      message: "providerConnectionId does not match the exact orchestration route.",
+    });
+  }
+  if (value.model !== orchestration.expectedModel) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["model"],
+      message: "model does not match the exact orchestration route.",
+    });
+  }
 });
 
 export type GovernedGatewayRequest = z.infer<typeof gatewayRequestSchema>;
@@ -66,6 +92,12 @@ type PolicyResult = Awaited<ReturnType<typeof evaluateOrganizationPolicy>>;
 type ProviderAttemptResult =
   | { kind: "response"; response: Response; attemptIndex: number; retryCount: number; unknownPriorCharge: boolean; policy: PolicyResult }
   | { kind: "blocked"; policy: PolicyResult; retryCount: number; unknownPriorCharge: boolean; lastAttemptId: string | null };
+
+function orchestrationMetadata(
+  input: GovernedGatewayRequest,
+): Record<string, string | number | boolean | null> {
+  return orchestrationReceiptMetadata(input.orchestration);
+}
 
 const EMPTY_USAGE: GatewayUsage = {
   freshInputTokens: null,
@@ -182,6 +214,7 @@ async function ensureRun(args: {
       providerConnectionId: args.input.providerConnectionId,
       apiKeyId: args.apiKeyId,
       estimatedInputMethod: "utf8_bytes_div_4",
+      ...orchestrationMetadata(args.input),
     },
   });
 }
@@ -193,6 +226,7 @@ async function persistAttempt(args: {
   model: string;
   attempt: RetryAttempt;
   fallbackFromCallId?: string | null;
+  orchestrationMetadata?: Record<string, string | number | boolean | null>;
 }) {
   const id = `llm_${randomUUID()}`;
   await getDb().insert(llmCalls).values({
@@ -218,6 +252,7 @@ async function persistAttempt(args: {
       chargeUnknown: true,
       retryReason: args.attempt.reason,
       retryDelayMs: args.attempt.delayMs,
+      ...(args.orchestrationMetadata ?? {}),
     },
   });
   return id;
@@ -243,6 +278,7 @@ async function persistCall(args: {
   fallbackUsed?: boolean;
   unknownPriorCharge?: boolean;
   transportResultBytes?: number | null;
+  orchestrationMetadata?: Record<string, string | number | boolean | null>;
 }) {
   const callId = `llm_${randomUUID()}`;
   const db = getDb();
@@ -277,6 +313,7 @@ async function persistCall(args: {
         runCostAmbiguous: args.unknownPriorCharge === true,
         transportResultBytes: args.transportResultBytes ?? null,
         resultByteMeasurement: args.transportResultBytes === undefined || args.transportResultBytes === null ? "unavailable" : "transport_bytes",
+        ...(args.orchestrationMetadata ?? {}),
       },
     });
     const terminalStatus = args.statusCode >= 200 && args.statusCode < 400 ? "completed" : "failed";
@@ -470,6 +507,7 @@ async function callProviderWithPolicy(args: {
         provider: args.provider,
         model: args.model,
         fallbackFromCallId: args.fallbackFromCallId,
+        orchestrationMetadata: orchestrationMetadata(args.input),
         attempt: {
           attemptIndex,
           statusCode: null,
@@ -499,6 +537,7 @@ async function callProviderWithPolicy(args: {
       provider: args.provider,
       model: args.model,
       fallbackFromCallId: args.fallbackFromCallId,
+      orchestrationMetadata: orchestrationMetadata(args.input),
       attempt: {
         attemptIndex,
         statusCode: response.status,
@@ -650,6 +689,7 @@ export async function executeGovernedGateway(
       provider: connection.provider,
       model: activeModel,
       attempt: finalPrimaryAttempt,
+      orchestrationMetadata: orchestrationMetadata(input),
     });
     unknownPriorCharge = true;
     try { await attempt.response.body?.cancel(); } catch { /* cleanup only */ }
@@ -720,6 +760,11 @@ export async function executeGovernedGateway(
   baseHeaders.set("x-ti-run-id", runId);
   baseHeaders.set("x-ti-policy-action", finalPolicy.decision.action);
   baseHeaders.set("x-ti-model-resolved", activeModel);
+  if (input.orchestration) {
+    baseHeaders.set("x-ti-orchestration-role", input.orchestration.role);
+    baseHeaders.set("x-ti-orchestration-decision", input.orchestration.routeDecision);
+    baseHeaders.set("x-ti-exact-route-required", String(input.orchestration.requireExactRoute));
+  }
   baseHeaders.set("x-ti-cost-certainty", unknownPriorCharge ? "partial_unknown" : "provider_reconciled");
   baseHeaders.set("x-ti-provider-rounds", String(runtimeAtHeaders.providerRounds));
   baseHeaders.set("x-ti-elapsed-ms-at-headers", String(runtimeAtHeaders.elapsedMs));
@@ -763,6 +808,7 @@ export async function executeGovernedGateway(
           fallbackUsed,
           unknownPriorCharge,
           transportResultBytes: streamedTransportBytes,
+          orchestrationMetadata: orchestrationMetadata(input),
         });
         void callId;
         await exportGatewayTrace({
@@ -836,6 +882,7 @@ export async function executeGovernedGateway(
     fallbackUsed,
     unknownPriorCharge,
     transportResultBytes: resultBytes,
+    orchestrationMetadata: orchestrationMetadata(input),
   });
 
   await exportGatewayTrace({
