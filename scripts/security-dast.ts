@@ -1,3 +1,5 @@
+export {};
+
 const baseUrl = process.env.SECURITY_BASE_URL ?? "http://127.0.0.1:3000";
 
 const secretPatterns = [
