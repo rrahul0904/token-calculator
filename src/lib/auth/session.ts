@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import type { OrganizationRole } from "@/db/schema";
 import { organizationMembers, organizations, users } from "@/db/schema";
 import { getDb, isDatabaseConfigured } from "@/db/client";
-import { hasWorkosAuthConfiguration } from "@/lib/config";
+import { hasExplicitE2eAuthAdapter, hasWorkosAuthConfiguration } from "@/lib/config";
 
 export interface ExternalAuthSession {
   userId: string;
@@ -33,7 +33,7 @@ function safeEqual(left: string, right: string) {
 
 async function getExplicitE2eSession(): Promise<ExternalAuthSession | null> {
   const secret = process.env.TOKEN_INTELLIGENCE_E2E_AUTH_SECRET;
-  if (!secret || process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED !== "1") return null;
+  if (!secret || !hasExplicitE2eAuthAdapter()) return null;
   const incoming = (await headers()).get("x-ti-e2e-auth");
   if (!incoming || !safeEqual(incoming, secret)) return null;
   const selectedUserId = (await headers()).get("x-ti-e2e-user");

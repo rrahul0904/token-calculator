@@ -16,7 +16,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
       DATABASE_SSL: disable
@@ -62,6 +62,8 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Production dependency vulnerability audit
+        run: npm audit --omit=dev --audit-level=high
       - name: Repository secret policy
         run: npm run secret:policy
       - name: Lint
@@ -117,5 +119,7 @@ jobs:
           exit 1
       - name: CLI local API smoke
         run: npm run ti -- estimate --base-url http://127.0.0.1:3000 --input 1000 --output 200 --cached 100 --requests 10
+      - name: Defensive dynamic attack-surface checks
+        run: npm run security:dast
       - name: Playwright production smoke
         run: npm run test:e2e

@@ -34,4 +34,45 @@ describe("release environment contract", () => {
     expect(status.ready).toBe(true);
     expect(status.variables.find((item) => item.name === "NEXT_PUBLIC_WORKOS_REDIRECT_URI")?.source).toBe("system-derived");
   });
+  it("rejects the local E2E auth adapter in Preview and Production", () => {
+    const base = {
+      APP_BASE_URL: "https://preview.example.test",
+      DATABASE_URL: "postgres://configured",
+      DATABASE_SSL: "require",
+      WORKOS_API_KEY: "configured-api-key",
+      WORKOS_CLIENT_ID: "configured-client-id",
+      WORKOS_COOKIE_PASSWORD: "configured-cookie-password",
+      WORKOS_AUTHKIT_DOMAIN: "https://auth.example.test",
+      MCP_RESOURCE_URI: "https://preview.example.test/mcp",
+      STRIPE_SECRET_KEY: "configured-stripe-key",
+      STRIPE_WEBHOOK_SECRET: "configured-stripe-webhook",
+      STRIPE_PRICE_PRO: "price_pro",
+      STRIPE_PRICE_TEAM: "price_team",
+      TOKEN_INTELLIGENCE_ENCRYPTION_KEY: "configured-encryption-key",
+      CRON_SECRET: "configured-cron-secret",
+      VERCEL_URL: "preview.example.test",
+      TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED: "1",
+      TOKEN_INTELLIGENCE_E2E_AUTH_SECRET: "must-never-be-live",
+    };
+
+    const preview = releaseEnvStatus("preview", base);
+    expect(preview.ready).toBe(false);
+    expect(preview.violations).toContain("E2E_AUTH_ENABLED_OUTSIDE_LOCAL_TEST");
+
+    const production = releaseEnvStatus("production", {
+      ...base,
+      NEXT_PUBLIC_WORKOS_REDIRECT_URI: "https://preview.example.test/auth/callback",
+    });
+    expect(production.ready).toBe(false);
+    expect(production.violations).toContain("E2E_AUTH_ENABLED_OUTSIDE_LOCAL_TEST");
+  });
+
+  it("requires HTTPS canonical origins outside local test", () => {
+    const status = releaseEnvStatus("preview", {
+      APP_BASE_URL: "http://preview.example.test",
+    });
+    expect(status.ready).toBe(false);
+    expect(status.violations).toContain("APP_BASE_URL_MUST_USE_HTTPS");
+  });
+
 });
