@@ -16,6 +16,9 @@ function row(variant: "baseline" | "candidate", index: number, overrides: Partia
       cache_write_tokens: 0,
       tool_call_count: 4,
       target_tool_call_count: 2,
+      gold_files_total: 4,
+      gold_files_found: 3,
+      files_served: 6,
       index_time_ms: 20,
     },
     ...overrides,
@@ -58,6 +61,10 @@ describe("experiment evidence labels", () => {
       toolCallAccountingComplete: true,
       targetToolAccountingCount: 10,
       targetToolInvocationRate: 1,
+      retrievalDiagnosticsCount: 10,
+      medianRetrievalCoverage: 0.75,
+      medianRetrievalPrecision: 0.5,
+      medianFilesServed: 6,
     });
   });
 
