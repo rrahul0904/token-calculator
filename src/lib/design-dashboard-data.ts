@@ -12,6 +12,12 @@ function money(value: string | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function metric(value: unknown) {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function median(values: number[]) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -136,9 +142,9 @@ export async function getExperimentsDashboardData(organizationId: string) {
   for (const revalidation of revalidationRows) if (!latestRevalidationByExperiment.has(revalidation.experimentId)) latestRevalidationByExperiment.set(revalidation.experimentId, revalidation);
   const items = experimentRows.map((experiment) => {
     const results = resultRows.filter((result) => result.experimentId === experiment.id);
-    const byVariant = new Map<string, { count: number; successful: number; costs: number[]; qualities: number[]; latencies: number[] }>();
+    const byVariant = new Map<string, { count: number; successful: number; costs: number[]; qualities: number[]; latencies: number[]; tokens: number[]; outputTokens: number[] }>();
     for (const result of results) {
-      const group = byVariant.get(result.variant) ?? { count: 0, successful: 0, costs: [], qualities: [], latencies: [] };
+      const group = byVariant.get(result.variant) ?? { count: 0, successful: 0, costs: [], qualities: [], latencies: [], tokens: [], outputTokens: [] };
       group.count += 1;
       if (result.success) group.successful += 1;
       const cost = money(result.costUsd);
@@ -146,9 +152,21 @@ export async function getExperimentsDashboardData(organizationId: string) {
       const quality = money(result.qualityScore);
       if (quality !== null) group.qualities.push(quality);
       if (result.latencyMs !== null) group.latencies.push(result.latencyMs);
+      if (result.tokens !== null) group.tokens.push(result.tokens);
+      const outputTokens = metric(result.benchmarkContext["output_tokens"]);
+      if (outputTokens !== null) group.outputTokens.push(outputTokens);
       byVariant.set(result.variant, group);
     }
-    const variants = [...byVariant.entries()].map(([variant, group]) => ({ variant, count: group.count, successRate: group.count ? group.successful / group.count : null, medianCostUsd: median(group.costs), medianQuality: median(group.qualities), medianLatencyMs: median(group.latencies) }));
+    const variants = [...byVariant.entries()].map(([variant, group]) => ({
+      variant,
+      count: group.count,
+      successRate: group.count ? group.successful / group.count : null,
+      medianCostUsd: median(group.costs),
+      medianQuality: median(group.qualities),
+      medianLatencyMs: median(group.latencies),
+      medianMeasuredTokens: median(group.tokens),
+      medianOutputTokens: median(group.outputTokens),
+    }));
     const verification = evaluateExperimentRows({
       status: experiment.status,
       rows: results,
