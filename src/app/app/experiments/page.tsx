@@ -87,7 +87,8 @@ export default async function ExperimentsPage() {
                       <div className="finding">
                         <div className="finding__top">
                           <div>
-                            <strong>Verified savings v{item.latestVerifiedSavings.version}</strong>
+                            <strong>{item.evidence === "experiment_verified" ? "Verified savings" : "Historical verified savings"} v{item.latestVerifiedSavings.version}</strong>
+                            {item.evidence !== "experiment_verified" ? <p>Current evidence no longer satisfies the strengthened full-session benchmark gate; the immutable snapshot remains for audit history.</p> : null}
                             <p>
                               <Money value={item.latestVerifiedSavings.savingsPerObservationUsd} /> per evaluated observation · {percentValue(item.latestVerifiedSavings.savingsPct)} lower median cost · {item.latestVerifiedSavings.baselineSampleSize}/{item.latestVerifiedSavings.candidateSampleSize} baseline/candidate samples
                             </p>
