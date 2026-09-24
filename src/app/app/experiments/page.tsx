@@ -77,7 +77,7 @@ export default async function ExperimentsPage() {
                             {integrity.pairedCaseCount} paired cases · {integrity.authoritativeFullSessionCount}/{item.resultCount} full-session observations · {integrity.cacheAccountingCount}/{item.resultCount} cache-accounted · {integrity.toolCallAccountingCount}/{item.resultCount} tool-accounted
                           </p>
                           <p>
-                            Tool invocation rate: {pct(integrity.toolInvocationRate)} · index/setup time reported for {integrity.indexTimeReportedCount}/{item.resultCount} observations ({pct(integrity.indexTimeCoverage)}).
+                            Any-tool use: {pct(integrity.agentToolUseRate)} · target-tool invocation: {pct(integrity.targetToolInvocationRate)} across {integrity.targetToolAccountingCount} instrumented observations · index/setup time reported for {integrity.indexTimeReportedCount}/{item.resultCount} observations ({pct(integrity.indexTimeCoverage)}).
                           </p>
                         </div>
                       </div>
