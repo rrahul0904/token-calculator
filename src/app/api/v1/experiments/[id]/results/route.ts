@@ -57,6 +57,13 @@ async function experimentForTenant(id: string, organizationId: string) {
     .limit(1))[0] ?? null;
 }
 
+function metadataNumber(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -90,7 +97,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!caseRow) return reply({ error: "CASE_NOT_FOUND" }, 404);
       if (caseRow.organizationId !== tenant.organizationId || caseRow.datasetId !== experiment.datasetId) return reply({ error: "CROSS_TENANT_OR_DATASET_REFERENCE" }, 403);
     }
-    let linkedRun: (LinkedRunEconomics & { organizationId: string; metadata: Record<string, unknown> }) | null = null;
+    let linkedRun: (LinkedRunEconomics & {
+      organizationId: string;
+      metadata: Record<string, unknown>;
+      agentName: string;
+      agentVersion: string | null;
+      workflowName: string | null;
+      workflowVersion: string | null;
+      repo: string | null;
+      repoCommitSha: string | null;
+      toolCallCount: number;
+      turnCount: number;
+      startedAt: Date;
+      endedAt: Date | null;
+    }) | null = null;
     if (parsed.data.runId) {
       const run = (await db.select({
         organizationId: runs.organizationId,
@@ -106,6 +126,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         retryCount: runs.retryCount,
         fallbackCount: runs.fallbackCount,
         metadata: runs.metadata,
+        agentName: runs.agentName,
+        agentVersion: runs.agentVersion,
+        workflowName: runs.workflowName,
+        workflowVersion: runs.workflowVersion,
+        repo: runs.repo,
+        repoCommitSha: runs.repoCommitSha,
+        toolCallCount: runs.toolCallCount,
+        turnCount: runs.turnCount,
+        startedAt: runs.startedAt,
+        endedAt: runs.endedAt,
       }).from(runs).where(eq(runs.id, parsed.data.runId)).limit(1))[0];
       if (!run) return reply({ error: "RUN_NOT_FOUND" }, 404);
       if (run.organizationId !== tenant.organizationId) return reply({ error: "CROSS_TENANT_REFERENCE" }, 403);
@@ -127,6 +157,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       ? linkedRun.metadata["orchestration.run_id"].trim()
       : "";
     let economics;
+    let measurementScope = "submitted_observation";
+    let benchmarkContext: Record<string, unknown> = {
+      benchmark_version: "full-session-v1",
+      measurement_scope: measurementScope,
+    };
+
     if (linkedRun && orchestrationRunId) {
       const [orchestrationCalls, orchestrationRuns] = await Promise.all([
         db.select({
@@ -145,6 +181,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         db.select({
           retryCount: runs.retryCount,
           fallbackCount: runs.fallbackCount,
+          cacheReadTokens: runs.cacheReadTokens,
+          cacheWriteTokens: runs.cacheWriteTokens,
+          toolCallCount: runs.toolCallCount,
+          turnCount: runs.turnCount,
+          metadata: runs.metadata,
         }).from(runs).where(and(
           eq(runs.organizationId, tenant.organizationId),
           sql`${runs.metadata} ->> 'orchestration.run_id' = ${orchestrationRunId}`,
@@ -155,6 +196,28 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         retries: orchestrationRuns.reduce((sum, run) => sum + (run.retryCount ?? 0), 0),
         fallbacks: orchestrationRuns.reduce((sum, run) => sum + (run.fallbackCount ?? 0), 0),
       });
+      measurementScope = "orchestration_full_session";
+      const indexTimes = orchestrationRuns
+        .map((run) => metadataNumber(run.metadata, "benchmark.index_time_ms"))
+        .filter((value): value is number => value !== null);
+      benchmarkContext = {
+        benchmark_version: "full-session-v1",
+        measurement_scope: measurementScope,
+        harness: linkedRun.agentName,
+        harness_version: linkedRun.agentVersion,
+        workflow_name: linkedRun.workflowName,
+        workflow_version: linkedRun.workflowVersion,
+        repository: linkedRun.repo,
+        repository_commit_sha: linkedRun.repoCommitSha,
+        cache_read_tokens: orchestrationRuns.reduce((sum, run) => sum + run.cacheReadTokens, 0),
+        cache_write_tokens: orchestrationRuns.reduce((sum, run) => sum + run.cacheWriteTokens, 0),
+        tool_call_count: orchestrationRuns.reduce((sum, run) => sum + run.toolCallCount, 0),
+        turn_count: orchestrationRuns.reduce((sum, run) => sum + run.turnCount, 0),
+        index_time_ms: indexTimes.length === orchestrationRuns.length && indexTimes.length > 0
+          ? indexTimes.reduce((sum, value) => sum + value, 0)
+          : null,
+        orchestration_run_id: orchestrationRunId,
+      };
     } else {
       economics = resolveExperimentEconomics({
         run: linkedRun,
@@ -165,7 +228,30 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           fallbacks: parsed.data.fallbacks,
         },
       });
+      measurementScope = linkedRun ? "full_session" : "submitted_observation";
+      benchmarkContext = linkedRun ? {
+        benchmark_version: "full-session-v1",
+        measurement_scope: measurementScope,
+        harness: linkedRun.agentName,
+        harness_version: linkedRun.agentVersion,
+        workflow_name: linkedRun.workflowName,
+        workflow_version: linkedRun.workflowVersion,
+        repository: linkedRun.repo,
+        repository_commit_sha: linkedRun.repoCommitSha,
+        cache_read_tokens: linkedRun.cacheReadTokens ?? 0,
+        cache_write_tokens: linkedRun.cacheWriteTokens ?? 0,
+        tool_call_count: linkedRun.toolCallCount,
+        turn_count: linkedRun.turnCount,
+        index_time_ms: metadataNumber(linkedRun.metadata, "benchmark.index_time_ms"),
+        started_at: linkedRun.startedAt.toISOString(),
+        ended_at: linkedRun.endedAt?.toISOString() ?? null,
+      } : {
+        benchmark_version: "full-session-v1",
+        measurement_scope: measurementScope,
+        note: "Caller-submitted economics are retained as observations but cannot qualify as verified savings.",
+      };
     }
+    benchmarkContext.economics_source = economics.source;
 
     const row = (await db.insert(experimentResults).values({
       id: `exr_${randomUUID()}`,
@@ -180,6 +266,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       latencyMs: parsed.data.latencyMs ?? null,
       retries: economics.retries,
       fallbacks: economics.fallbacks,
+      economicsSource: economics.source,
+      measurementScope,
+      benchmarkContext,
       success,
       evaluatorResults,
     }).returning())[0];
