@@ -99,20 +99,25 @@ const checks: Check[] = [
   },
 ];
 
-let failures = 0;
-for (const check of checks) {
-  try {
-    await check.run();
-    console.log(`PASS  ${check.name}`);
-  } catch (error) {
-    failures += 1;
-    console.error(`FAIL  ${check.name}: ${error instanceof Error ? error.message : String(error)}`);
+async function main() {
+  let failures = 0;
+  for (const check of checks) {
+    try {
+      await check.run();
+      console.log(`PASS  ${check.name}`);
+    } catch (error) {
+      failures += 1;
+      console.error(`FAIL  ${check.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
-}
 
-if (failures > 0) {
-  console.error(`${failures} defensive DAST check(s) failed`);
-  process.exitCode = 1;
-} else {
+  if (failures > 0) {
+    throw new Error(`${failures} defensive DAST check(s) failed`);
+  }
   console.log(`PASS  defensive DAST (${checks.length} checks)`);
 }
+
+void main().catch((error) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
