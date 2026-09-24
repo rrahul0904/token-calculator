@@ -7,10 +7,10 @@ import { releaseMigrationInventory } from "../scripts/release/migration-inventor
 describe("release migration evidence", () => {
   it("matches the current checked-in migration set", async () => {
     const inventory = await releaseMigrationInventory();
-    expect(inventory.count).toBe(12);
-    expect(inventory.range).toEqual(["0000", "0011"]);
+    expect(inventory.count).toBe(13);
+    expect(inventory.range).toEqual(["0000", "0012"]);
     expect(inventory.files[0]).toBe("0000_agent_economics_foundation.sql");
-    expect(inventory.files.at(-1)).toBe("0011_verified_savings_revalidations.sql");
+    expect(inventory.files.at(-1)).toBe("0012_experiment_benchmark_integrity.sql");
   });
 
   it("keeps release documentation aligned with the checked-in migration range", async () => {
