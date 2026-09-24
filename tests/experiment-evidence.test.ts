@@ -15,6 +15,7 @@ function row(variant: "baseline" | "candidate", index: number, overrides: Partia
       cache_read_tokens: 0,
       cache_write_tokens: 0,
       tool_call_count: 4,
+      target_tool_call_count: 2,
       index_time_ms: 20,
     },
     ...overrides,
@@ -55,6 +56,8 @@ describe("experiment evidence labels", () => {
       authoritativeFullSessionEconomics: true,
       cacheAccountingComplete: true,
       toolCallAccountingComplete: true,
+      targetToolAccountingCount: 10,
+      targetToolInvocationRate: 1,
     });
   });
 
