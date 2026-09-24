@@ -43,6 +43,7 @@ Each verified observation carries benchmark context derived from telemetry:
 - cache-read tokens;
 - cache-write tokens;
 - total tool calls;
+- target retrieval/tool identity and invocation count when the harness reports them;
 - turn count;
 - harness / agent identity where available;
 - workflow identity where available;
@@ -75,11 +76,12 @@ For agent/tool evaluations:
 3. keep repository commit, prompt, model/harness access, and other controllable inputs fixed where applicable;
 4. record complete session usage, not only a retrieved payload;
 5. record cache-read/write tokens;
-6. record tool-call count and invocation rate;
-7. record indexing/setup time when applicable;
-8. evaluate quality separately from token/cost savings;
-9. report medians and sample sizes together with the savings percentage;
-10. preserve the full evidence hash so later changes trigger revalidation.
+6. record total tool-call count and instrument the benchmarked target tool separately;
+7. record target-tool invocation rate so generic tool use is not misattributed;
+8. record indexing/setup time when applicable;
+9. evaluate quality separately from token/cost savings;
+10. report medians and sample sizes together with the savings percentage;
+11. preserve the full evidence hash so later changes trigger revalidation.
 
 ## Non-goals
 
