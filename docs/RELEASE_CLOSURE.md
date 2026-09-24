@@ -36,7 +36,7 @@ The launch product is implemented end to end at the repository level, including:
 - WorkOS/AuthKit session/callback/sign-out hardening;
 - Stripe Checkout/portal/webhook entitlement implementation;
 - ephemeral WorkOS release-certification users created, masked and deleted by Preview/Production workflows;
-- forward migrations through `0011_verified_savings_revalidations`;
+- forward migrations through `0012_experiment_benchmark_integrity`;
 - exact-SHA Preview certification, staged Production certification/promotion and automatic rollback controls.
 
 Authenticated browser acceptance now covers the experiment lifecycle, saved scenario history, budget/policy/approval control plane and the existing tenant/API-key/privacy/workspace journeys. Prompt content remains non-durable in Cost Lab and evaluation workflows.
@@ -48,7 +48,7 @@ Issue #1 is closed as completed. Issue #3 remains open only for broader post-lau
 | Area | Status | Evidence |
 |---|---|---|
 | Repository implementation | PASS | Canonical `main` and release-candidate paths require full CI, production build and Playwright smoke on the exact release SHA; no open code PR may be treated as release evidence |
-| Migration chain | PASS | CI applies `0000` through `0011` on disposable PostgreSQL and verifies checksums/schema/triggers; release manifests derive this inventory from checked-in SQL |
+| Migration chain | PASS | CI applies `0000` through `0012` on disposable PostgreSQL and verifies checksums/schema/triggers; release manifests derive this inventory from checked-in SQL |
 | Neon validation branch | PASS | Schema through `0011` is present on `br-small-haze-aeqj7d25`; transaction pooling is enabled |
 | Neon Production baseline | PASS | Production `br-muddy-sun-aeyodc4h` records migrations `0000` through `0011`; required tables, outcome identity columns, indexes and tenant triggers were verified; transaction pooling is enabled |
 | WorkOS Staging | PASS_PROVIDER | AuthKit/API key, Preview origins, MCP OAuth resources, Directory Sync webhook and ephemeral-user create/delete smoke verified |
@@ -103,7 +103,7 @@ Live Stripe provider resources are already correct. Preview billing certificatio
 2. Install `VERCEL_TOKEN` and correct Preview runtime values.
 3. Release Preview verifies Neon identity/migrations, provisions temporary WorkOS Staging users, deploys the exact SHA, certifies AuthKit/onboarding/Stripe TEST/MCP/health/5xx, cleans temporary users and emits `preview_certified` evidence.
 4. Activate WorkOS Production with real billing information and install the Production runtime contract.
-5. Release Production downloads/re-certifies the Preview manifest, verifies WorkOS/live Stripe/Neon and runs the forward-only migration verifier against the verified Production branch. With the current schema, `0000` through `0011` must already checksum-match; future migrations are applied only by this gated path.
+5. Release Production downloads/re-certifies the Preview manifest, verifies WorkOS/live Stripe/Neon and runs the forward-only migration verifier against the verified Production branch. The repository release range is `0000` through `0012`. Installed Production migrations `0000` through `0011` must already checksum-match, and `0012` is applied only by this gated forward-migration path.
 6. The workflow creates a staged Production deployment without moving traffic, provisions a temporary Production AuthKit user, and certifies build identity/health/auth/MCP/5xx.
 7. It promotes the already-certified staged deployment and proves the stable domain serves the same deployment ID.
 8. Any failed post-promotion certification triggers automatic rollback; temporary auth users are cleaned up.
