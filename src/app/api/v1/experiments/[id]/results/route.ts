@@ -217,8 +217,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         workflow_version: linkedRun.workflowVersion,
         repository: linkedRun.repo,
         repository_commit_sha: linkedRun.repoCommitSha,
-        cache_read_tokens: orchestrationRuns.reduce((sum, run) => sum + run.cacheReadTokens, 0),
-        cache_write_tokens: orchestrationRuns.reduce((sum, run) => sum + run.cacheWriteTokens, 0),
+        fresh_input_tokens: orchestrationCalls.reduce((sum, call) => sum + (call.freshInputTokens ?? 0), 0),
+        cache_read_tokens: orchestrationCalls.reduce((sum, call) => sum + (call.cacheReadTokens ?? 0), 0),
+        cache_write_tokens: orchestrationCalls.reduce((sum, call) => sum + (call.cacheWriteTokens ?? 0), 0),
+        reasoning_tokens: orchestrationCalls.reduce((sum, call) => sum + (call.reasoningTokens ?? 0), 0),
+        output_tokens: orchestrationCalls.reduce((sum, call) => sum + (call.outputTokens ?? 0), 0),
+        measured_tokens: economics.tokens,
         tool_call_count: orchestrationRuns.reduce((sum, run) => sum + run.toolCallCount, 0),
         target_tool: metadataString(linkedRun.metadata, "benchmark.target_tool"),
         target_tool_call_count: targetToolCounts.length === orchestrationRuns.length && targetToolCounts.length > 0
@@ -228,6 +232,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         index_time_ms: indexTimes.length === orchestrationRuns.length && indexTimes.length > 0
           ? indexTimes.reduce((sum, value) => sum + value, 0)
           : null,
+        gold_files_total: metadataNumber(linkedRun.metadata, "benchmark.gold_files_total"),
+        gold_files_found: metadataNumber(linkedRun.metadata, "benchmark.gold_files_found"),
+        files_served: metadataNumber(linkedRun.metadata, "benchmark.files_served"),
         orchestration_run_id: orchestrationRunId,
       };
     } else {
@@ -250,13 +257,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         workflow_version: linkedRun.workflowVersion,
         repository: linkedRun.repo,
         repository_commit_sha: linkedRun.repoCommitSha,
+        fresh_input_tokens: linkedRun.freshInputTokens ?? 0,
         cache_read_tokens: linkedRun.cacheReadTokens ?? 0,
         cache_write_tokens: linkedRun.cacheWriteTokens ?? 0,
+        reasoning_tokens: linkedRun.reasoningTokens ?? 0,
+        output_tokens: linkedRun.outputTokens ?? 0,
+        measured_tokens: economics.tokens,
         tool_call_count: linkedRun.toolCallCount,
         target_tool: metadataString(linkedRun.metadata, "benchmark.target_tool"),
         target_tool_call_count: metadataNumber(linkedRun.metadata, "benchmark.target_tool_call_count"),
         turn_count: linkedRun.turnCount,
         index_time_ms: metadataNumber(linkedRun.metadata, "benchmark.index_time_ms"),
+        gold_files_total: metadataNumber(linkedRun.metadata, "benchmark.gold_files_total"),
+        gold_files_found: metadataNumber(linkedRun.metadata, "benchmark.gold_files_found"),
+        files_served: metadataNumber(linkedRun.metadata, "benchmark.files_served"),
         started_at: linkedRun.startedAt.toISOString(),
         ended_at: linkedRun.endedAt?.toISOString() ?? null,
       } : {
