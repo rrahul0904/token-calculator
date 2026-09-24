@@ -69,19 +69,21 @@ export default async function ExperimentsPage() {
                         : "Results are recorded, but they remain unverified until the same cases are paired across variants and every observation has authoritative full-session economics plus cache/tool-call accounting."}
                     </p>
 
-                    <div className="finding">
-                      <div className="finding__top">
-                        <div>
-                          <strong>Benchmark integrity</strong>
-                          <p>
-                            {integrity.pairedCaseCount} paired cases · {integrity.authoritativeFullSessionCount}/{item.resultCount} full-session observations · {integrity.cacheAccountingCount}/{item.resultCount} cache-accounted · {integrity.toolCallAccountingCount}/{item.resultCount} tool-accounted
-                          </p>
-                          <p>
-                            Any-tool use: {pct(integrity.agentToolUseRate)} · target-tool invocation: {pct(integrity.targetToolInvocationRate)} across {integrity.targetToolAccountingCount} instrumented observations · index/setup time reported for {integrity.indexTimeReportedCount}/{item.resultCount} observations ({pct(integrity.indexTimeCoverage)}).
-                          </p>
+                    {integrity ? (
+                      <div className="finding">
+                        <div className="finding__top">
+                          <div>
+                            <strong>Benchmark integrity</strong>
+                            <p>
+                              {integrity.pairedCaseCount} paired cases · {integrity.authoritativeFullSessionCount}/{item.resultCount} full-session observations · {integrity.cacheAccountingCount}/{item.resultCount} cache-accounted · {integrity.toolCallAccountingCount}/{item.resultCount} tool-accounted
+                            </p>
+                            <p>
+                              Any-tool use: {pct(integrity.agentToolUseRate)} · target-tool invocation: {pct(integrity.targetToolInvocationRate)} across {integrity.targetToolAccountingCount} instrumented observations · index/setup time reported for {integrity.indexTimeReportedCount}/{item.resultCount} observations ({pct(integrity.indexTimeCoverage)}).
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : null}
 
                     {item.latestVerifiedSavings ? (
                       <div className="finding">
