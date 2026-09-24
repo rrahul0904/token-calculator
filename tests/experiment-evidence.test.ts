@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { evaluateExperimentRows, experimentEvidence } from "@/lib/evaluations/experiment-evidence";
+import { evaluateExperimentRows, experimentEvidence, type ExperimentEvidenceRow } from "@/lib/evaluations/experiment-evidence";
 
-function row(variant: "baseline" | "candidate", index: number, overrides: Record<string, unknown> = {}) {
+function row(variant: "baseline" | "candidate", index: number, overrides: Partial<ExperimentEvidenceRow> = {}): ExperimentEvidenceRow {
   return {
     variant,
     caseId: `case_${index}`,
