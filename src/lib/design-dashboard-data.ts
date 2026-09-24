@@ -2,7 +2,7 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { findings, llmCalls, outcomes, projects, runs } from "@/db/schema";
 import { evaluationDatasets, experimentResults, experiments, verifiedSavings, verifiedSavingsRevalidations } from "@/db/gap-closure-schema";
-import { experimentEvidence } from "@/lib/evaluations/experiment-evidence";
+import { evaluateExperimentRows } from "@/lib/evaluations/experiment-evidence";
 import { summarizeOutcomeEconomics } from "@/lib/outcomes/economics";
 import { summarizeOrchestrationEconomics } from "@/lib/orchestration/route-lab";
 
@@ -149,7 +149,12 @@ export async function getExperimentsDashboardData(organizationId: string) {
       byVariant.set(result.variant, group);
     }
     const variants = [...byVariant.entries()].map(([variant, group]) => ({ variant, count: group.count, successRate: group.count ? group.successful / group.count : null, medianCostUsd: median(group.costs), medianQuality: median(group.qualities), medianLatencyMs: median(group.latencies) }));
-    const variantByName = new Map(variants.map((variant) => [variant.variant.toLowerCase(), variant]));
+    const verification = evaluateExperimentRows({
+      status: experiment.status,
+      rows: results,
+      minimumQualityScore: experiment.qualityThreshold,
+      maxCostRegressionPct: experiment.maxCostRegressionPct,
+    });
     const latestSavings = latestSavingsByExperiment.get(experiment.id);
     const latestRevalidation = latestRevalidationByExperiment.get(experiment.id);
     return {
@@ -157,13 +162,9 @@ export async function getExperimentsDashboardData(organizationId: string) {
       dataset: datasetById.get(experiment.datasetId) ?? null,
       resultCount: results.length,
       variants,
-      evidence: experimentEvidence({
-        status: experiment.status,
-        resultCount: results.length,
-        baseline: variantByName.get("baseline"),
-        candidate: variantByName.get("candidate"),
-        minimumQualityScore: money(experiment.qualityThreshold),
-      }),
+      evidence: results.length === 0 ? "unavailable" as const : verification.passed ? "experiment_verified" as const : "results_recorded" as const,
+      benchmarkIntegrity: verification.benchmarkIntegrity,
+      verificationPrerequisites: verification.prerequisites,
       latestVerifiedSavings: latestSavings ? {
         id: latestSavings.id,
         version: latestSavings.version,
