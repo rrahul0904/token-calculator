@@ -40,8 +40,8 @@ The measurement scope must represent the full agent/orchestration session rather
 
 Each verified observation carries benchmark context derived from telemetry:
 
-- cache-read tokens;
-- cache-write tokens;
+- fresh input, cache-read, cache-write, reasoning and output token components;
+- total measured session tokens and cost;
 - total tool calls;
 - target retrieval/tool identity and invocation count when the harness reports them;
 - turn count;
@@ -50,7 +50,11 @@ Each verified observation carries benchmark context derived from telemetry:
 - repository and commit where available;
 - index/setup time when the harness reports it.
 
-This lets the product distinguish “the tool exists” from “the tool was actually used,” and exposes cache behavior beside token/cost results.
+This lets the product distinguish “the tool exists” from “the tool was actually used,” exposes cache behavior beside cost, and keeps output-token/session-token comparisons visible when cache-warmed cost is a poor comparison surface.
+
+### Retrieval quality is disclosed beside compression
+
+When a harness reports `benchmark.gold_files_total`, `benchmark.gold_files_found`, and `benchmark.files_served`, Token Intelligence records median gold-file coverage, precision and files served. These diagnostics are intentionally not universal gates because not every optimization is file retrieval, but they prevent “less context” from being treated as automatically better context.
 
 ### Index/setup time is disclosed, not silently ignored
 
@@ -76,12 +80,15 @@ For agent/tool evaluations:
 3. keep repository commit, prompt, model/harness access, and other controllable inputs fixed where applicable;
 4. record complete session usage, not only a retrieved payload;
 5. record cache-read/write tokens;
-6. record total tool-call count and instrument the benchmarked target tool separately;
-7. record target-tool invocation rate so generic tool use is not misattributed;
-8. record indexing/setup time when applicable;
-9. evaluate quality separately from token/cost savings;
-10. report medians and sample sizes together with the savings percentage;
-11. preserve the full evidence hash so later changes trigger revalidation.
+6. report total measured session tokens and output tokens, not only cost;
+7. record cache-read/write components so warm-cache effects are explicit;
+8. record total tool-call count and instrument the benchmarked target tool separately;
+9. record target-tool invocation rate so generic tool use is not misattributed;
+10. when retrieval is in scope, record gold-file coverage, precision and files served;
+11. record indexing/setup time when applicable;
+12. evaluate quality separately from token/cost savings;
+13. report medians and sample sizes together with the savings percentage;
+14. preserve the full evidence hash so later changes trigger revalidation.
 
 ## Non-goals
 
