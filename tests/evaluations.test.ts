@@ -46,9 +46,30 @@ describe("deterministic evaluations", () => {
 
 describe("verified savings evidence", () => {
   function rows(candidateCost = 0.6, candidateQuality = 0.94, candidateSuccess = true) {
+    const benchmarkContext = { cache_read_tokens: 0, cache_write_tokens: 0, tool_call_count: 2 };
     return [
-      ...Array.from({ length: 5 }, (_, index) => ({ variant: "baseline", qualityScore: 0.95, costUsd: 1 + index * 0.01, success: true })),
-      ...Array.from({ length: 5 }, (_, index) => ({ variant: "candidate", qualityScore: candidateQuality, costUsd: candidateCost + index * 0.01, success: candidateSuccess })),
+      ...Array.from({ length: 5 }, (_, index) => ({
+        variant: "baseline",
+        caseId: `case_${index}`,
+        runId: `run_baseline_${index}`,
+        qualityScore: 0.95,
+        costUsd: 1 + index * 0.01,
+        success: true,
+        economicsSource: "linked_run",
+        measurementScope: "full_session",
+        benchmarkContext,
+      })),
+      ...Array.from({ length: 5 }, (_, index) => ({
+        variant: "candidate",
+        caseId: `case_${index}`,
+        runId: `run_candidate_${index}`,
+        qualityScore: candidateQuality,
+        costUsd: candidateCost + index * 0.01,
+        success: candidateSuccess,
+        economicsSource: "linked_run",
+        measurementScope: "full_session",
+        benchmarkContext,
+      })),
     ];
   }
 
