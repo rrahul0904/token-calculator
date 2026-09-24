@@ -7,6 +7,7 @@ import { getExperimentsDashboardData } from "@/lib/design-dashboard-data";
 function pct(value: number | null) { return value === null ? "—" : `${(value * 100).toFixed(1)}%`; }
 function percentValue(value: number | null) { return value === null ? "—" : `${value.toFixed(1)}%`; }
 function latency(value: number | null) { return value === null ? "—" : value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${Math.round(value)}ms`; }
+function tokens(value: number | null) { return value === null ? "—" : Math.round(value).toLocaleString(); }
 
 export default async function ExperimentsPage() {
   const tenant = await getTenantContext();
@@ -80,6 +81,11 @@ export default async function ExperimentsPage() {
                             <p>
                               Any-tool use: {pct(integrity.agentToolUseRate)} · target-tool invocation: {pct(integrity.targetToolInvocationRate)} across {integrity.targetToolAccountingCount} instrumented observations · index/setup time reported for {integrity.indexTimeReportedCount}/{item.resultCount} observations ({pct(integrity.indexTimeCoverage)}).
                             </p>
+                            {integrity.retrievalDiagnosticsCount > 0 ? (
+                              <p>
+                                Retrieval diagnostics ({integrity.retrievalDiagnosticsCount} observations): median gold-file coverage {pct(integrity.medianRetrievalCoverage)} · median precision {pct(integrity.medianRetrievalPrecision)} · median files served {integrity.medianFilesServed?.toFixed(1) ?? "—"}.
+                              </p>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -111,6 +117,8 @@ export default async function ExperimentsPage() {
                             <th>Cases</th>
                             <th>Success</th>
                             <th>Median quality</th>
+                            <th>Median session tokens</th>
+                            <th>Median output tokens</th>
                             <th>Median session cost</th>
                             <th>Median latency</th>
                           </tr>
@@ -122,6 +130,8 @@ export default async function ExperimentsPage() {
                               <td>{variant.count}</td>
                               <td>{pct(variant.successRate)}</td>
                               <td className="mono">{variant.medianQuality === null ? "—" : variant.medianQuality.toFixed(3)}</td>
+                              <td className="mono">{tokens(variant.medianMeasuredTokens)}</td>
+                              <td className="mono">{tokens(variant.medianOutputTokens)}</td>
                               <td className="mono"><Money value={variant.medianCostUsd} /></td>
                               <td className="mono">{latency(variant.medianLatencyMs)}</td>
                             </tr>
