@@ -32,6 +32,7 @@ const requiredMigrations = [
   "0009_verified_savings_ledger.sql",
   "0010_stable_outcome_identities.sql",
   "0011_verified_savings_revalidations.sql",
+  "0012_experiment_benchmark_integrity.sql",
 ];
 
 const requiredTriggers = [
