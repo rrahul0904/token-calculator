@@ -41,6 +41,11 @@ function median(values: number[]) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function safeRatio(numerator: number | null, denominator: number | null) {
+  if (numerator === null || denominator === null || denominator <= 0) return null;
+  return Math.min(Math.max(numerator / denominator, 0), 1);
+}
+
 function variantRows(rows: ExperimentEvidenceRow[], variant: "baseline" | "candidate") {
   return rows.filter((row) => row.variant.trim().toLowerCase() === variant);
 }
@@ -107,6 +112,14 @@ export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
   const agentToolUseRows = rows.filter((row) => (contextNumber(row, "tool_call_count") ?? 0) > 0);
   const targetToolAccountingRows = rows.filter((row) => contextNumber(row, "target_tool_call_count") !== null);
   const targetToolInvokedRows = targetToolAccountingRows.filter((row) => (contextNumber(row, "target_tool_call_count") ?? 0) > 0);
+  const retrievalDiagnostics = rows.flatMap((row) => {
+    const goldTotal = contextNumber(row, "gold_files_total");
+    const goldFound = contextNumber(row, "gold_files_found");
+    const filesServed = contextNumber(row, "files_served");
+    const coverage = safeRatio(goldFound, goldTotal);
+    const precision = safeRatio(goldFound, filesServed);
+    return coverage === null || precision === null ? [] : [{ coverage, precision, filesServed: filesServed! }];
+  });
 
   return {
     pairedCaseCount: pairedCases.length,
@@ -123,6 +136,10 @@ export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
     agentToolUseRate: rows.length ? agentToolUseRows.length / rows.length : null,
     targetToolAccountingCount: targetToolAccountingRows.length,
     targetToolInvocationRate: targetToolAccountingRows.length ? targetToolInvokedRows.length / targetToolAccountingRows.length : null,
+    retrievalDiagnosticsCount: retrievalDiagnostics.length,
+    medianRetrievalCoverage: median(retrievalDiagnostics.map((item) => item.coverage)),
+    medianRetrievalPrecision: median(retrievalDiagnostics.map((item) => item.precision)),
+    medianFilesServed: median(retrievalDiagnostics.map((item) => item.filesServed)),
     indexTimeReportedCount: indexTimeRows.length,
     indexTimeCoverage: rows.length ? indexTimeRows.length / rows.length : null,
   };
