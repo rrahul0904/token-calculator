@@ -104,7 +104,9 @@ export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
     && contextNumber(row, "cache_write_tokens") !== null);
   const toolAccountingRows = rows.filter((row) => contextNumber(row, "tool_call_count") !== null);
   const indexTimeRows = rows.filter((row) => contextNumber(row, "index_time_ms") !== null);
-  const toolInvokedRows = rows.filter((row) => (contextNumber(row, "tool_call_count") ?? 0) > 0);
+  const agentToolUseRows = rows.filter((row) => (contextNumber(row, "tool_call_count") ?? 0) > 0);
+  const targetToolAccountingRows = rows.filter((row) => contextNumber(row, "target_tool_call_count") !== null);
+  const targetToolInvokedRows = targetToolAccountingRows.filter((row) => (contextNumber(row, "target_tool_call_count") ?? 0) > 0);
 
   return {
     pairedCaseCount: pairedCases.length,
@@ -118,7 +120,9 @@ export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
     cacheAccountingComplete: rows.length > 0 && cacheAccountingRows.length === rows.length,
     toolCallAccountingCount: toolAccountingRows.length,
     toolCallAccountingComplete: rows.length > 0 && toolAccountingRows.length === rows.length,
-    toolInvocationRate: rows.length ? toolInvokedRows.length / rows.length : null,
+    agentToolUseRate: rows.length ? agentToolUseRows.length / rows.length : null,
+    targetToolAccountingCount: targetToolAccountingRows.length,
+    targetToolInvocationRate: targetToolAccountingRows.length ? targetToolInvokedRows.length / targetToolAccountingRows.length : null,
     indexTimeReportedCount: indexTimeRows.length,
     indexTimeCoverage: rows.length ? indexTimeRows.length / rows.length : null,
   };
