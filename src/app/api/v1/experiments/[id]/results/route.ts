@@ -64,6 +64,11 @@ function metadataNumber(metadata: Record<string, unknown>, key: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function metadataString(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -200,6 +205,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       const indexTimes = orchestrationRuns
         .map((run) => metadataNumber(run.metadata, "benchmark.index_time_ms"))
         .filter((value): value is number => value !== null);
+      const targetToolCounts = orchestrationRuns
+        .map((run) => metadataNumber(run.metadata, "benchmark.target_tool_call_count"))
+        .filter((value): value is number => value !== null);
       benchmarkContext = {
         benchmark_version: "full-session-v1",
         measurement_scope: measurementScope,
@@ -212,6 +220,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         cache_read_tokens: orchestrationRuns.reduce((sum, run) => sum + run.cacheReadTokens, 0),
         cache_write_tokens: orchestrationRuns.reduce((sum, run) => sum + run.cacheWriteTokens, 0),
         tool_call_count: orchestrationRuns.reduce((sum, run) => sum + run.toolCallCount, 0),
+        target_tool: metadataString(linkedRun.metadata, "benchmark.target_tool"),
+        target_tool_call_count: targetToolCounts.length === orchestrationRuns.length && targetToolCounts.length > 0
+          ? targetToolCounts.reduce((sum, value) => sum + value, 0)
+          : null,
         turn_count: orchestrationRuns.reduce((sum, run) => sum + run.turnCount, 0),
         index_time_ms: indexTimes.length === orchestrationRuns.length && indexTimes.length > 0
           ? indexTimes.reduce((sum, value) => sum + value, 0)
@@ -241,6 +253,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         cache_read_tokens: linkedRun.cacheReadTokens ?? 0,
         cache_write_tokens: linkedRun.cacheWriteTokens ?? 0,
         tool_call_count: linkedRun.toolCallCount,
+        target_tool: metadataString(linkedRun.metadata, "benchmark.target_tool"),
+        target_tool_call_count: metadataNumber(linkedRun.metadata, "benchmark.target_tool_call_count"),
         turn_count: linkedRun.turnCount,
         index_time_ms: metadataNumber(linkedRun.metadata, "benchmark.index_time_ms"),
         started_at: linkedRun.startedAt.toISOString(),
