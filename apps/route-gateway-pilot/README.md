@@ -20,11 +20,11 @@ set -a; . ./.env; set +a
 npm start
 ```
 
-Example, with your actual gateway key:
+Set `GATEWAY_KEY` in your shell to the tenant secret using a secure local method. Example:
 
 ```bash
 curl -sS http://localhost:3000/v1/chat/completions \
-  -H 'Authorization: Bearer YOUR_GATEWAY_TENANT_KEY' \
+  -H "Authorization: Bearer $GATEWAY_KEY" \
   -H 'Content-Type: application/json' \
   -H 'x-ti-cache: exact' \
   -d '{"model":"economy","messages":[{"role":"user","content":"Reply with one sentence about caching."}],"temperature":0,"max_tokens":80}'
