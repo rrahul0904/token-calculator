@@ -62,7 +62,8 @@ const checks: Check[] = [
         body: JSON.stringify({ name: "security-probe", description: "must not persist" }),
         redirect: "manual",
       });
-      assert(write.status === 401, `anonymous project creation returned ${write.status}`);
+      assert(write.status === 401 || write.status === 403, `anonymous project creation returned ${write.status}`);
+      assertNoSecrets(await body(write), "anonymous project creation denial");
     },
   },
   {
