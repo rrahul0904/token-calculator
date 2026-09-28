@@ -101,7 +101,7 @@ export function createApp(config, { fetchImpl = fetch, clock = () => Date.now(),
     if (pathname === '/admin/metrics' && request.method === 'GET') {
       if (!config.adminKey) return fail('ADMIN_ENDPOINT_DISABLED', 404);
       const result = authenticate(request.headers.get('authorization'), [{ tenant: 'admin', secret: config.adminKey }]);
-      return result ? json({ ...metrics, scope: 'process_only', costSource: 'configured_rate_card_estimate' }) : fail('UNAUTHORIZED', 401);
+      return result ? json({ ...metrics, scope: 'process_only', providerMode, costSource: previewMode ? 'synthetic_fixture_no_spend' : 'configured_rate_card_estimate' }) : fail('UNAUTHORIZED', 401);
     }
     const tenant = authorize(request);
     if (!tenant) { metrics.rejected++; return fail('UNAUTHORIZED', 401); }
@@ -148,7 +148,9 @@ export function createApp(config, { fetchImpl = fetch, clock = () => Date.now(),
     const { _cacheable, ...replyBody } = result;
     const usage = result.usage;
     const cost = !previewMode && usage ? (usage.prompt_tokens * route.inputPerMillionUsd + usage.completion_tokens * route.outputPerMillionUsd) / 1_000_000 : null;
-    if (cost === null) metrics.unknownUsageCalls++; else metrics.estimatedUpstreamCostUsd += cost;
+    if (!previewMode) {
+      if (cost === null) metrics.unknownUsageCalls++; else metrics.estimatedUpstreamCostUsd += cost;
+    }
     if (key && _cacheable && usage) cache.put(key, replyBody);
     return json(replyBody, 200, headersFor(key ? 'MISS' : 'BYPASS', cost, previewMode ? 'synthetic_fixture' : (usage ? 'provider_reported' : 'unavailable'), providerMode));
   };
