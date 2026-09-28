@@ -114,3 +114,19 @@ test('unknown prototype property cannot act as a route alias', async () => {
   const app = createApp(parseConfig(env()), { fetchImpl: async () => { throw new Error('should never happen'); } });
   assert.equal((await app(req('/v1/chat/completions', { body: payload('toString') }))).status, 404);
 });
+
+test('successful but missing provider usage is never stored as a replayable cache entry', async () => {
+  let calls = 0;
+  const app = createApp(parseConfig(env()), { fetchImpl: async () => {
+    calls++;
+    return Response.json({ choices: [{ message: { content: 'complete but unmetered' }, finish_reason: 'stop' }] });
+  } });
+  for (let i = 0; i < 2; i++) {
+    const response = await app(req('/v1/chat/completions', { mode: 'exact' }));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('x-ti-cache'), 'MISS');
+    assert.equal(response.headers.get('x-ti-usage-source'), 'unavailable');
+    assert.equal((await response.json()).usage, null);
+  }
+  assert.equal(calls, 2);
+});
