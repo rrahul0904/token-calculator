@@ -96,7 +96,8 @@ export function createApp(config, { fetchImpl = fetch, clock = () => Date.now(),
     if (request.method === 'GET' && pathname === '/healthz') return json({ status: 'ok', service: 'route-gateway-pilot', mode: 'single_instance', storage: 'ephemeral', provider_mode: providerMode });
     if (request.method === 'GET' && pathname === '/') {
       const html = await readFile(fileURLToPath(new URL('../public/index.html', import.meta.url)), 'utf8');
-      return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" } });
+      const page = previewMode ? html.replace('<body><main>', '<body><main><p role="status" style="padding:14px;border:2px solid #91edd0">SYNTHETIC CERTIFICATION PREVIEW ONLY — no real provider requests or measured savings.</p>').replace('value="economy"', 'value="fixture"') : html;
+      return new Response(page, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" } });
     }
     if (pathname === '/admin/metrics' && request.method === 'GET') {
       if (!config.adminKey) return fail('ADMIN_ENDPOINT_DISABLED', 404);
