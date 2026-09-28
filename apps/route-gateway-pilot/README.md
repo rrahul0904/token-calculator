@@ -37,3 +37,9 @@ Set Railway service root directory to `/apps/route-gateway-pilot` in `rrahul0904
 ### Known constraints / release gates
 
 This pilot is not multi-replica-safe: cache, quota and metrics are per process and reset on restart. It has no Postgres receipts, idempotent retry, streaming/tools/multimodal, tenant self-service signup, provider-native prompt-cache accounting, validated quality-based dynamic routing, production-grade budget enforcement, billing integration or verified savings. It must not be marketed as production-ready for other organizations. See `SECURITY.md` and the original RE-304 dossier. Promote capabilities to the existing governed gateway with tenant-scoped durable storage and identical policy enforcement before general availability.
+
+## Synthetic-only certification preview
+
+For a controlled single-replica preview with **zero paid-provider requests**, use the separate entrypoint `node src/certification-preview.mjs` (not the normal `npm start`). Set `GATEWAY_CERTIFICATION_PREVIEW=FAKE_ONLY` and `GATEWAY_TENANTS_JSON` with separately generated tenant secrets. Do not set real OpenAI/Anthropic keys on that environment; this entrypoint refuses them. It enforces only the `fixture` model alias, injects a network-free deterministic transport, visibly labels the public documentation and `/healthz` synthetic, and does not emit provider-cost estimates. The usual `src/server.mjs` behavior remains separate and unchanged.
+
+Run `npm test && npm run check` to execute network-level synthetic certification tests, including anonymous 401, authenticated model enumeration, default BYPASS, explicit MISS/HIT, cross-tenant isolation, unsupported request rejection, and empty replay cache after server restart. See [CERTIFICATION.md](./CERTIFICATION.md) for deployment settings, evidence requirements, and the remaining release holds. A synthetic preview is not a real-provider or production certification.
