@@ -44,8 +44,8 @@ function validate(value) {
   if (!nonSystemSeen) return null;
   return { model: value.model, messages: value.messages, temperature: value.temperature ?? 1, max_tokens: value.max_tokens ?? 1024 };
 }
-function headersFor(cacheStatus, cost = null, source = 'unknown') {
-  return { 'x-ti-cache': cacheStatus, 'x-ti-usage-source': source, 'x-ti-cost-source': cost === null ? 'unavailable' : 'configured_rate_card_estimate',
+function headersFor(cacheStatus, cost = null, source = 'unknown', providerMode = 'configured_provider') {
+  return { 'x-ti-cache': cacheStatus, 'x-ti-usage-source': source, 'x-ti-provider-mode': providerMode, 'x-ti-cost-source': cost === null ? 'unavailable' : 'configured_rate_card_estimate',
     ...(cost !== null ? { 'x-ti-provider-cost-estimate-usd': cost.toFixed(8) } : {}) };
 }
 function usageFromOpenAI(value) {
@@ -78,7 +78,8 @@ function toProvider(route, body, config) {
   return { url: ANTHROPIC_URL, init: { method: 'POST', headers: { 'x-api-key': config.anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model: route.model, ...(system ? { system } : {}), messages: body.messages.filter(x => x.role !== 'system'), max_tokens: body.max_tokens, temperature: body.temperature, stream: false }) } };
 }
-export function createApp(config, { fetchImpl = fetch, clock = () => Date.now() } = {}) {
+export function createApp(config, { fetchImpl = fetch, clock = () => Date.now(), previewMode = false } = {}) {
+  const providerMode = previewMode ? 'synthetic_fixture' : 'configured_provider';
   const cache = new ExactCache(config.ttl, config.maxEntries, clock);
   const limits = new Map();
   const metrics = { accepted: 0, rejected: 0, upstreamCalls: 0, upstreamErrors: 0, cacheHits: 0, cacheMisses: 0, estimatedUpstreamCostUsd: 0, unknownUsageCalls: 0 };
@@ -92,7 +93,7 @@ export function createApp(config, { fetchImpl = fetch, clock = () => Date.now() 
   }
   return async function handle(request) {
     const pathname = new URL(request.url).pathname;
-    if (request.method === 'GET' && pathname === '/healthz') return json({ status: 'ok', service: 'route-gateway-pilot', mode: 'single_instance', storage: 'ephemeral' });
+    if (request.method === 'GET' && pathname === '/healthz') return json({ status: 'ok', service: 'route-gateway-pilot', mode: 'single_instance', storage: 'ephemeral', provider_mode: providerMode });
     if (request.method === 'GET' && pathname === '/') {
       const html = await readFile(fileURLToPath(new URL('../public/index.html', import.meta.url)), 'utf8');
       return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'" } });
@@ -129,7 +130,7 @@ export function createApp(config, { fetchImpl = fetch, clock = () => Date.now() 
         cached.id = `chatcmpl-cache-${randomUUID()}`;
         cached.created = Math.floor(clock() / 1000);
         cached.usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-        return json(cached, 200, headersFor('HIT', 0, 'gateway_replay'));
+        return json(cached, 200, headersFor('HIT', previewMode ? null : 0, 'gateway_replay', providerMode));
       }
       metrics.cacheMisses++;
     }
@@ -146,10 +147,10 @@ export function createApp(config, { fetchImpl = fetch, clock = () => Date.now() 
     if (!result) { metrics.upstreamErrors++; return fail('UPSTREAM_UNSUPPORTED_RESPONSE', 502); }
     const { _cacheable, ...replyBody } = result;
     const usage = result.usage;
-    const cost = usage ? (usage.prompt_tokens * route.inputPerMillionUsd + usage.completion_tokens * route.outputPerMillionUsd) / 1_000_000 : null;
+    const cost = !previewMode && usage ? (usage.prompt_tokens * route.inputPerMillionUsd + usage.completion_tokens * route.outputPerMillionUsd) / 1_000_000 : null;
     if (cost === null) metrics.unknownUsageCalls++; else metrics.estimatedUpstreamCostUsd += cost;
     if (key && _cacheable && usage) cache.put(key, replyBody);
-    return json(replyBody, 200, headersFor(key ? 'MISS' : 'BYPASS', cost, usage ? 'provider_reported' : 'unavailable'));
+    return json(replyBody, 200, headersFor(key ? 'MISS' : 'BYPASS', cost, previewMode ? 'synthetic_fixture' : (usage ? 'provider_reported' : 'unavailable'), providerMode));
   };
 }
 export { HELP };
