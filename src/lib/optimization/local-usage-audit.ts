@@ -1,4 +1,5 @@
 import type { CollectorParseResult } from "@/lib/collectors/types";
+import { buildLocalSessionMetricReceipt, type LocalSessionMetricReceipt } from "@/lib/optimization/local-session-metrics";
 import { analyzeRun, type FindingConfidence, type FindingResult, type FindingSeverity, type RunAnalysisInput } from "@/lib/findings/engine";
 import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
 
@@ -24,6 +25,7 @@ export interface LocalUsageAuditReport {
   source: string;
   sessionId: string;
   usageClassification: CollectorParseResult["usageClassification"];
+  metricReceipt: LocalSessionMetricReceipt;
   privacy: {
     localOnly: true;
     contentStored: false;
@@ -336,6 +338,7 @@ export function auditCollectorResult(result: CollectorParseResult, options: { ge
     source: result.collector,
     sessionId: result.sessionId,
     usageClassification: result.usageClassification,
+    metricReceipt: buildLocalSessionMetricReceipt(result),
     privacy: { localOnly: true, contentStored: false, rawPromptContentInspected: false, networkRequestsRequired: false },
     summary: {
       runs: allRunIds.size,
