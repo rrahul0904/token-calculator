@@ -8,12 +8,12 @@ import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
  * In particular, source identifiers are hashed before leaving this view.
  */
 type UsageSource = "provider_measured" | "agent_measured" | "local_tokenizer_reference" | "estimated" | "reconciled" | "unknown";
-type CostBasis = "provider_reconciled" | "provider_reported" | "agent_reported" | "pricing_estimate" | "unknown";
+type CostBasis = "reconciled_reported" | "provider_reported" | "agent_reported" | "reported_unverified" | "pricing_estimate" | "unknown";
 type TokenKey = "freshInputTokens" | "cacheReadTokens" | "cacheWriteTokens" | "reasoningTokens" | "outputTokens";
 const TOKEN_KEYS: TokenKey[] = ["freshInputTokens", "cacheReadTokens", "cacheWriteTokens", "reasoningTokens", "outputTokens"];
 const USAGE_SOURCES = new Set<UsageSource>(["provider_measured", "agent_measured", "local_tokenizer_reference", "estimated", "reconciled"]);
 const COST_BASIS: Record<string, CostBasis> = {
-  reconciled: "provider_reconciled",
+  reconciled: "reconciled_reported",
   provider_measured: "provider_reported",
   agent_measured: "agent_reported",
 };
@@ -33,7 +33,7 @@ export interface LocalRunMetricReceipt {
     measuredUsd: number | null;
     estimatedUsd: number | null;
     selectedUsd: number | null;
-    classification: "measured" | "estimated" | "unknown";
+    classification: "measured" | "estimated" | "mixed" | "unknown";
     basis: CostBasis;
     pricingVersion: string | null;
     coverage: "complete" | "partial" | "none";
@@ -124,7 +124,7 @@ function runCost(run: TelemetryEventInput | undefined, turns: TelemetryEventInpu
   const measured = reconciled !== null ? reconciled : actual;
   if (measured !== null) {
     // "actual" means collector/provider reported; only "reconciled" means reconciled.
-    const basis: CostBasis = reconciled !== null ? "provider_reconciled" : COST_BASIS[src] ?? "agent_reported";
+    const basis: CostBasis = reconciled !== null ? "reconciled_reported" : COST_BASIS[src] ?? "reported_unverified";
     return {
       measuredUsd: measured, estimatedUsd: estimate, selectedUsd: measured,
       classification: "measured" as const, basis, pricingVersion: version(payload.pricingVersion),
@@ -149,17 +149,22 @@ function runCost(run: TelemetryEventInput | undefined, turns: TelemetryEventInpu
     };
   }
   const complete = priced.length === turns.length;
-  const allMeasured = priced.every((turn) => {
+  const reported = priced.filter((turn) => {
     const s = source(record(turn.payload).usageSource);
     return s === "provider_measured" || s === "agent_measured" || s === "reconciled";
   });
-  const amount = round(priced.reduce((sum, turn) => sum + (safeCost(record(turn.payload).costUsd) ?? 0), 0));
-  const estimated = !allMeasured;
+  const estimated = priced.filter((turn) => !reported.includes(turn));
+  const sumPriced = (items: TelemetryEventInput[]) => items.length
+    ? round(items.reduce((sum, turn) => sum + (safeCost(record(turn.payload).costUsd) ?? 0), 0)) : null;
+  const measuredUsd = sumPriced(reported);
+  const estimatedUsd = sumPriced(estimated);
   return {
-    measuredUsd: estimated ? null : amount, estimatedUsd: estimated ? amount : null,
-    selectedUsd: complete ? amount : null,
-    classification: complete ? estimated ? "estimated" as const : "measured" as const : "unknown" as const,
-    basis: complete ? estimated ? "pricing_estimate" as const : "agent_reported" as const : "unknown" as const,
+    measuredUsd, estimatedUsd,
+    selectedUsd: complete ? round((measuredUsd ?? 0) + (estimatedUsd ?? 0)) : null,
+    classification: !complete ? "unknown" as const : reported.length && estimated.length
+      ? "mixed" as const : estimated.length ? "estimated" as const : "measured" as const,
+    basis: !complete || (reported.length && estimated.length) ? "unknown" as const
+      : estimated.length ? "pricing_estimate" as const : "agent_reported" as const,
     pricingVersion: null, coverage: complete ? "complete" as const : "partial" as const,
     eventRefs: priced.map(eventRef).sort(),
   };
@@ -200,13 +205,20 @@ export function buildLocalSessionMetricReceipt(input: CollectorParseResult): Loc
     };
   }).sort((a, b) => a.runRef.localeCompare(b.runRef));
 
-  const selected = runs.filter((run) => run.cost.selectedUsd !== null);
-  const measured = selected.filter((run) => run.cost.classification === "measured");
-  const estimated = selected.filter((run) => run.cost.classification === "estimated");
-  const sum = (entries: LocalRunMetricReceipt[]): number | null => entries.length
-    ? round(entries.reduce((total, entry) => total + (entry.cost.selectedUsd ?? 0), 0)) : null;
-  const known = sum(selected);
-  const coverage = !selected.length ? "none" : selected.length === runs.length ? "complete" : "partial";
+  // For a run with both an actual and a counterfactual estimate, only the actual
+  // is included in session totals. Mixed turn receipts may contribute both buckets.
+  const amounts = (kind: "measuredUsd" | "estimatedUsd"): number[] => runs.flatMap((run) => {
+    if (kind === "estimatedUsd" && run.cost.classification === "measured") return [];
+    const amount = run.cost[kind];
+    return amount === null ? [] : [amount];
+  });
+  const sum = (values: number[]): number | null => values.length
+    ? round(values.reduce((total, amount) => total + amount, 0)) : null;
+  const measured = sum(amounts("measuredUsd"));
+  const estimated = sum(amounts("estimatedUsd"));
+  const known = measured === null && estimated === null ? null : round((measured ?? 0) + (estimated ?? 0));
+  const fullyPriced = runs.filter((run) => run.cost.coverage === "complete").length;
+  const coverage = known === null ? "none" : fullyPriced === runs.length ? "complete" : "partial";
   return {
     schemaVersion: "1",
     scope: "local_session",
@@ -224,9 +236,9 @@ export function buildLocalSessionMetricReceipt(input: CollectorParseResult): Loc
     },
     runs,
     costs: {
-      measuredUsd: sum(measured), estimatedUsd: sum(estimated), knownPortionUsd: known,
+      measuredUsd: measured, estimatedUsd: estimated, knownPortionUsd: known,
       completeTotalUsd: coverage === "complete" ? known : null,
-      runsWithoutCost: runs.length - selected.length, coverage,
+      runsWithoutCost: runs.length - fullyPriced, coverage,
     },
     limitations: [
       "Collector-observed token counts are not independently verified provider billing.",
