@@ -28,17 +28,20 @@
 | Python SDK import | Pass | Imported `TokenIntelligenceClient` and `TokenIntelligenceError` |
 | CLI smoke | Pass | `npm run ti -- --help` |
 | Production build | Pass | `npm run build`; Next.js 16.3.6 compiled and generated all 123 static pages |
-| Browser E2E | Not run | The browser dependency setup was interrupted when Docker Desktop restarted. Per user direction Docker is stopped; no database-backed E2E run or browser certification is claimed. |
+| Browser E2E | Pass (hosted) | GitHub `CI / verify` ran the production smoke across Chromium desktop/mobile and WebKit desktop/tablet. No local browser server was started. |
 | `git diff --check` | Pass | No whitespace errors |
 
 The original local Vitest config used URL `.pathname` for the `@` alias. In this workspace, whose path contains spaces, that encoded the path and prevented module resolution. It now uses Node's `fileURLToPath`; the full suite passes locally with this fix.
 
 ## Remote and deployment gates
 
-- GitHub write credentials are unavailable in this workspace. The branch has not been pushed, so GitHub Actions, CodeQL, and exact-head CI have not run for this candidate.
-- Donor evidence observed: PR #49 focused verification and CI run #899 passed, with CodeQL passing. PR #45 CI run #897 failed at Playwright production smoke; its migration and benchmark changes were not integrated. PR #52 run #891 was in progress when last checked; green exact-head CI was not established.
-- Vercel is the preferred web host for this Next.js application, but repository issue #28 reports missing Actions secret `VERCEL_TOKEN`. No Vercel deployment token or alternate host credentials are configured here.
-- No exact-SHA Preview exists, so preview certification cannot be completed. Production promotion remains prohibited until Preview certification and the external WorkOS, Stripe, database, and Vercel runtime gates in issue #35 are resolved.
+- Draft PR: https://github.com/rrahul0904/token-calculator/pull/53. On candidate SHA `f7b123eed3b8ae77b56df91a9707a5e422e67468`, CI run [36910255231](https://github.com/rrahul0904/token-calculator/actions/runs/36910255231) passed in 6m13s, including the full browser matrix; Security CodeQL run [36910255256](https://github.com/rrahul0904/token-calculator/actions/runs/36910255256) passed in 1m19s. GitHub reports merge state `CLEAN`; the PR remains draft and unmerged.
+- Donor evidence observed: PR #49 focused verification and CI run #899 passed, with CodeQL passing. PR #45 CI run #897 failed at Playwright production smoke; its migration and benchmark changes were not integrated. PR #52 run #891 was in progress when last checked; the integrated PR #53 exact-head checks above are green.
+- Existing Vercel project linkage in repository workflows pins team `team_zmEezpOKGZy2sH5nqTfO44LD` and project `prj_ADoR3dW8VcpJOaQcagZXOpioyM7l`; the configured stable URL is https://token-intelligence-eight.vercel.app. The stable URL responds HTTP 200, while `/api/health` reports `database: not_configured` and auth, billing, credential vault, and GitHub as configuration-blocked; `/api/build` returns 404.
+- The latest GitHub-recorded Vercel Preview is an older successful deployment from 2026-09-03 at SHA `17fab8f01a27003d8ed0c8e862404072bc1bd801`: https://token-intelligence-53dhgdc8q-rrahul0904-5013s-projects.vercel.app. GitHub has no deployment record for candidate SHA `f7b123eed3b8ae77b56df91a9707a5e422e67468`.
+- The Vercel API/CLI/browser session is not available here: no `vercel` CLI, local `.vercel` linkage, browser session, or local `VERCEL_TOKEN` was found. GitHub API lists no repository Actions secrets, no `Preview` environment secrets, and no `Preview` environment variables. Vercel project environment names/values, build logs, current Git repository binding, and the Vercel Production Branch setting could not be inspected; values were not exposed. Repository release workflows pin the existing team/project IDs above, but this does not substitute for reading live Vercel project settings.
+- GitHub's repository deployment records contain no Production deployment entry, so the exact currently deployed Production SHA and Vercel build-log status could not be verified. The documented Neon Production database branch is `main`; that is not evidence of the Vercel Git Production Branch setting.
+- No candidate Preview is certified. The missing deployment credential, Preview runtime configuration, persistent database identity, and external WorkOS/Stripe/UAT gates in issue #35 prohibit production promotion. No merge or promotion was performed.
 - The isolated Docker database and runtime used for integration evidence are stopped. No local web server is left running.
 
 ## Scope boundaries

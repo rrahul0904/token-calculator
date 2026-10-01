@@ -97,7 +97,7 @@ The canonical donor/issue/PR history is recorded in [`REVERSE_ENGINEERING_RECONC
 - PR #45 full-session benchmark integrity, PR #46's isolated fake-provider-only gateway pilot, and Issue #47's governed production gateway requirements remain unintegrated pending current exact-head gates and dedicated implementation/certification evidence.
 - TokenCalc-seven PR #12's modeled workload, reverse budget solver, endpoint pricing, versioned provenance, sharing, cache economics, pinned comparison, variance, and advisory handoff are already present in current source. Its branch is not merged wholesale.
 
-The complete integration candidate has not been pushed, checked by GitHub Actions, preview-certified, or promoted. See the reconciliation document and release evidence manifest for precise test results and remaining external gates.
+The implementation candidate is pushed as draft PR #53. Exact-head CI and CodeQL pass, including hosted production browser smoke; no Vercel Preview was created for the candidate SHA, so it is not preview-certified or promoted. See the reconciliation document and release evidence ledger for precise deployment observations and remaining external gates.
 
 ## Current release rule
 
