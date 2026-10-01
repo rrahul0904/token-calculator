@@ -1,0 +1,29 @@
+name: RE-341 focused verification
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-session-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Focused local receipt and legacy audit/scan tests
+        run: npx vitest run tests/local-session-metrics.test.ts tests/local-usage-audit.test.ts tests/local-usage-scan.test.ts
+      - name: Offline CLI help smoke
+        run: npm run ti -- --help
