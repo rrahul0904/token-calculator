@@ -9,5 +9,8 @@ regexTarget = "line"
 regexes = [
   '''process\.env\.WORKOS_API_KEY = "sk_test_release_callback";''',
   '''process\.env\.WORKOS_CLIENT_ID = "client_test_release_callback";''',
-  '''process\.env\.WORKOS_COOKIE_PASSWORD = "0123456789abcdef0123456789abcdef";'''
+  '''process\.env\.WORKOS_COOKIE_PASSWORD = "0123456789abcdef0123456789abcdef";''',
+  # The pilot's first commit used this exact known dummy value in two public curl examples.
+  # Retain full-history scanning; allow only this literal synthetic placeholder.
+  '''Authorization: Bearer YOUR_GATEWAY_TENANT_KEY'''
 ]
