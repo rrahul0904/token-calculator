@@ -82,7 +82,7 @@ Current migration chain is **`0000` through `0008`**.
 These are the remaining launch gates; they are external account/runtime state, not unfinished feature code:
 
 1. **GitHub/Vercel:** repository secret `VERCEL_TOKEN` is not configured. The Release Preview preflight therefore fails closed before deployment. Vercel CLI pull/deploy/promote requires an authorization token.
-2. **Vercel Preview runtime:** the existing old Preview has a stale `DATABASE_URL`; the environment must be refreshed with the persistent validation DB, WorkOS Staging, Stripe TEST, vault and cron values.
+2. **Vercel Preview runtime:** the last recorded Preview health endpoint currently reports database connectivity, but its database identity and project environment could not be inspected. Release certification still requires the persistent validation DB identity plus WorkOS Staging, Stripe TEST, vault and cron configuration; connectivity alone is not identity proof.
 3. **Stripe TEST:** the connected Stripe session currently exposes the live account only. Preview release certification requires TEST-mode Checkout/portal/webhook lifecycle and intentionally refuses live mode.
 4. **WorkOS Production:** WorkOS reports Production `Inactive`; no billing address/default payment method is configured. Production mutations are rejected while inactive. Real billing details/payment method must activate the existing workspace first.
 5. **Vercel Production runtime:** the existing stable deployment is an older artifact and lacks the launch-critical Production runtime contract. Production values are installed only after the provider prerequisites above are valid.
