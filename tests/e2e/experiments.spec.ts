@@ -16,7 +16,7 @@ test.describe("experiment lifecycle", () => {
     });
   }
 
-  test("dataset, cases, experiment evidence and versioned verified savings work end to end", async ({ request, page }) => {
+  test("paired full-session experiment evidence and versioned verified savings work end to end", async ({ request, page }) => {
     const suffix = Date.now();
     const experimentName = `Release experiment ${suffix}`;
     const datasetResponse = await request.post("/api/v1/evaluation-datasets", {
@@ -25,11 +25,19 @@ test.describe("experiment lifecycle", () => {
     expect(datasetResponse.status()).toBe(201);
     const dataset = (await datasetResponse.json()).data as { id: string };
 
-    const caseResponse = await request.post(`/api/v1/evaluation-datasets/${dataset.id}/cases`, {
-      data: { inputReference: `fixture-${suffix}`, expectedOutcome: { testsPassed: true }, tags: ["release"], metadata: { suite: "playwright" } },
-    });
-    expect(caseResponse.status()).toBe(201);
-    const evaluationCase = (await caseResponse.json()).data as { id: string };
+    const caseIds: string[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const caseResponse = await request.post(`/api/v1/evaluation-datasets/${dataset.id}/cases`, {
+        data: {
+          inputReference: `fixture-${suffix}-${index}`,
+          expectedOutcome: { testsPassed: true },
+          tags: ["release", "paired-benchmark"],
+          metadata: { suite: "playwright", pairIndex: index },
+        },
+      });
+      expect(caseResponse.status()).toBe(201);
+      caseIds.push(String((await caseResponse.json()).data.id));
+    }
 
     const experimentResponse = await request.post("/api/v1/experiments", {
       data: {
@@ -45,16 +53,77 @@ test.describe("experiment lifecycle", () => {
     expect(experimentResponse.status()).toBe(201);
     const experiment = (await experimentResponse.json()).data as { id: string };
 
-    for (let index = 0; index < 5; index += 1) {
-      const baseline = await request.post(`/api/v1/experiments/${experiment.id}/results`, {
-        data: { variant: "baseline", caseId: evaluationCase.id, qualityScore: 0.95, costUsd: 1, tokens: 1000, latencyMs: 500, retries: 0, fallbacks: 0, success: true },
-      });
-      expect(baseline.status()).toBe(201);
+    const keyResponse = await request.post("/api/v1/api-keys", {
+      data: {
+        name: `Experiment benchmark ${suffix}`,
+        environment: "test",
+        projectId: "proj_e2e",
+        scopes: ["write:runs"],
+        requestsPerMinute: 120,
+      },
+    });
+    expect(keyResponse.status()).toBe(201);
+    const keyPayload = (await keyResponse.json()).data as { id: string; secret: string };
 
-      const candidate = await request.post(`/api/v1/experiments/${experiment.id}/results`, {
-        data: { variant: "candidate", caseId: evaluationCase.id, qualityScore: 0.95, costUsd: 0.5, tokens: 900, latencyMs: 450, retries: 0, fallbacks: 0, success: true },
-      });
-      expect(candidate.status()).toBe(201);
+    for (let index = 0; index < caseIds.length; index += 1) {
+      for (const variant of ["baseline", "candidate"] as const) {
+        const isBaseline = variant === "baseline";
+        const runId = `run_e2e_${variant}_${suffix}_${index}`;
+        const startedAt = new Date(Date.now() + index * 1_000).toISOString();
+        const endedAt = new Date(Date.now() + index * 1_000 + 500).toISOString();
+        const runResponse = await request.post("/api/v1/runs", {
+          headers: { authorization: `Bearer ${keyPayload.secret}` },
+          data: {
+            id: runId,
+            projectId: "proj_e2e",
+            environment: "test",
+            agentName: "playwright-benchmark",
+            agentVendor: "openai",
+            agentVersion: "e2e",
+            workflowName: "full-session-benchmark",
+            workflowVersion: "1",
+            repo: "rrahul0904/token-calculator",
+            repoCommitSha: "e2e-benchmark-fixture",
+            startedAt,
+            endedAt,
+            status: "completed",
+            actualCostUsd: isBaseline ? 1 : 0.5,
+            freshInputTokens: isBaseline ? 800 : 700,
+            cacheReadTokens: 100,
+            cacheWriteTokens: 50,
+            reasoningTokens: 25,
+            outputTokens: isBaseline ? 100 : 90,
+            toolCallCount: 2,
+            retryCount: 0,
+            fallbackCount: 0,
+            turnCount: 3,
+            usageSource: "provider_measured",
+            metadata: {
+              "benchmark.target_tool": "route-lab",
+              "benchmark.target_tool_call_count": 1,
+              "benchmark.index_time_ms": 25,
+              "benchmark.gold_files_total": 2,
+              "benchmark.gold_files_found": 2,
+              "benchmark.files_served": 2,
+            },
+          },
+        });
+        expect(runResponse.status()).toBe(201);
+
+        const resultResponse = await request.post(`/api/v1/experiments/${experiment.id}/results`, {
+          data: {
+            variant,
+            caseId: caseIds[index],
+            runId,
+            qualityScore: 0.95,
+            latencyMs: isBaseline ? 500 : 450,
+            retries: 0,
+            fallbacks: 0,
+            success: true,
+          },
+        });
+        expect(resultResponse.status()).toBe(201);
+      }
     }
 
     const completed = await request.patch(`/api/v1/experiments/${experiment.id}`, { data: { status: "completed" } });
@@ -67,6 +136,10 @@ test.describe("experiment lifecycle", () => {
     expect(gate.evidenceType).toBe("experiment_verified");
     expect(gate.successPassed).toBe(true);
     expect(gate.costImproved).toBe(true);
+    expect(gate.prerequisites.pairedCaseCohort).toBe(true);
+    expect(gate.prerequisites.fullSessionEconomics).toBe(true);
+    expect(gate.prerequisites.cacheAccounting).toBe(true);
+    expect(gate.prerequisites.toolCallAccounting).toBe(true);
     expect(gate.baseline.count).toBe(5);
     expect(gate.candidate.count).toBe(5);
     expect(gate.baseline.sampleSize).toBe(5);
@@ -120,6 +193,9 @@ test.describe("experiment lifecycle", () => {
     await expect(experimentPanel.getByText("Verified savings v1", { exact: true })).toBeVisible();
     await expect(page.getByText("Verified savings snapshots", { exact: true })).toBeVisible();
     await expect(experimentPanel.getByText("Latest revalidation:", { exact: true })).toBeVisible();
+
+    const revoked = await request.delete(`/api/v1/api-keys/${keyPayload.id}`);
+    expect(revoked.status()).toBe(200);
   });
 
   test("experiment metadata rejects retained prompt content", async ({ request }) => {
