@@ -576,9 +576,11 @@ pre {
     align-items: center;
     justify-content: center;
   }
-  .public-mobile-nav {
+.public-mobile-nav {
     position: fixed;
     top: 56px;
+    max-height: calc(100dvh - 56px);
+    overflow-y: auto;
     left: 0;
     right: 0;
     z-index: 49;

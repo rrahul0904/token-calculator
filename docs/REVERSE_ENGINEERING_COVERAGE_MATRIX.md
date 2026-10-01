@@ -1,6 +1,6 @@
 # Token Intelligence Release Coverage Matrix
 
-Last reconciled: 2026-09-12 UTC
+Last reconciled: 2026-10-01 UTC
 
 This matrix describes the canonical release candidate on `release-candidate-full-site` / PR #14. It is evidence-driven: schema-only work is not treated as a complete user journey, and provider/account configuration is never mislabeled as live application functionality.
 
@@ -86,6 +86,18 @@ These are the remaining launch gates; they are external account/runtime state, n
 3. **Stripe TEST:** the connected Stripe session currently exposes the live account only. Preview release certification requires TEST-mode Checkout/portal/webhook lifecycle and intentionally refuses live mode.
 4. **WorkOS Production:** WorkOS reports Production `Inactive`; no billing address/default payment method is configured. Production mutations are rejected while inactive. Real billing details/payment method must activate the existing workspace first.
 5. **Vercel Production runtime:** the existing stable deployment is an older artifact and lacks the launch-critical Production runtime contract. Production values are installed only after the provider prerequisites above are valid.
+
+## 2026-10-01 donor and release reconciliation
+
+The canonical donor/issue/PR history is recorded in [`REVERSE_ENGINEERING_RECONCILIATION.md`](./REVERSE_ENGINEERING_RECONCILIATION.md). Summary of current candidate changes:
+
+- PR #52 responsive public navigation and anonymous Projects API 401 repair are on the integration branch; the short-viewport menu overflow review comment is addressed.
+- PR #49 RE-341 receipt normalization is integrated with existing `ti audit` / `ti scan` paths; reported cost remains distinct from estimates, and this is not independent billing or savings evidence.
+- Cost-xray Phase A and Bough Phase A have standalone native contracts and synthetic tests in the integration candidate; neither enables live collection, system interception, production billing, or upstream parity.
+- PR #45 full-session benchmark integrity, PR #46's isolated fake-provider-only gateway pilot, and Issue #47's governed production gateway requirements remain unintegrated pending current exact-head gates and dedicated implementation/certification evidence.
+- TokenCalc-seven PR #12's modeled workload, reverse budget solver, endpoint pricing, versioned provenance, sharing, cache economics, pinned comparison, variance, and advisory handoff are already present in current source. Its branch is not merged wholesale.
+
+The complete integration candidate has not been pushed, checked by GitHub Actions, preview-certified, or promoted. See the reconciliation document and release evidence manifest for precise test results and remaining external gates.
 
 ## Current release rule
 
