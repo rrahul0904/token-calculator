@@ -28,10 +28,6 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function assertDenied(status: number, label: string) {
-  assert(status === 401 || status === 403, `${label} returned ${status}`);
-}
-
 function assertNoSecrets(value: string, label: string) {
   for (const pattern of secretPatterns) {
     assert(!pattern.test(value), `${label} leaked sensitive material matching ${pattern}`);
@@ -58,7 +54,7 @@ const checks: Check[] = [
     name: "anonymous session endpoints fail closed",
     async run() {
       const read = await fetch(url("/api/v1/api-keys"), { redirect: "manual" });
-      assertDenied(read.status, "anonymous api-key read");
+      assert(read.status === 401, `anonymous api-key read returned ${read.status}`);
 
       const write = await fetch(url("/api/v1/projects"), {
         method: "POST",
@@ -66,7 +62,7 @@ const checks: Check[] = [
         body: JSON.stringify({ name: "security-probe", description: "must not persist" }),
         redirect: "manual",
       });
-      assertDenied(write.status, "anonymous project creation");
+      assert(write.status === 401, `anonymous project creation returned ${write.status}`);
     },
   },
   {
@@ -116,12 +112,14 @@ async function main() {
   }
 
   if (failures > 0) {
-    throw new Error(`${failures} defensive DAST check(s) failed`);
+    console.error(`${failures} defensive DAST check(s) failed`);
+    process.exitCode = 1;
+  } else {
+    console.log(`PASS  defensive DAST (${checks.length} checks)`);
   }
-  console.log(`PASS  defensive DAST (${checks.length} checks)`);
 }
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+main().catch((error) => {
+  console.error(`FAIL  defensive DAST runner: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });
