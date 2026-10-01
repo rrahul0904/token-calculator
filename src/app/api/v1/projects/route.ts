@@ -19,6 +19,12 @@ function reply(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+function authorizationFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : "AUTHORIZATION_FAILED";
+  const status = message === "AUTH_OR_TENANT_REQUIRED" ? 401 : 403;
+  return reply({ error: message }, status);
+}
+
 export async function GET() {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -26,7 +32,7 @@ export async function GET() {
     const rows = await getDb().select().from(projects).where(eq(projects.organizationId, tenant.organizationId)).orderBy(projects.name);
     return reply({ data: rows });
   } catch (error) {
-    return reply({ error: error instanceof Error ? error.message : "AUTHORIZATION_FAILED" }, 403);
+    return authorizationFailure(error);
   }
 }
 
@@ -42,6 +48,6 @@ export async function POST(request: Request) {
     await db.insert(auditEvents).values({ id: `aud_${randomUUID()}`, organizationId: tenant.organizationId, actorType: "user", actorId: tenant.internalUserId, action: "project.created", resourceType: "project", resourceId: id, details: { name: parsed.data.name } });
     return reply({ data: row }, 201);
   } catch (error) {
-    return reply({ error: error instanceof Error ? error.message : "CREATE_FAILED" }, 403);
+    return authorizationFailure(error);
   }
 }
