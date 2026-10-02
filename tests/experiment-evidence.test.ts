@@ -21,6 +21,9 @@ function row(variant: "baseline" | "candidate", index: number, overrides: Partia
       target_tool: "repo_search",
       target_tool_call_count: 2,
       index_time_ms: 20,
+      run_status: "completed",
+      run_ended_at: "2026-10-01T12:00:00.000Z",
+      session_runs_terminal: true,
     },
     ...overrides,
   };
@@ -45,6 +48,7 @@ describe("experiment evidence labels", () => {
       sameCaseCohort: true,
       authoritativeFullSessionCount: 10,
       authoritativeFullSessionEconomics: true,
+      noDuplicateRuns: true,
       cacheAccountingComplete: true,
       toolCallAccountingComplete: true,
       targetToolAccountingCount: 10,
@@ -83,6 +87,31 @@ describe("experiment evidence labels", () => {
     expect(result.passed).toBe(false);
     expect(result.benchmarkIntegrity?.sameCaseCohort).toBe(false);
     expect(result.benchmarkIntegrity?.noDuplicateCases).toBe(false);
+  });
+
+  it("requires an independent linked run for every paired observation", () => {
+    const rows = pairedRows();
+    rows[9] = row("candidate", 4, { runId: rows[7].runId });
+    const result = evaluateExperimentRows({ status: "completed", rows, minimumQualityScore: null });
+    expect(result.passed).toBe(false);
+    expect(result.prerequisites.independentRuns).toBe(false);
+    expect(result.benchmarkIntegrity?.noDuplicateRuns).toBe(false);
+  });
+
+  it("does not treat a nonterminal run as full-session evidence", () => {
+    const rows = pairedRows();
+    rows[0] = { ...rows[0], benchmarkContext: { ...rows[0].benchmarkContext, run_status: "running", run_ended_at: null } };
+    const result = evaluateExperimentRows({ status: "completed", rows, minimumQualityScore: null });
+    expect(result.passed).toBe(false);
+    expect(result.prerequisites.fullSessionEconomics).toBe(false);
+  });
+
+  it("does not treat a session with active constituent runs as complete", () => {
+    const rows = pairedRows();
+    rows[0] = { ...rows[0], benchmarkContext: { ...rows[0].benchmarkContext, session_runs_terminal: false } };
+    const result = evaluateExperimentRows({ status: "completed", rows, minimumQualityScore: null });
+    expect(result.passed).toBe(false);
+    expect(result.prerequisites.fullSessionEconomics).toBe(false);
   });
 
   it("keeps index timing as disclosed coverage, not a universal gate", () => {

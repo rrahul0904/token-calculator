@@ -69,6 +69,12 @@ function metadataString(metadata: Record<string, unknown>, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isTerminalRun(run: { status: string; endedAt: Date | null }) {
+  return ["completed", "failed", "aborted", "cancelled", "budget_blocked"].includes(run.status.trim().toLowerCase())
+    && run.endedAt instanceof Date
+    && Number.isFinite(run.endedAt.getTime());
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -102,7 +108,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (!caseRow) return reply({ error: "CASE_NOT_FOUND" }, 404);
       if (caseRow.organizationId !== tenant.organizationId || caseRow.datasetId !== experiment.datasetId) return reply({ error: "CROSS_TENANT_OR_DATASET_REFERENCE" }, 403);
     }
-    let linkedRun: (LinkedRunEconomics & { organizationId: string; metadata: Record<string, unknown>; toolCallCount: number }) | null = null;
+    let linkedRun: (LinkedRunEconomics & { organizationId: string; metadata: Record<string, unknown>; toolCallCount: number; status: string; endedAt: Date | null }) | null = null;
     if (parsed.data.runId) {
       const run = (await db.select({
         organizationId: runs.organizationId,
@@ -118,6 +124,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         toolCallCount: runs.toolCallCount,
         retryCount: runs.retryCount,
         fallbackCount: runs.fallbackCount,
+        status: runs.status,
+        endedAt: runs.endedAt,
         metadata: runs.metadata,
       }).from(runs).where(eq(runs.id, parsed.data.runId)).limit(1))[0];
       if (!run) return reply({ error: "RUN_NOT_FOUND" }, 404);
@@ -140,7 +148,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       ? linkedRun.metadata["orchestration.run_id"].trim()
       : "";
     let economics;
-    let measurementScope = "submitted_observation";
+    let measurementScope = linkedRun ? (isTerminalRun(linkedRun) ? "full_session" : "incomplete_session") : "submitted_observation";
     let benchmarkContext: Record<string, unknown> = {
       benchmark_version: "full-session-v1",
       measurement_scope: measurementScope,
@@ -167,23 +175,31 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           cacheWriteTokens: runs.cacheWriteTokens,
           toolCallCount: runs.toolCallCount,
           turnCount: runs.turnCount,
+          status: runs.status,
+          endedAt: runs.endedAt,
           metadata: runs.metadata,
         }).from(runs).where(and(
           eq(runs.organizationId, tenant.organizationId),
           sql`${runs.metadata} ->> 'orchestration.run_id' = ${orchestrationRunId}`,
         )),
       ]);
+      const completeOrchestration = orchestrationRuns.length > 0
+        && isTerminalRun(linkedRun)
+        && orchestrationRuns.every(isTerminalRun);
       economics = resolveOrchestrationExperimentEconomics({
         calls: orchestrationCalls,
         retries: orchestrationRuns.reduce((sum, run) => sum + (run.retryCount ?? 0), 0),
         fallbacks: orchestrationRuns.reduce((sum, run) => sum + (run.fallbackCount ?? 0), 0),
       });
-      measurementScope = "orchestration_full_session";
+      measurementScope = completeOrchestration ? "orchestration_full_session" : "incomplete_session";
       const indexTimes = orchestrationRuns.map((run) => metadataNumber(run.metadata, "benchmark.index_time_ms"));
       const targetToolCounts = orchestrationRuns.map((run) => metadataNumber(run.metadata, "benchmark.target_tool_call_count"));
       benchmarkContext = {
         benchmark_version: "full-session-v1",
         measurement_scope: measurementScope,
+        run_status: linkedRun.status,
+        run_ended_at: linkedRun.endedAt?.toISOString() ?? null,
+        session_runs_terminal: completeOrchestration,
         target_tool: metadataString(linkedRun.metadata, "benchmark.target_tool"),
         fresh_input_tokens: orchestrationCalls.reduce((sum, call) => sum + (call.freshInputTokens ?? 0), 0),
         cache_read_tokens: orchestrationCalls.length > 0 && orchestrationCalls.every((call) => call.cacheReadTokens !== null)
@@ -215,10 +231,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           fallbacks: parsed.data.fallbacks,
         },
       });
-      measurementScope = linkedRun ? "full_session" : "submitted_observation";
+      measurementScope = linkedRun ? (isTerminalRun(linkedRun) ? "full_session" : "incomplete_session") : "submitted_observation";
       benchmarkContext = linkedRun ? {
         benchmark_version: "full-session-v1",
         measurement_scope: measurementScope,
+        run_status: linkedRun.status,
+        run_ended_at: linkedRun.endedAt?.toISOString() ?? null,
+        session_runs_terminal: isTerminalRun(linkedRun),
         harness: linkedRun.metadata.agent_name ?? null,
         repository: linkedRun.metadata.repository ?? null,
         repository_commit_sha: linkedRun.metadata.repository_commit_sha ?? null,

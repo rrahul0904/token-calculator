@@ -48,6 +48,16 @@ function contextNumber(row: ExperimentEvidenceRow, key: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function terminalSessionEvidence(row: ExperimentEvidenceRow) {
+  const status = String(row.benchmarkContext?.run_status ?? "").trim().toLowerCase();
+  const endedAt = row.benchmarkContext?.run_ended_at;
+  const hasEndTime = typeof endedAt === "string" && Number.isFinite(Date.parse(endedAt))
+    || endedAt instanceof Date && Number.isFinite(endedAt.getTime());
+  return ["completed", "failed", "aborted", "cancelled", "budget_blocked"].includes(status)
+    && hasEndTime
+    && row.benchmarkContext?.session_runs_terminal === true;
+}
+
 function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
   const baseline = rows.filter((row) => row.variant.trim().toLowerCase() === "baseline");
   const candidate = rows.filter((row) => row.variant.trim().toLowerCase() === "candidate");
@@ -55,13 +65,17 @@ function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
   const candidateCases = candidate.map((row) => row.caseId?.trim() || "");
   const uniqueBaseline = new Set(baselineCases.filter(Boolean));
   const uniqueCandidate = new Set(candidateCases.filter(Boolean));
+  const runIds = rows.map((row) => row.runId?.trim() || "");
+  const uniqueRunIds = new Set(runIds.filter(Boolean));
   const pairedCaseCount = [...uniqueBaseline].filter((id) => uniqueCandidate.has(id)).length;
   const noDuplicates = uniqueBaseline.size === baseline.length && uniqueCandidate.size === candidate.length;
+  const noDuplicateRuns = runIds.length === rows.length && runIds.every(Boolean) && uniqueRunIds.size === rows.length;
   const sameCaseCohort = rows.length > 0
     && baseline.length > 0
     && candidate.length > 0
     && baseline.length === candidate.length
     && noDuplicates
+    && noDuplicateRuns
     && baselineCases.every(Boolean)
     && candidateCases.every(Boolean)
     && pairedCaseCount === baseline.length;
@@ -71,7 +85,8 @@ function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
     && numeric(row.costUsd) !== null
     && numeric(row.costUsd)! >= 0
     && numeric(row.qualityScore) !== null
-    && row.success !== null);
+    && row.success !== null
+    && terminalSessionEvidence(row));
   const cacheRows = rows.filter((row) => contextNumber(row, "cache_read_tokens") !== null && contextNumber(row, "cache_write_tokens") !== null);
   const toolRows = rows.filter((row) => contextNumber(row, "tool_call_count") !== null);
   const targetRows = rows.filter((row) => typeof row.benchmarkContext?.target_tool === "string" && contextNumber(row, "target_tool_call_count") !== null);
@@ -95,6 +110,7 @@ function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
     pairedCaseCount,
     sameCaseCohort,
     noDuplicateCases: noDuplicates,
+    noDuplicateRuns,
     authoritativeFullSessionCount: fullSessionRows.length,
     authoritativeFullSessionEconomics: rows.length > 0 && fullSessionRows.length === rows.length,
     cacheAccountingComplete: rows.length > 0 && cacheRows.length === rows.length,
@@ -150,6 +166,7 @@ export function evaluateExperimentSummaries(args: {
     baselineSuccess: baseline.successRate !== null,
     candidateSuccess: candidate.successRate !== null,
     pairedCaseCohort: Boolean(args.integrity?.sameCaseCohort && args.integrity.pairedCaseCount >= MINIMUM_EXPERIMENT_EVIDENCE_SAMPLE),
+    independentRuns: Boolean(args.integrity?.noDuplicateRuns),
     fullSessionEconomics: Boolean(args.integrity?.authoritativeFullSessionEconomics),
     cacheAccounting: Boolean(args.integrity?.cacheAccountingComplete),
     toolCallAccounting: Boolean(args.integrity?.toolCallAccountingComplete),
