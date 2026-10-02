@@ -16,9 +16,9 @@ export function gatewayRequestDigest(input: unknown): string {
   return digest(JSON.stringify(canonicalize(input)));
 }
 
-export function gatewayIdempotencyIdentity(organizationId: string, apiKeyId: string, idempotencyKey: string, apiKeySecretHash: string) {
+export function gatewayIdempotencyIdentity(organizationId: string, idempotencyKey: string, apiKeySecretHash: string) {
   const scopedKeyDigest = createHmac("sha256", apiKeySecretHash)
-    .update(`gateway-idempotency\0${organizationId}\0${apiKeyId}\0${idempotencyKey}`)
+    .update(`gateway-idempotency\0${organizationId}\0${idempotencyKey}`)
     .digest("hex");
   return { runId: `run_${scopedKeyDigest.slice(0, 40)}`, keyDigest: scopedKeyDigest };
 }
