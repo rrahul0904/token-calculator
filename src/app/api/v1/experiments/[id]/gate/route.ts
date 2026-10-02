@@ -29,9 +29,14 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
     const rows = await db.select({
       variant: experimentResults.variant,
+      caseId: experimentResults.caseId,
+      runId: experimentResults.runId,
       qualityScore: experimentResults.qualityScore,
       costUsd: experimentResults.costUsd,
       success: experimentResults.success,
+      economicsSource: experimentResults.economicsSource,
+      measurementScope: experimentResults.measurementScope,
+      benchmarkContext: experimentResults.benchmarkContext,
     }).from(experimentResults)
       .where(and(eq(experimentResults.experimentId, id), eq(experimentResults.organizationId, tenant.organizationId)));
 

@@ -4,12 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Dataset = { id: string; name: string; version: string; caseCount: number };
+type EvaluationCase = { id: string; inputReference: string };
 type Experiment = { id: string; name: string; datasetId: string; status: string; resultCount: number };
 type GateResult = {
   passed: boolean;
   evidenceType: string;
   baseline?: { sampleSize: number; qualityScore: number | null; medianCostUsd: number | null; successRate: number | null };
   candidate?: { sampleSize: number; qualityScore: number | null; medianCostUsd: number | null; successRate: number | null };
+  benchmarkIntegrity?: {
+    pairedCaseCount: number;
+    authoritativeFullSessionCount: number;
+    cacheAccountingComplete: boolean;
+    toolCallAccountingComplete: boolean;
+  } | null;
 };
 type ApiBody = { data?: unknown; error?: string };
 
@@ -25,6 +32,7 @@ function dataObject(body: ApiBody | null): Record<string, unknown> | null {
 export function ExperimentsManager({ canManage }: { canManage: boolean }) {
   const router = useRouter();
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [cases, setCases] = useState<EvaluationCase[]>([]);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [datasetId, setDatasetId] = useState("");
   const [experimentId, setExperimentId] = useState("");
@@ -35,6 +43,8 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
   const [baselineModel, setBaselineModel] = useState("");
   const [candidateModel, setCandidateModel] = useState("");
   const [variant, setVariant] = useState<"baseline" | "candidate">("baseline");
+  const [caseId, setCaseId] = useState("");
+  const [runId, setRunId] = useState("");
   const [quality, setQuality] = useState("1");
   const [cost, setCost] = useState("0");
   const [success, setSuccess] = useState(true);
@@ -65,6 +75,27 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setGate(null); }, [experimentId]);
+  useEffect(() => {
+    const experiment = experiments.find((item) => item.id === experimentId);
+    if (experiment && experiment.datasetId !== datasetId) setDatasetId(experiment.datasetId);
+  }, [datasetId, experimentId, experiments]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!datasetId) {
+      setCases([]);
+      setCaseId("");
+      return () => { cancelled = true; };
+    }
+    void (async () => {
+      const response = await fetch(`/api/v1/evaluation-datasets/${encodeURIComponent(datasetId)}/cases`, { cache: "no-store" });
+      const body = await json(response);
+      if (cancelled || !response.ok) return;
+      const next = (body?.data ?? []) as EvaluationCase[];
+      setCases(next);
+      setCaseId((current) => current && next.some((item) => item.id === current) ? current : next[0]?.id ?? "");
+    })();
+    return () => { cancelled = true; };
+  }, [datasetId]);
 
   async function execute(action: () => Promise<void>) {
     setBusy(true);
@@ -152,11 +183,22 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
       const response = await fetch(`/api/v1/experiments/${encodeURIComponent(experimentId)}/results`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ variant, qualityScore, costUsd, success, retries: 0, fallbacks: 0 }),
+        body: JSON.stringify({
+          variant,
+          caseId: caseId || null,
+          runId: runId.trim() || null,
+          qualityScore,
+          costUsd,
+          success,
+          retries: 0,
+          fallbacks: 0,
+        }),
       });
       const body = await json(response);
       if (!response.ok) throw new Error(String(body?.error ?? "Result creation failed"));
-      setMessage(`${variant === "baseline" ? "Baseline" : "Candidate"} observation recorded.`);
+      setMessage(runId.trim()
+        ? `${variant === "baseline" ? "Baseline" : "Candidate"} full-session observation linked to a run.`
+        : `${variant === "baseline" ? "Baseline" : "Candidate"} manual observation recorded. It is exploratory evidence and cannot qualify as verified savings.`);
       setGate(null);
       await load();
       router.refresh();
@@ -190,7 +232,7 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
       <div className="app-panel__header">
         <div>
           <h2>Experiment workbench</h2>
-          <p>Create versioned metadata-only evaluation datasets, record controlled baseline/candidate evidence, and run a deterministic savings gate.</p>
+          <p>Create versioned metadata-only evaluation datasets, pair the same cases across variants, link observations to complete agent runs, and run a deterministic savings gate.</p>
         </div>
       </div>
       <div className="app-panel__body app-stack">
@@ -224,22 +266,24 @@ export function ExperimentsManager({ canManage }: { canManage: boolean }) {
             </div>
 
             <section className="app-panel">
-              <div className="app-panel__header"><div><h3>3. Evidence</h3><p>Verification requires at least five baseline and five candidate observations, completed status, non-inferior success/quality, and lower median cost.</p></div></div>
+              <div className="app-panel__header"><div><h3>3. Evidence</h3><p>Verification requires at least five paired cases, run-linked full-session economics, cache/tool-call accounting, completed status, non-inferior success/quality, and lower median cost.</p></div></div>
               <div className="app-panel__body app-stack">
                 <div className="form-grid">
                   <div className="form-row"><label htmlFor="experiment-variant">Variant</label><select id="experiment-variant" value={variant} onChange={(event) => setVariant(event.target.value as "baseline" | "candidate")}><option value="baseline">Baseline</option><option value="candidate">Candidate</option></select></div>
+                  <div className="form-row"><label htmlFor="experiment-case">Paired evaluation case</label><select id="experiment-case" value={caseId} onChange={(event) => setCaseId(event.target.value)}><option value="">Choose case</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.inputReference}</option>)}</select></div>
+                  <div className="form-row"><label htmlFor="experiment-run-id">Run ID</label><input id="experiment-run-id" value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="run_..." /><small>Required for verified savings. Session cost/tokens, cache use, and tool calls are read from telemetry rather than trusted from this form.</small></div>
                   <div className="form-row"><label htmlFor="experiment-quality">Quality score</label><input id="experiment-quality" type="number" min="0" max="1" step="0.01" value={quality} onChange={(event) => setQuality(event.target.value)} /></div>
-                  <div className="form-row"><label htmlFor="experiment-cost">Cost USD</label><input id="experiment-cost" type="number" min="0" step="0.0001" value={cost} onChange={(event) => setCost(event.target.value)} /></div>
+                  <div className="form-row"><label htmlFor="experiment-cost">Manual cost fallback (USD)</label><input id="experiment-cost" type="number" min="0" step="0.0001" value={cost} onChange={(event) => setCost(event.target.value)} /><small>Used only when no run is linked; manual economics never qualify as verified savings.</small></div>
                   <div className="form-row"><label htmlFor="experiment-success">Outcome</label><select id="experiment-success" value={success ? "success" : "failure"} onChange={(event) => setSuccess(event.target.value === "success")}><option value="success">Verified success</option><option value="failure">Failure</option></select></div>
                 </div>
                 <div className="form-actions">
-                  <button className="button button--ghost" type="button" disabled={busy || !experimentId} onClick={() => void recordResult()}>Record observation</button>
+                  <button className="button button--ghost" type="button" disabled={busy || !experimentId || !caseId} onClick={() => void recordResult()}>Record observation</button>
                   <button className="button button--primary" type="button" disabled={busy || !experimentId} onClick={() => void completeAndEvaluate()}>Complete + evaluate gate</button>
                 </div>
                 {gate ? (
                   <div className="finding">
                     <div className="finding__top">
-                      <div><strong>{gate.passed ? "Verified savings" : "Not verified"}</strong><p>{gate.evidenceType} · baseline n={gate.baseline?.sampleSize ?? 0} · candidate n={gate.candidate?.sampleSize ?? 0}</p></div>
+                      <div><strong>{gate.passed ? "Verified savings" : "Not verified"}</strong><p>{gate.evidenceType} · baseline n={gate.baseline?.sampleSize ?? 0} · candidate n={gate.candidate?.sampleSize ?? 0} · paired cases={gate.benchmarkIntegrity?.pairedCaseCount ?? 0} · full-session rows={gate.benchmarkIntegrity?.authoritativeFullSessionCount ?? 0}</p></div>
                     </div>
                   </div>
                 ) : null}

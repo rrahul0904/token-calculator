@@ -13,7 +13,8 @@ This runbook restores service after a failed Token Intelligence release without 
 - Neon project: `token-intelligence` (`restless-queen-06517393`)
 - Neon production branch: `main` (`br-muddy-sun-aeyodc4h`)
 - Release validation branch: `release-validation-full-site` (`br-small-haze-aeqj7d25`)
-- Production migration ledger: `0000` through `0011` recorded with checksums; transaction pooling is enabled.
+- Repository release migration range for this candidate: `0000` through `0012`.
+- Production migration ledger before this candidate is applied: `0000` through `0011` recorded with checksums; transaction pooling is enabled.
 
 Update this section with the final certified release SHA and production deployment ID immediately before promotion.
 

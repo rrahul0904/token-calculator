@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "@/db/schema";
 import {
@@ -266,6 +266,32 @@ export async function ingestParsedTelemetryEvent(
   context: IngestContext,
   event: TelemetryEventInput,
 ): Promise<IngestResult> {
+  const eventLockKey = JSON.stringify([context.organizationId, event.source, event.sourceEventId]);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${eventLockKey}, 0))`);
+
+  const existingEvent = (await tx.select({ id: schema.usageEvents.id }).from(schema.usageEvents).where(and(
+    eq(schema.usageEvents.organizationId, context.organizationId),
+    eq(schema.usageEvents.source, event.source),
+    eq(schema.usageEvents.sourceEventId, event.sourceEventId),
+  )).limit(1))[0];
+  if (existingEvent) return { sourceEventId: event.sourceEventId, duplicate: true };
+
+  if (event.eventType === "run.upsert") {
+    const materialized = await materialize(tx, context, event);
+    await tx.insert(schema.usageEvents).values({
+      id: `evt_${randomUUID()}`,
+      organizationId: context.organizationId,
+      projectId: event.projectId ?? context.projectId ?? null,
+      runId: event.runId ?? null,
+      sourceEventId: event.sourceEventId,
+      source: event.source,
+      eventType: event.eventType,
+      occurredAt: event.occurredAt,
+      payload: event.payload,
+    });
+    return { sourceEventId: event.sourceEventId, duplicate: false, ...materialized };
+  }
+
   const inserted = await tx.insert(schema.usageEvents).values({
     id: `evt_${randomUUID()}`,
     organizationId: context.organizationId,
