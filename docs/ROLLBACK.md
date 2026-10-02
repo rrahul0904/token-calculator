@@ -14,6 +14,7 @@ This runbook restores service after a failed Token Intelligence release without 
 - Neon production branch: `main` (`br-muddy-sun-aeyodc4h`)
 - Release validation branch: `release-validation-full-site` (`br-small-haze-aeqj7d25`)
 - Production migration ledger: `0000` through `0011` recorded with checksums; transaction pooling is enabled.
+- Candidate migration chain: `0000` through `0012`; `0012_experiment_benchmark_integrity` is not applied in Production by this PR.
 
 Update this section with the final certified release SHA and production deployment ID immediately before promotion.
 
