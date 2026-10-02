@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import * as z from "zod";
 import { getDb } from "@/db/client";
-import { llmCalls, organizations, projects, providerConnections, runs } from "@/db/schema";
+import { apiKeys, gatewayQuotaReservations, llmCalls, organizations, projects, providerConnections, runs } from "@/db/schema";
 import type { ApiPrincipal } from "@/lib/auth/api-auth";
 import { calculateCost } from "@/lib/cost";
 import { decryptProviderCredential } from "@/lib/gateway/provider-credential";
+import { gatewayIdempotencyIdentity, gatewayRequestDigest } from "@/lib/gateway/idempotency";
 import type { GatewayProviderName } from "@/lib/gateway/provider-connectivity";
 import { parseSseUsage, providerForName, type GatewayProviderAdapter, type GatewayRequest, type GatewayUsage } from "@/lib/gateway/providers";
 import {
@@ -21,6 +22,7 @@ import { orchestrationGatewayContextSchema, orchestrationReceiptMetadata } from 
 import { exportGatewayTrace } from "@/lib/otel/export";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 import { actionRiskSchema } from "@/lib/policy/schemas";
+import { reserveApiKeyGatewayQuota } from "@/lib/gateway/quota";
 
 const metadataSchema = z.record(z.string(), z.string()).refine((value) => Object.keys(value).length <= 20, "At most 20 metadata entries are allowed.");
 const contentSchema = z.unknown().refine((value) => value !== undefined, "input is required");
@@ -29,6 +31,7 @@ export const gatewayRequestSchema = z.object({
   providerConnectionId: z.string().min(8).max(180),
   projectId: z.string().max(180).nullable().optional(),
   runId: z.string().min(8).max(180).optional(),
+  idempotencyKey: z.string().trim().min(1).max(200).optional(),
   agentName: z.string().trim().min(1).max(120).default("API Gateway"),
   workflowName: z.string().trim().max(160).nullable().optional(),
   environment: z.string().trim().min(1).max(80).default("production"),
@@ -76,6 +79,13 @@ export interface GatewayExecutionResult {
   runId: string;
   callId: string | null;
   policyAction: string;
+}
+
+export class GatewayExecutionError extends Error {
+  constructor(readonly code: string, readonly runId?: string) {
+    super(code);
+    this.name = "GatewayExecutionError";
+  }
 }
 
 type RetryAttempt = {
@@ -176,25 +186,11 @@ async function ensureRun(args: {
   estimatedInputTokens: number;
   estimatedCost: number | null;
   startedAt: Date;
+  idempotencyKeyDigest: string | null;
+  requestDigest: string;
 }) {
   const db = getDb();
-  const existing = await db.select({ id: runs.id, organizationId: runs.organizationId }).from(runs).where(eq(runs.id, args.runId)).limit(1);
-  if (existing[0] && existing[0].organizationId !== args.organizationId) throw new Error("RUN_SCOPE_VIOLATION");
-  if (existing[0]) {
-    await db.update(runs).set({
-      projectId: args.projectId,
-      serviceAccountId: args.serviceAccountId,
-      environment: args.input.environment,
-      agentName: args.input.agentName,
-      agentVendor: args.provider,
-      workflowName: args.input.workflowName ?? null,
-      status: "queued",
-      estimatedCostUsd: args.estimatedCost === null ? null : args.estimatedCost.toString(),
-      updatedAt: args.startedAt,
-    }).where(and(eq(runs.id, args.runId), eq(runs.organizationId, args.organizationId)));
-    return;
-  }
-  await db.insert(runs).values({
+  const inserted = await db.insert(runs).values({
     id: args.runId,
     organizationId: args.organizationId,
     projectId: args.projectId,
@@ -214,9 +210,22 @@ async function ensureRun(args: {
       providerConnectionId: args.input.providerConnectionId,
       apiKeyId: args.apiKeyId,
       estimatedInputMethod: "utf8_bytes_div_4",
+      idempotencyKeyDigest: args.idempotencyKeyDigest,
+      requestDigest: args.requestDigest,
       ...orchestrationMetadata(args.input),
     },
-  });
+  }).onConflictDoNothing().returning({ id: runs.id });
+  if (inserted.length) return;
+
+  const existing = (await db.select({ organizationId: runs.organizationId, metadata: runs.metadata }).from(runs).where(eq(runs.id, args.runId)).limit(1))[0];
+  if (!existing || existing.organizationId !== args.organizationId) throw new GatewayExecutionError("RUN_SCOPE_VIOLATION");
+  if (args.idempotencyKeyDigest && existing.metadata.idempotencyKeyDigest === args.idempotencyKeyDigest) {
+    const code = existing.metadata.requestDigest === args.requestDigest
+      ? "GATEWAY_IDEMPOTENCY_RESULT_NOT_REPLAYABLE"
+      : "GATEWAY_IDEMPOTENCY_PAYLOAD_MISMATCH";
+    throw new GatewayExecutionError(code, args.runId);
+  }
+  throw new GatewayExecutionError("RUN_ALREADY_EXISTS", args.runId);
 }
 
 async function persistAttempt(args: {
@@ -279,10 +288,16 @@ async function persistCall(args: {
   unknownPriorCharge?: boolean;
   transportResultBytes?: number | null;
   orchestrationMetadata?: Record<string, string | number | boolean | null>;
+  apiKeyId: string;
 }) {
   const callId = `llm_${randomUUID()}`;
   const db = getDb();
   await db.transaction(async (tx) => {
+    const key = (await tx.select({ id: apiKeys.id }).from(apiKeys).where(and(
+      eq(apiKeys.id, args.apiKeyId),
+      eq(apiKeys.organizationId, args.organizationId),
+    )).for("update").limit(1))[0];
+    if (!key) throw new Error("API_KEY_NOT_FOUND");
     await tx.insert(llmCalls).values({
       id: callId,
       organizationId: args.organizationId,
@@ -335,6 +350,13 @@ async function persistCall(args: {
       usageSource: args.unknownPriorCharge ? "estimated" : "provider_measured",
       updatedAt: args.endedAt,
     }).where(and(eq(runs.id, args.runId), eq(runs.organizationId, args.organizationId)));
+    const knownUsage = args.usage.totalTokens !== null && args.costUsd !== null && !args.unknownPriorCharge;
+    await tx.update(gatewayQuotaReservations).set({ status: knownUsage ? "released" : "unknown", updatedAt: args.endedAt }).where(and(
+      eq(gatewayQuotaReservations.id, args.runId),
+      eq(gatewayQuotaReservations.organizationId, args.organizationId),
+      eq(gatewayQuotaReservations.apiKeyId, args.apiKeyId),
+      eq(gatewayQuotaReservations.status, "reserved"),
+    ));
   });
   return callId;
 }
@@ -594,7 +616,11 @@ export async function executeGovernedGateway(
   const adapter = providerForName(connection.provider);
   if (!adapter) throw new Error("PROVIDER_UNSUPPORTED");
 
-  const runId = input.runId ?? `run_${randomUUID()}`;
+  const identity = input.idempotencyKey
+    ? gatewayIdempotencyIdentity(principal.organizationId, principal.apiKeyId, input.idempotencyKey)
+    : null;
+  const requestDigest = gatewayRequestDigest({ ...input, idempotencyKey: undefined });
+  const runId = identity?.runId ?? input.runId ?? `run_${randomUUID()}`;
   const startedAt = new Date();
   const runtime = createGatewayRuntimeMeter(startedAt.getTime());
   const estimatedInputTokens = estimateTokens(input.input);
@@ -610,13 +636,42 @@ export async function executeGovernedGateway(
     estimatedInputTokens,
     estimatedCost,
     startedAt,
+    idempotencyKeyDigest: identity?.keyDigest ?? null,
+    requestDigest,
   });
+
+  const inputBytes = Buffer.byteLength(typeof input.input === "string" ? input.input : JSON.stringify(input.input) ?? "null", "utf8");
+  const models = [input.model, ...(input.fallbackModel && input.fallbackModel !== input.model ? [input.fallbackModel] : [])];
+  const outputBounds = models.map((model) => input.maxOutputTokens ?? Math.min(findCatalogModel(connection.provider, model)?.maxOutput ?? 4096, 4096));
+  const reservedTokens = models.reduce((total, _model, index) => total + 3 * (inputBytes + outputBounds[index]), 0);
+  const reservedCost = models.reduce<number | null>((total, model, index) => {
+    const attemptCost = estimateModelCost(connection.provider, model, inputBytes, outputBounds[index]);
+    return total === null || attemptCost === null ? null : total + (attemptCost * 3);
+  }, 0);
+  try {
+    await reserveApiKeyGatewayQuota({
+      organizationId: principal.organizationId,
+      apiKeyId: principal.apiKeyId,
+      runId,
+      tokens: Math.max(reservedTokens, 1),
+      costUsd: reservedCost,
+    });
+  } catch (error) {
+    await terminateRun(principal.organizationId, runId, error instanceof Error ? error.message.toLowerCase() : "gateway_quota_reservation_failed", 0, false);
+    throw error;
+  }
 
   let credential: string;
   try {
     credential = decryptProviderCredential(connection);
   } catch {
     await terminateRun(principal.organizationId, runId, "credential_decryption_failed", 0, false);
+    await db.update(gatewayQuotaReservations).set({ status: "released", updatedAt: new Date() }).where(and(
+      eq(gatewayQuotaReservations.id, runId),
+      eq(gatewayQuotaReservations.organizationId, principal.organizationId),
+      eq(gatewayQuotaReservations.apiKeyId, principal.apiKeyId),
+      eq(gatewayQuotaReservations.status, "reserved"),
+    ));
     throw new Error("PROVIDER_CREDENTIAL_DECRYPTION_FAILED");
   }
   await db.update(runs).set({ status: "running", updatedAt: new Date() }).where(and(eq(runs.id, runId), eq(runs.organizationId, principal.organizationId)));
@@ -646,6 +701,12 @@ export async function executeGovernedGateway(
     });
   } catch (error) {
     await terminateRun(principal.organizationId, runId, error instanceof Error ? error.message.toLowerCase() : "gateway_upstream_unavailable", 2, false);
+    await db.update(gatewayQuotaReservations).set({ status: "unknown", updatedAt: new Date() }).where(and(
+      eq(gatewayQuotaReservations.id, runId),
+      eq(gatewayQuotaReservations.organizationId, principal.organizationId),
+      eq(gatewayQuotaReservations.apiKeyId, principal.apiKeyId),
+      eq(gatewayQuotaReservations.status, "reserved"),
+    ));
     throw error;
   }
 
@@ -658,6 +719,12 @@ export async function executeGovernedGateway(
       usageSource: attempt.unknownPriorCharge ? "estimated" : "provider_measured",
       updatedAt: new Date(),
     }).where(and(eq(runs.id, runId), eq(runs.organizationId, principal.organizationId)));
+    await db.update(gatewayQuotaReservations).set({ status: attempt.unknownPriorCharge ? "unknown" : "released", updatedAt: new Date() }).where(and(
+      eq(gatewayQuotaReservations.id, runId),
+      eq(gatewayQuotaReservations.organizationId, principal.organizationId),
+      eq(gatewayQuotaReservations.apiKeyId, principal.apiKeyId),
+      eq(gatewayQuotaReservations.status, "reserved"),
+    ));
     const blockedRuntime = snapshotGatewayRuntime(runtime);
     return {
       runId,
@@ -729,6 +796,12 @@ export async function executeGovernedGateway(
           usageSource: "estimated",
           updatedAt: new Date(),
         }).where(and(eq(runs.id, runId), eq(runs.organizationId, principal.organizationId)));
+        await db.update(gatewayQuotaReservations).set({ status: "unknown", updatedAt: new Date() }).where(and(
+          eq(gatewayQuotaReservations.id, runId),
+          eq(gatewayQuotaReservations.organizationId, principal.organizationId),
+          eq(gatewayQuotaReservations.apiKeyId, principal.apiKeyId),
+          eq(gatewayQuotaReservations.status, "reserved"),
+        ));
         const blockedRuntime = snapshotGatewayRuntime(runtime);
         return {
           runId,
@@ -745,6 +818,12 @@ export async function executeGovernedGateway(
       unknownPriorCharge = unknownPriorCharge || fallbackAttempt.unknownPriorCharge;
     } catch (error) {
       await terminateRun(principal.organizationId, runId, error instanceof Error ? error.message.toLowerCase() : "gateway_fallback_unavailable", totalRetryCount, true);
+      await db.update(gatewayQuotaReservations).set({ status: "unknown", updatedAt: new Date() }).where(and(
+        eq(gatewayQuotaReservations.id, runId),
+        eq(gatewayQuotaReservations.organizationId, principal.organizationId),
+        eq(gatewayQuotaReservations.apiKeyId, principal.apiKeyId),
+        eq(gatewayQuotaReservations.status, "reserved"),
+      ));
       throw error;
     }
   }
@@ -809,6 +888,7 @@ export async function executeGovernedGateway(
           unknownPriorCharge,
           transportResultBytes: streamedTransportBytes,
           orchestrationMetadata: orchestrationMetadata(input),
+          apiKeyId: principal.apiKeyId,
         });
         void callId;
         await exportGatewayTrace({
@@ -883,6 +963,7 @@ export async function executeGovernedGateway(
     unknownPriorCharge,
     transportResultBytes: resultBytes,
     orchestrationMetadata: orchestrationMetadata(input),
+    apiKeyId: principal.apiKeyId,
   });
 
   await exportGatewayTrace({

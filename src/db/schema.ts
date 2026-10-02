@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -211,6 +213,25 @@ export const apiKeys = pgTable(
   (table) => [
     uniqueIndex("api_keys_prefix_uq").on(table.prefix),
     index("api_keys_org_idx").on(table.organizationId),
+  ],
+);
+
+export const gatewayQuotaReservations = pgTable(
+  "gateway_quota_reservations",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    apiKeyId: text("api_key_id").notNull().references(() => apiKeys.id, { onDelete: "cascade" }),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: true }).notNull(),
+    reservedTokens: numeric("reserved_tokens", { precision: 24, scale: 6 }).notNull(),
+    reservedCostUsd: numeric("reserved_cost_usd", { precision: 24, scale: 8 }),
+    status: text("status").notNull().default("reserved"),
+    ...timestamps,
+  },
+  (table) => [
+    index("gateway_quota_reservations_key_period_status_idx").on(table.organizationId, table.apiKeyId, table.periodStart, table.status),
+    check("gateway_quota_reservations_status_check", sql`${table.status} in ('reserved', 'unknown', 'released')`),
   ],
 );
 
