@@ -2,7 +2,7 @@ import process from "node:process";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeDb } from "@/db/client";
-import { checkApiKeyQuota } from "@/lib/gateway/quota";
+import { checkApiKeyQuota, reserveApiKeyGatewayQuota, settleApiKeyGatewayQuota } from "@/lib/gateway/quota";
 import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
 import { rollupPlatformDay } from "@/lib/admin/data";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
@@ -146,6 +146,30 @@ describeIntegration("database release invariants", () => {
     expect(second.remaining).toBe(0);
     expect(third.allowed).toBe(false);
     expect(third.remaining).toBe(0);
+  });
+
+  it("serializes monthly quota reservations and keeps ambiguous charges held", async () => {
+    await sql`update api_key_quotas set monthly_token_limit = 400 where organization_id = ${orgA} and api_key_id = ${keyA}`;
+    const reservations = await Promise.allSettled([
+      reserveApiKeyGatewayQuota({ organizationId: orgA, apiKeyId: keyA, runId: `quota_run_a_${suffix}`, tokens: 200, costUsd: null }),
+      reserveApiKeyGatewayQuota({ organizationId: orgA, apiKeyId: keyA, runId: `quota_run_b_${suffix}`, tokens: 200, costUsd: null }),
+    ]);
+    expect(reservations.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(reservations.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const acceptedRunId = reservations[0].status === "fulfilled" ? `quota_run_a_${suffix}` : `quota_run_b_${suffix}`;
+    await settleApiKeyGatewayQuota({ organizationId: orgA, apiKeyId: keyA, runId: acceptedRunId, outcome: "unknown" });
+    const quota = await checkApiKeyQuota(orgA, keyA);
+    expect(quota.state.usedTokens).toBe(365);
+    expect(quota.allowed).toBe(true);
+    await sql`update api_key_quotas set monthly_token_limit = 350 where organization_id = ${orgA} and api_key_id = ${keyA}`;
+    const exhausted = await checkApiKeyQuota(orgA, keyA);
+    expect(exhausted.allowed).toBe(false);
+    expect(exhausted.reason).toBe("MONTHLY_TOKEN_QUOTA_EXCEEDED");
+    await sql`update api_key_quotas set monthly_token_limit = null, monthly_cost_limit_usd = 0.01 where organization_id = ${orgA} and api_key_id = ${keyA}`;
+    const unpriced = await checkApiKeyQuota(orgA, keyA);
+    expect(unpriced.allowed).toBe(false);
+    expect(unpriced.reason).toBe("MONTHLY_COST_QUOTE_UNAVAILABLE");
+    await sql`update api_key_quotas set monthly_cost_limit_usd = null where organization_id = ${orgA} and api_key_id = ${keyA}`;
   });
 
   it("enforces telemetry event idempotency per organization/source/event id", async () => {
