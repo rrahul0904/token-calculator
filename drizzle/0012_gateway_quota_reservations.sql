@@ -1,3 +1,9 @@
+ALTER TABLE "api_keys"
+  ADD COLUMN IF NOT EXISTS "idempotency_scope_id" text NOT NULL DEFAULT gen_random_uuid()::text;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "api_keys_idempotency_scope_uq"
+  ON "api_keys" ("idempotency_scope_id");
+
 CREATE TABLE IF NOT EXISTS "gateway_quota_reservations" (
   "id" text PRIMARY KEY NOT NULL,
   "organization_id" text NOT NULL REFERENCES "organizations"("id") ON DELETE CASCADE,

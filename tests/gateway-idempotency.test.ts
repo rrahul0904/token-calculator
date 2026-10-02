@@ -3,11 +3,11 @@ import { gatewayIdempotencyIdentity, gatewayRequestDigest } from "@/lib/gateway/
 
 describe("gateway durable idempotency identity", () => {
   it("derives stable identities scoped to both tenant and API key", () => {
-    const identity = gatewayIdempotencyIdentity("org_a", "request-123", "stored-scrypt-hash-a");
-    expect(identity).toEqual(gatewayIdempotencyIdentity("org_a", "request-123", "stored-scrypt-hash-a"));
+    const identity = gatewayIdempotencyIdentity("org_a", "request-123", "random-api-key-scope-a");
+    expect(identity).toEqual(gatewayIdempotencyIdentity("org_a", "request-123", "random-api-key-scope-a"));
     expect(identity.runId).toMatch(/^run_[a-f0-9]{40}$/);
-    expect(identity).not.toEqual(gatewayIdempotencyIdentity("org_b", "request-123", "stored-scrypt-hash-a"));
-    expect(identity).not.toEqual(gatewayIdempotencyIdentity("org_a", "request-123", "stored-scrypt-hash-b"));
+    expect(identity).not.toEqual(gatewayIdempotencyIdentity("org_b", "request-123", "random-api-key-scope-a"));
+    expect(identity).not.toEqual(gatewayIdempotencyIdentity("org_a", "request-123", "random-api-key-scope-b"));
   });
 
   it("hashes object-key order canonically while preserving array order", () => {

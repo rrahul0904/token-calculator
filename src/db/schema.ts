@@ -205,6 +205,7 @@ export const apiKeys = pgTable(
     prefix: text("prefix").notNull(),
     lastFour: text("last_four").notNull(),
     secretHash: text("secret_hash").notNull(),
+    idempotencyScopeId: text("idempotency_scope_id").notNull().default(sql`gen_random_uuid()::text`),
     scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -212,6 +213,7 @@ export const apiKeys = pgTable(
   },
   (table) => [
     uniqueIndex("api_keys_prefix_uq").on(table.prefix),
+    uniqueIndex("api_keys_idempotency_scope_uq").on(table.idempotencyScopeId),
     index("api_keys_org_idx").on(table.organizationId),
   ],
 );
