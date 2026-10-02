@@ -9,5 +9,8 @@ regexTarget = "line"
 regexes = [
   '''process\.env\.WORKOS_API_KEY = "sk_test_release_callback";''',
   '''process\.env\.WORKOS_CLIENT_ID = "client_test_release_callback";''',
-  '''process\.env\.WORKOS_COOKIE_PASSWORD = "0123456789abcdef0123456789abcdef";'''
+  '''process\.env\.WORKOS_COOKIE_PASSWORD = "0123456789abcdef0123456789abcdef";''',
+  # This exact synthetic placeholder appears in two public examples in the pilot's first commit.
+  # Keep full-history scanning and allow only this literal line.
+  '''Authorization: Bearer YOUR_GATEWAY_TENANT_KEY'''
 ]

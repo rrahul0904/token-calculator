@@ -160,6 +160,7 @@ export async function getExperimentsDashboardData(organizationId: string) {
       evidence: experimentEvidence({
         status: experiment.status,
         resultCount: results.length,
+        rows: results,
         baseline: variantByName.get("baseline"),
         candidate: variantByName.get("candidate"),
         minimumQualityScore: money(experiment.qualityThreshold),

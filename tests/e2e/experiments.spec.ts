@@ -25,11 +25,14 @@ test.describe("experiment lifecycle", () => {
     expect(datasetResponse.status()).toBe(201);
     const dataset = (await datasetResponse.json()).data as { id: string };
 
-    const caseResponse = await request.post(`/api/v1/evaluation-datasets/${dataset.id}/cases`, {
-      data: { inputReference: `fixture-${suffix}`, expectedOutcome: { testsPassed: true }, tags: ["release"], metadata: { suite: "playwright" } },
-    });
-    expect(caseResponse.status()).toBe(201);
-    const evaluationCase = (await caseResponse.json()).data as { id: string };
+    const evaluationCases: Array<{ id: string }> = [];
+    for (let index = 0; index < 5; index += 1) {
+      const caseResponse = await request.post(`/api/v1/evaluation-datasets/${dataset.id}/cases`, {
+        data: { inputReference: `fixture-${suffix}-${index}`, expectedOutcome: { testsPassed: true }, tags: ["release"], metadata: { suite: "playwright" } },
+      });
+      expect(caseResponse.status()).toBe(201);
+      evaluationCases.push((await caseResponse.json()).data as { id: string });
+    }
 
     const experimentResponse = await request.post("/api/v1/experiments", {
       data: {
@@ -44,17 +47,59 @@ test.describe("experiment lifecycle", () => {
     });
     expect(experimentResponse.status()).toBe(201);
     const experiment = (await experimentResponse.json()).data as { id: string };
+    const keyResponse = await request.post("/api/v1/api-keys", {
+      data: { name: `Benchmark evidence ${suffix}`, environment: "test", projectId: "proj_e2e", scopes: ["write:runs"] },
+    });
+    expect(keyResponse.status()).toBe(201);
+    const apiKey = String((await keyResponse.json()).data.secret);
 
     for (let index = 0; index < 5; index += 1) {
-      const baseline = await request.post(`/api/v1/experiments/${experiment.id}/results`, {
-        data: { variant: "baseline", caseId: evaluationCase.id, qualityScore: 0.95, costUsd: 1, tokens: 1000, latencyMs: 500, retries: 0, fallbacks: 0, success: true },
-      });
-      expect(baseline.status()).toBe(201);
+      for (const observation of [
+        { variant: "baseline", actualCostUsd: 1 },
+        { variant: "candidate", actualCostUsd: 0.5 },
+      ] as const) {
+        const runId = `benchmark-${suffix}-${observation.variant}-${index}`;
+        const now = new Date();
+        const run = await request.post("/api/v1/runs", {
+          headers: { authorization: `Bearer ${apiKey}` },
+          data: {
+            id: runId,
+            projectId: "proj_e2e",
+            agentName: "benchmark-e2e",
+            agentVendor: "openai",
+            startedAt: new Date(now.getTime() - 1000).toISOString(),
+            endedAt: now.toISOString(),
+            status: "completed",
+            actualCostUsd: observation.actualCostUsd,
+            freshInputTokens: 1000,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            outputTokens: 100,
+            toolCallCount: 2,
+            usageSource: "provider_measured",
+            metadata: {
+              "benchmark.target_tool": "repo_search",
+              "benchmark.target_tool_call_count": 1,
+              "benchmark.index_time_ms": 20,
+            },
+          },
+        });
+        expect(run.status()).toBe(201);
 
-      const candidate = await request.post(`/api/v1/experiments/${experiment.id}/results`, {
-        data: { variant: "candidate", caseId: evaluationCase.id, qualityScore: 0.95, costUsd: 0.5, tokens: 900, latencyMs: 450, retries: 0, fallbacks: 0, success: true },
-      });
-      expect(candidate.status()).toBe(201);
+        const result = await request.post(`/api/v1/experiments/${experiment.id}/results`, {
+          data: {
+            variant: observation.variant,
+            caseId: evaluationCases[index].id,
+            runId,
+            qualityScore: 0.95,
+            latencyMs: 500,
+            retries: 0,
+            fallbacks: 0,
+            success: true,
+          },
+        });
+        expect(result.status()).toBe(201);
+      }
     }
 
     const completed = await request.patch(`/api/v1/experiments/${experiment.id}`, { data: { status: "completed" } });
@@ -71,6 +116,8 @@ test.describe("experiment lifecycle", () => {
     expect(gate.candidate.count).toBe(5);
     expect(gate.baseline.sampleSize).toBe(5);
     expect(gate.candidate.sampleSize).toBe(5);
+    expect(gate.benchmarkIntegrity.noDuplicateRuns).toBe(true);
+    expect(gate.benchmarkIntegrity.authoritativeFullSessionCount).toBe(10);
     expect(gate.baseline.qualityScore).toBe(0.95);
     expect(gate.candidate.qualityScore).toBe(0.95);
 

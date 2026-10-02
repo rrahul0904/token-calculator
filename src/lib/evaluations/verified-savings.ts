@@ -33,6 +33,9 @@ export function verifiedSavingsEvidenceHash(
       qualityScore: row.qualityScore,
       costUsd: row.costUsd,
       success: row.success,
+      economicsSource: row.economicsSource,
+      measurementScope: row.measurementScope,
+      benchmarkContext: row.benchmarkContext,
       evaluatorResults: row.evaluatorResults,
     })),
   };
