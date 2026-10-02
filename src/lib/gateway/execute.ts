@@ -142,6 +142,16 @@ function estimateModelCost(provider: string, model: string, inputTokens: number,
   return calculateCost(catalog, { inputTokens, outputTokens: output }).total;
 }
 
+function estimateMaximumModelCost(provider: string, model: string, inputTokens: number, outputTokens: number): number | null {
+  const catalog = findCatalogModel(provider, model);
+  if (!catalog) return null;
+  return Math.max(
+    calculateCost(catalog, { inputTokens, outputTokens }).total,
+    calculateCost(catalog, { inputTokens, cachedInputTokens: inputTokens, outputTokens }).total,
+    calculateCost(catalog, { inputTokens, cacheWrite5mTokens: inputTokens, outputTokens }).total,
+  );
+}
+
 function costForUsage(provider: string, model: string, usage: GatewayUsage): number | null {
   const catalog = findCatalogModel(provider, model);
   if (!catalog) return null;
@@ -645,12 +655,24 @@ export async function executeGovernedGateway(
     requestDigest,
   });
 
-  const inputBytes = Buffer.byteLength(typeof input.input === "string" ? input.input : JSON.stringify(input.input) ?? "null", "utf8");
   const models = [input.model, ...(input.fallbackModel && input.fallbackModel !== input.model ? [input.fallbackModel] : [])];
   const outputBounds = models.map((model) => input.maxOutputTokens ?? Math.min(findCatalogModel(connection.provider, model)?.maxOutput ?? 4096, 4096));
-  const reservedTokens = models.reduce((total, _model, index) => total + 3 * (inputBytes + outputBounds[index]), 0);
+  const inputBounds = models.map((model, index) => {
+    const request: GatewayRequest = {
+      model,
+      input: input.input,
+      maxOutputTokens: outputBounds[index],
+      stream: input.stream,
+      temperature: input.temperature,
+      metadata: input.metadata,
+    };
+    const body = adapter.buildRequest(request, "").init.body;
+    if (typeof body !== "string") throw new Error("GATEWAY_QUOTA_ESTIMATE_UNAVAILABLE");
+    return Buffer.byteLength(body, "utf8");
+  });
+  const reservedTokens = models.reduce((total, _model, index) => total + 3 * 2 * (inputBounds[index] + outputBounds[index]), 0);
   const reservedCost = models.reduce<number | null>((total, model, index) => {
-    const attemptCost = estimateModelCost(connection.provider, model, inputBytes, outputBounds[index]);
+    const attemptCost = estimateMaximumModelCost(connection.provider, model, inputBounds[index], outputBounds[index]);
     return total === null || attemptCost === null ? null : total + (attemptCost * 3);
   }, 0);
   try {
