@@ -4,7 +4,7 @@ The governed gateway accepts an optional `Idempotency-Key` header (1-200 charact
 
 The current gateway does not persist response bodies, so it cannot replay a prior response. Repeating a key with the same normalized request returns `409 GATEWAY_IDEMPOTENCY_RESULT_NOT_REPLAYABLE`; changing the request under the same key returns `409 GATEWAY_IDEMPOTENCY_PAYLOAD_MISMATCH`. Both responses include the original `runId` and `replayed: false`. This is durable at-most-once protection, not full HTTP idempotent response replay. An ambiguous database failure around the reservation must be retried with the same key; no request should be retried under a new key until the run state is reconciled.
 
-The request digest canonicalizes object key ordering, preserves array order, and excludes the idempotency key itself. Only digests are stored; key values and request content are not added to run metadata.
+The key identity is HMACed with the authenticated API key's stored scrypt verifier, so raw idempotency keys are not stored or hashed as passwords with a fast digest. The request digest canonicalizes object key ordering, preserves array order, and excludes the idempotency key itself. Only digests are stored; key values and request content are not added to run metadata.
 
 ## Remaining production gates
 

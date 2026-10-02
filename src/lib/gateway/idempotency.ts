@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -16,7 +16,9 @@ export function gatewayRequestDigest(input: unknown): string {
   return digest(JSON.stringify(canonicalize(input)));
 }
 
-export function gatewayIdempotencyIdentity(organizationId: string, apiKeyId: string, idempotencyKey: string) {
-  const scopedKeyDigest = digest(`${organizationId}\0${apiKeyId}\0${idempotencyKey}`);
+export function gatewayIdempotencyIdentity(organizationId: string, apiKeyId: string, idempotencyKey: string, apiKeySecretHash: string) {
+  const scopedKeyDigest = createHmac("sha256", apiKeySecretHash)
+    .update(`gateway-idempotency\0${organizationId}\0${apiKeyId}\0${idempotencyKey}`)
+    .digest("hex");
   return { runId: `run_${scopedKeyDigest.slice(0, 40)}`, keyDigest: scopedKeyDigest };
 }

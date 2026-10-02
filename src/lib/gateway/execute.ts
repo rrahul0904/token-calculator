@@ -616,8 +616,13 @@ export async function executeGovernedGateway(
   const adapter = providerForName(connection.provider);
   if (!adapter) throw new Error("PROVIDER_UNSUPPORTED");
 
+  const apiKeyRows = input.idempotencyKey ? await db.select({ secretHash: apiKeys.secretHash }).from(apiKeys).where(and(
+    eq(apiKeys.id, principal.apiKeyId),
+    eq(apiKeys.organizationId, principal.organizationId),
+  )).limit(1) : [];
+  if (input.idempotencyKey && !apiKeyRows[0]) throw new Error("API_KEY_NOT_FOUND");
   const identity = input.idempotencyKey
-    ? gatewayIdempotencyIdentity(principal.organizationId, principal.apiKeyId, input.idempotencyKey)
+    ? gatewayIdempotencyIdentity(principal.organizationId, principal.apiKeyId, input.idempotencyKey, apiKeyRows[0].secretHash)
     : null;
   const requestDigest = gatewayRequestDigest({ ...input, idempotencyKey: undefined });
   const runId = identity?.runId ?? input.runId ?? `run_${randomUUID()}`;
