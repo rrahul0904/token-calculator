@@ -1,11 +1,12 @@
 import process from "node:process";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { closeDb } from "@/db/client";
+import { closeDb, getDb } from "@/db/client";
 import { checkApiKeyQuota } from "@/lib/gateway/quota";
 import { consumeGatewayRateLimit } from "@/lib/gateway/rate-limit";
 import { rollupPlatformDay } from "@/lib/admin/data";
 import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
+import { ingestTelemetryEvent } from "@/lib/telemetry/ingest";
 
 const integrationEnabled = process.env.TOKEN_INTELLIGENCE_INTEGRATION_TESTS === "1";
 const describeIntegration = integrationEnabled ? describe : describe.skip;
@@ -162,6 +163,42 @@ describeIntegration("database release invariants", () => {
     } catch (error) {
       expectPgCode(error, "23505");
     }
+  });
+
+  it("materializes a first run before recording its tenant-guarded event and remains idempotent", async () => {
+    const runId = `it_run_ingest_${suffix}`;
+    const event = {
+      sourceEventId: `run_source_${suffix}`,
+      source: "integration",
+      eventType: "run.upsert" as const,
+      occurredAt: new Date(),
+      projectId: projectA,
+      runId,
+      payload: {
+        id: runId,
+        projectId: projectA,
+        agentName: "integration-agent",
+        startedAt: new Date(),
+        endedAt: new Date(),
+        status: "completed",
+        actualCostUsd: 0.5,
+        usageSource: "provider_measured",
+      },
+    };
+
+    const first = await ingestTelemetryEvent(getDb(), { organizationId: orgA, projectId: projectA }, event);
+    const duplicate = await ingestTelemetryEvent(getDb(), { organizationId: orgA, projectId: projectA }, event);
+    const storedRuns = await sql<{ count: number }[]>`select count(*)::int as count from runs where id = ${runId}`;
+    const storedEvents = await sql<{ count: number }[]>`
+      select count(*)::int as count from usage_events
+      where organization_id = ${orgA} and source = 'integration' and source_event_id = ${event.sourceEventId}
+    `;
+
+    expect(first.duplicate).toBe(false);
+    expect(first.materializedType).toBe("run");
+    expect(duplicate.duplicate).toBe(true);
+    expect(storedRuns[0]?.count).toBe(1);
+    expect(storedEvents[0]?.count).toBe(1);
   });
 
   it("enforces globally unique platform-admin identities outside organization roles", async () => {

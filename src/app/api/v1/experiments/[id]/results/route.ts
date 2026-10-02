@@ -69,6 +69,12 @@ function metadataString(metadata: Record<string, unknown>, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function isTerminalRun(status: string, endedAt: Date | null) {
+  return ["completed", "failed", "aborted", "cancelled", "budget_blocked"].includes(status.trim().toLowerCase())
+    && endedAt instanceof Date
+    && Number.isFinite(endedAt.getTime());
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   if (!isDatabaseConfigured()) return reply({ error: "DATABASE_NOT_CONFIGURED" }, 503);
   try {
@@ -114,6 +120,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       toolCallCount: number;
       turnCount: number;
       startedAt: Date;
+      status: string;
       endedAt: Date | null;
     }) | null = null;
     if (parsed.data.runId) {
@@ -140,6 +147,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         toolCallCount: runs.toolCallCount,
         turnCount: runs.turnCount,
         startedAt: runs.startedAt,
+        status: runs.status,
         endedAt: runs.endedAt,
       }).from(runs).where(eq(runs.id, parsed.data.runId)).limit(1))[0];
       if (!run) return reply({ error: "RUN_NOT_FOUND" }, 404);
@@ -190,18 +198,23 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           cacheWriteTokens: runs.cacheWriteTokens,
           toolCallCount: runs.toolCallCount,
           turnCount: runs.turnCount,
+          status: runs.status,
+          endedAt: runs.endedAt,
           metadata: runs.metadata,
         }).from(runs).where(and(
           eq(runs.organizationId, tenant.organizationId),
           sql`${runs.metadata} ->> 'orchestration.run_id' = ${orchestrationRunId}`,
         )),
       ]);
+      const completeOrchestration = orchestrationRuns.length > 0
+        && isTerminalRun(linkedRun.status, linkedRun.endedAt)
+        && orchestrationRuns.every((run) => isTerminalRun(run.status, run.endedAt));
       economics = resolveOrchestrationExperimentEconomics({
         calls: orchestrationCalls,
         retries: orchestrationRuns.reduce((sum, run) => sum + (run.retryCount ?? 0), 0),
         fallbacks: orchestrationRuns.reduce((sum, run) => sum + (run.fallbackCount ?? 0), 0),
       });
-      measurementScope = "orchestration_full_session";
+      measurementScope = completeOrchestration ? "orchestration_full_session" : "incomplete_session";
       const indexTimes = orchestrationRuns
         .map((run) => metadataNumber(run.metadata, "benchmark.index_time_ms"))
         .filter((value): value is number => value !== null);
@@ -211,6 +224,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       benchmarkContext = {
         benchmark_version: "full-session-v1",
         measurement_scope: measurementScope,
+        run_status: linkedRun.status,
+        run_ended_at: linkedRun.endedAt?.toISOString() ?? null,
+        session_runs_terminal: completeOrchestration,
         harness: linkedRun.agentName,
         harness_version: linkedRun.agentVersion,
         workflow_name: linkedRun.workflowName,
@@ -247,10 +263,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           fallbacks: parsed.data.fallbacks,
         },
       });
-      measurementScope = linkedRun ? "full_session" : "submitted_observation";
+      measurementScope = linkedRun
+        ? (isTerminalRun(linkedRun.status, linkedRun.endedAt) ? "full_session" : "incomplete_session")
+        : "submitted_observation";
       benchmarkContext = linkedRun ? {
         benchmark_version: "full-session-v1",
         measurement_scope: measurementScope,
+        run_status: linkedRun.status,
+        run_ended_at: linkedRun.endedAt?.toISOString() ?? null,
+        session_runs_terminal: isTerminalRun(linkedRun.status, linkedRun.endedAt),
         harness: linkedRun.agentName,
         harness_version: linkedRun.agentVersion,
         workflow_name: linkedRun.workflowName,

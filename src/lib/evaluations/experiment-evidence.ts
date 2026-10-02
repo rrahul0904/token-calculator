@@ -87,6 +87,16 @@ function contextNumber(row: ExperimentEvidenceRow, key: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
+function terminalSessionEvidence(row: ExperimentEvidenceRow) {
+  const status = String(row.benchmarkContext?.run_status ?? "").trim().toLowerCase();
+  const endedAt = row.benchmarkContext?.run_ended_at;
+  const hasEndTime = typeof endedAt === "string" && Number.isFinite(Date.parse(endedAt))
+    || endedAt instanceof Date && Number.isFinite(endedAt.getTime());
+  return ["completed", "failed", "aborted", "cancelled", "budget_blocked"].includes(status)
+    && hasEndTime
+    && row.benchmarkContext?.session_runs_terminal === true;
+}
+
 export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
   const baseline = variantRows(rows, "baseline");
   const candidate = variantRows(rows, "candidate");
@@ -94,15 +104,23 @@ export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
   const candidateCases = uniqueCaseIds(candidate);
   const pairedCases = [...baselineCases].filter((value) => candidateCases.has(value));
   const noDuplicateCases = !hasDuplicateCases(baseline) && !hasDuplicateCases(candidate);
+  const runIds = rows.map((row) => row.runId?.trim() || "");
+  const uniqueRunIds = new Set(runIds.filter(Boolean));
+  const noDuplicateRuns = runIds.every(Boolean) && uniqueRunIds.size === rows.length;
   const allRowsCaseLinked = rows.length > 0 && rows.every((row) => caseId(row) !== null);
   const sameCaseCohort = allRowsCaseLinked
     && noDuplicateCases
+    && noDuplicateRuns
     && baseline.length === candidate.length
     && baselineCases.size === baseline.length
     && candidateCases.size === candidate.length
     && pairedCases.length === baseline.length;
 
-  const authoritativeRows = rows.filter(authoritativeFullSession);
+  const authoritativeRows = rows.filter((row) => authoritativeFullSession(row)
+    && numeric(row.costUsd) !== null
+    && numeric(row.qualityScore) !== null
+    && row.success !== null
+    && terminalSessionEvidence(row));
   const fullSessionEconomics = rows.length > 0 && authoritativeRows.length === rows.length;
   const cacheAccountingRows = rows.filter((row) =>
     contextNumber(row, "cache_read_tokens") !== null
@@ -127,6 +145,7 @@ export function benchmarkIntegrity(rows: ExperimentEvidenceRow[]) {
     candidateUniqueCaseCount: candidateCases.size,
     sameCaseCohort,
     noDuplicateCases,
+    noDuplicateRuns,
     authoritativeFullSessionCount: authoritativeRows.length,
     authoritativeFullSessionEconomics: fullSessionEconomics,
     cacheAccountingCount: cacheAccountingRows.length,
@@ -186,6 +205,7 @@ export function evaluateExperimentSummaries(args: {
     baselineSuccess: baseline.successRate !== null,
     candidateSuccess: candidate.successRate !== null,
     pairedCaseCohort: Boolean(integrity?.sameCaseCohort && integrity.pairedCaseCount >= MINIMUM_EXPERIMENT_EVIDENCE_SAMPLE),
+    independentRuns: Boolean(integrity?.noDuplicateRuns),
     fullSessionEconomics: Boolean(integrity?.authoritativeFullSessionEconomics),
     cacheAccounting: Boolean(integrity?.cacheAccountingComplete),
     toolCallAccounting: Boolean(integrity?.toolCallAccountingComplete),

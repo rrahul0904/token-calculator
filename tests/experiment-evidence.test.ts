@@ -20,6 +20,9 @@ function row(variant: "baseline" | "candidate", index: number, overrides: Partia
       gold_files_found: 3,
       files_served: 6,
       index_time_ms: 20,
+      run_status: "completed",
+      run_ended_at: "2026-10-01T12:00:00.000Z",
+      session_runs_terminal: true,
     },
     ...overrides,
   };
@@ -55,6 +58,7 @@ describe("experiment evidence labels", () => {
     expect(result.benchmarkIntegrity).toMatchObject({
       pairedCaseCount: 5,
       sameCaseCohort: true,
+      noDuplicateRuns: true,
       authoritativeFullSessionCount: 10,
       authoritativeFullSessionEconomics: true,
       cacheAccountingComplete: true,
@@ -93,6 +97,34 @@ describe("experiment evidence labels", () => {
     expect(result.benchmarkIntegrity?.sameCaseCohort).toBe(false);
     expect(result.benchmarkIntegrity?.noDuplicateCases).toBe(false);
     expect(result.prerequisites.pairedCaseCohort).toBe(false);
+  });
+
+  it("requires distinct run IDs for every paired observation", () => {
+    const rows = pairedRows();
+    rows[9] = row("candidate", 5, { runId: rows[7].runId });
+    const result = evaluateExperimentRows({ status: "completed", rows, minimumQualityScore: null });
+
+    expect(result.passed).toBe(false);
+    expect(result.prerequisites.independentRuns).toBe(false);
+    expect(result.benchmarkIntegrity?.noDuplicateRuns).toBe(false);
+  });
+
+  it("rejects full-session evidence from a running or unterminated run", () => {
+    const rows = pairedRows();
+    rows[0] = { ...rows[0], benchmarkContext: { ...rows[0].benchmarkContext, run_status: "running", run_ended_at: null } };
+    const result = evaluateExperimentRows({ status: "completed", rows, minimumQualityScore: null });
+
+    expect(result.passed).toBe(false);
+    expect(result.prerequisites.fullSessionEconomics).toBe(false);
+  });
+
+  it("rejects orchestration evidence while any constituent run is active", () => {
+    const rows = pairedRows();
+    rows[0] = { ...rows[0], benchmarkContext: { ...rows[0].benchmarkContext, session_runs_terminal: false } };
+    const result = evaluateExperimentRows({ status: "completed", rows, minimumQualityScore: null });
+
+    expect(result.passed).toBe(false);
+    expect(result.prerequisites.fullSessionEconomics).toBe(false);
   });
 
   it("keeps a cheaper but lower-quality full-session candidate unverified", () => {
