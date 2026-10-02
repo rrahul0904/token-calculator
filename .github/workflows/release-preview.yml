@@ -252,6 +252,7 @@ jobs:
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run mcp:verify --
           --base-url="${{ steps.deploy.outputs.url }}"
+          --resource-uri="${{ steps.deploy.outputs.url }}/mcp"
           --require
 
       - name: Read deployment identity

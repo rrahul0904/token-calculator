@@ -30,6 +30,14 @@ describe("release workflow invariants", () => {
     expect(source).toContain("TOKEN_INTELLIGENCE_EXPECTED_NEON_BRANCH_ID=br-small-haze-aeqj7d25");
   });
 
+  it("verifies Preview MCP metadata against the exact deployed resource URI", async () => {
+    const preview = await workflow("release-preview.yml");
+    const verifier = await source("scripts/release/mcp-verify.ts");
+
+    expect(preview).toContain('--resource-uri="${{ steps.deploy.outputs.url }}/mcp"');
+    expect(verifier).toContain('argument("resource-uri") ?? process.env.MCP_RESOURCE_URI');
+  });
+
   it("reuses the designated Staging WorkOS webhook endpoint for exact Preview origins", async () => {
     const preview = await workflow("release-preview.yml");
     expect(preview).toContain("WORKOS_STAGING_WEBHOOK_ENDPOINT_ID: we_01M22710048TQRMA6YQSX3HEGW");
