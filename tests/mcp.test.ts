@@ -27,6 +27,7 @@ const REQUIRED_TOOLS = [
   "compare_models",
   "recommend_model",
   "check_context",
+  "analyze_harness",
   "check_budget",
   "record_usage",
   "get_usage",
@@ -76,6 +77,34 @@ describe("MCP production contract", () => {
     const parsed = JSON.parse(text);
     expect(parsed.source).toBe("current_pricing_catalog");
     expect(Array.isArray(parsed.results)).toBe(true);
+  });
+
+  it("evaluates harness savings from metadata without a database round trip", async () => {
+    mocks.getDb.mockClear();
+    const result = await rpc("tools/call", {
+      name: "analyze_harness",
+      arguments: {
+        candidates: [{
+          id: "shell-output-reducer",
+          kind: "output_reducer",
+          baselineTokens: 10_000,
+          deliveredTokens: 4_000,
+          sampleSize: 8,
+          evidenceType: "measured_before_after",
+          qualityGate: "passed",
+          evidenceSource: "benchmark:v1",
+        }],
+      },
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.error).toBeUndefined();
+    const parsed = JSON.parse(result.payload.result?.content?.[0]?.text ?? "{}");
+    expect(parsed.summary.verifiedComponents).toBe(1);
+    expect(parsed.summary.bestVerifiedSavingsPct).toBe(60);
+    expect(parsed.summary.additiveSavingsClaimed).toBe(false);
+    expect(parsed.privacy.promptContentRequired).toBe(false);
+    expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
   it("returns a JSON-RPC error for an unknown tool", async () => {
