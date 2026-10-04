@@ -80,8 +80,8 @@ const KIND_RECOMMENDATIONS: Record<HarnessOptimizationKind, string> = {
   repository_context: "Use repository structure or relationship metadata to reduce repeated exploratory reads without sending source content to this evaluator.",
 };
 
-function finiteNonNegative(value: number | null): value is number {
-  return value !== null && Number.isFinite(value) && value >= 0;
+function normalizeTokenCount(value: number | null): number | null {
+  return value !== null && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function round(value: number, digits = 2) {
@@ -94,7 +94,7 @@ function verificationFor(candidate: HarnessOptimizationCandidate, minimumSampleS
   if (candidate.qualityGate !== "passed") return "Run an outcome-equivalent quality gate on the same versioned workload.";
   if (candidate.evidenceType !== "measured_before_after") return "Capture measured before/after token counts from the same workload; estimates and historical observations are not verified savings.";
   if (candidate.sampleSize < minimumSampleSize) return `Collect at least ${minimumSampleSize} comparable measured samples before claiming savings.`;
-  if (!finiteNonNegative(candidate.baselineTokens) || !finiteNonNegative(candidate.deliveredTokens)) return "Capture non-negative baseline and delivered token counts.";
+  if (normalizeTokenCount(candidate.baselineTokens) === null || normalizeTokenCount(candidate.deliveredTokens) === null) return "Capture non-negative baseline and delivered token counts.";
   return null;
 }
 
@@ -103,19 +103,19 @@ export function evaluateHarnessCandidate(
   options: { minimumSampleSize?: number } = {},
 ): HarnessOptimizationEvaluation {
   const minimumSampleSize = Math.max(1, Math.trunc(options.minimumSampleSize ?? 5));
-  const baselineKnown = finiteNonNegative(candidate.baselineTokens);
-  const deliveredKnown = finiteNonNegative(candidate.deliveredTokens);
-  const measuredSavingsTokens = baselineKnown && deliveredKnown
-    ? candidate.baselineTokens - candidate.deliveredTokens
+  const baselineTokens = normalizeTokenCount(candidate.baselineTokens);
+  const deliveredTokens = normalizeTokenCount(candidate.deliveredTokens);
+  const measuredSavingsTokens = baselineTokens !== null && deliveredTokens !== null
+    ? baselineTokens - deliveredTokens
     : null;
-  const measuredSavingsPct = measuredSavingsTokens !== null && candidate.baselineTokens > 0
-    ? round(measuredSavingsTokens / candidate.baselineTokens * 100)
+  const measuredSavingsPct = measuredSavingsTokens !== null && baselineTokens !== null && baselineTokens > 0
+    ? round(measuredSavingsTokens / baselineTokens * 100)
     : null;
 
   let status: HarnessEvaluationStatus;
   if (candidate.qualityGate === "failed") status = "quality_regression";
   else if (measuredSavingsTokens !== null && measuredSavingsTokens < 0) status = "token_regression";
-  else if (!baselineKnown || !deliveredKnown || candidate.baselineTokens === 0 || measuredSavingsTokens === 0) status = "no_savings_evidence";
+  else if (baselineTokens === null || deliveredTokens === null || baselineTokens === 0 || measuredSavingsTokens === 0) status = "no_savings_evidence";
   else if (candidate.qualityGate !== "passed") status = "quality_unverified";
   else if (candidate.evidenceType !== "measured_before_after") status = "candidate";
   else if (candidate.sampleSize < minimumSampleSize) status = "insufficient_samples";
@@ -128,8 +128,8 @@ export function evaluateHarnessCandidate(
     label: candidate.label?.trim() || candidate.id,
     status,
     claimable,
-    baselineTokens: baselineKnown ? candidate.baselineTokens : null,
-    deliveredTokens: deliveredKnown ? candidate.deliveredTokens : null,
+    baselineTokens,
+    deliveredTokens,
     measuredSavingsTokens,
     measuredSavingsPct,
     sampleSize: Math.max(0, Math.trunc(candidate.sampleSize)),
