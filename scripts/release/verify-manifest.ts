@@ -13,12 +13,14 @@ function argument(name: string): string | undefined {
 const path = argument("file") ?? "release-evidence/release-manifest.json";
 const expectedSha = argument("sha");
 const expectedStatus = argument("status") ?? "preview_certified";
+const expectedRunId = argument("run-id");
 const manifest = JSON.parse(await readFile(path, "utf8")) as {
   schemaVersion?: number;
   application?: string;
   version?: string;
   gitSha?: string;
   gitBranch?: string;
+  githubRunId?: string | null;
   status?: string;
   vercelPreviewUrl?: string | null;
   productionUrl?: string | null;
@@ -43,8 +45,9 @@ const checks = {
   schemaVersion: manifest.schemaVersion === 2,
   application: manifest.application === "token-intelligence",
   version: Boolean(packageJson.version && manifest.version === packageJson.version),
-  gitBranch: manifest.gitBranch === "release-candidate-full-site",
+  gitBranch: typeof manifest.gitBranch === "string" && manifest.gitBranch.trim().length > 0,
   sha: Boolean(expectedSha && manifest.gitSha === expectedSha),
+  githubRunId: !expectedRunId || manifest.githubRunId === expectedRunId,
   status: manifest.status === expectedStatus,
   previewUrl: !["preview_certified", "production_certified"].includes(expectedStatus) || Boolean(manifest.vercelPreviewUrl),
   productionUrl: expectedStatus !== "production_certified" || Boolean(manifest.productionUrl),

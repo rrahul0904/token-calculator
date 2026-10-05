@@ -22,6 +22,32 @@ describe("release workflow invariants", () => {
     expect(source).toContain("release-manifest");
   });
 
+  it("proves Preview source-ref ancestry and carries that provenance through Production", async () => {
+    const preview = await workflow("release-preview.yml");
+    const production = await workflow("release-production.yml");
+    const verifier = await source("scripts/release/verify-manifest.ts");
+
+    expect(preview).toContain("SOURCE_REF: ${{ github.ref_name }}");
+    expect(preview).toContain('git merge-base --is-ancestor "$TARGET_SHA" "refs/remotes/origin/$SOURCE_REF"');
+    expect(preview).toContain('--branch="$SOURCE_REF"');
+    expect(production).toContain("Require certified SHA to be merged into main");
+    expect(production).toContain('git merge-base --is-ancestor "$TARGET_SHA" refs/remotes/origin/main');
+    expect(production).toContain('--run-id="$PREVIEW_RUN_ID"');
+    expect(production).toContain('gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIEW_RUN_ID"');
+    expect(production).toContain('test "$RUN_PATH" = ".github/workflows/release-preview.yml"');
+    expect(production).toContain('test "$RUN_CONCLUSION" = "success"');
+    expect(production).toContain('process.stdout.write(m.gitBranch||"")');
+    expect(production).toContain('--branch="$SOURCE_BRANCH"');
+    expect(verifier).toContain('typeof manifest.gitBranch === "string" && manifest.gitBranch.trim().length > 0');
+    expect(verifier).toContain('!expectedRunId || manifest.githubRunId === expectedRunId');
+
+    const finalize = await workflow("release-finalize.yml");
+    expect(finalize).toContain('--run-id="$PRODUCTION_RUN_ID"');
+    expect(finalize).toContain('gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCTION_RUN_ID"');
+    expect(finalize).toContain('test "$RUN_PATH" = ".github/workflows/release-production.yml"');
+    expect(finalize).toContain('test "$RUN_CONCLUSION" = "success"');
+  });
+
   it("pins Preview runtime to the persistent validation database", async () => {
     const source = await workflow("release-preview.yml");
     expect(source).toContain("env run -e preview");
