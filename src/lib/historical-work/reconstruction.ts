@@ -81,7 +81,8 @@ function opaqueRef(kind: string, value: string) {
 
 export function sanitizeHistoricalModelRef(value: unknown): string | null {
   if (typeof value !== "string" || !value) return null;
-  if (/^(?:gpt-[a-z0-9][a-z0-9._-]*|o[1-9](?:-[a-z0-9][a-z0-9._-]*)?|chatgpt-[a-z0-9][a-z0-9._-]*|claude-[a-z0-9][a-z0-9._-]*|gemini-[a-z0-9][a-z0-9._-]*|gemma-[a-z0-9][a-z0-9._-]*|codex-[a-z0-9][a-z0-9._-]*|models\/[a-z0-9][a-z0-9._-]*)$/i.test(value)) {
+  const publicModel = /^(?:gpt-(?:[345](?:\.\d+)?|4o)(?:-(?:mini|nano|pro|codex|turbo|chat|instruct|latest|preview|search-preview|202[4-6]-\d{2}-\d{2}))*|o[1-4](?:-(?:mini|pro|preview|latest|202[4-6]-\d{2}-\d{2}))*|chatgpt-(?:4o|5)(?:-(?:mini|latest|202[4-6]-\d{2}-\d{2}))*|claude-(?:\d+(?:-\d+)?-(?:sonnet|opus|haiku)|(?:sonnet|opus|haiku)-\d+(?:-\d+)?)(?:-\d{8})?|gemini-\d+(?:\.\d+)?(?:-(?:pro|flash|flash-lite|flash-8b|nano|exp|experimental|preview|latest|thinking|\d{2}-\d{2}))*|gemma-\d+(?:-(?:1b|4b|9b|12b|27b|it))*|models\/gemini-\d+(?:\.\d+)?(?:-(?:pro|flash|flash-lite|flash-8b|nano|preview|latest|thinking|\d{2}-\d{2}))*)$/i;
+  if (publicModel.test(value)) {
     return value;
   }
   return `unknown_${createHash("sha256").update(value).digest("hex").slice(0, 16)}`;

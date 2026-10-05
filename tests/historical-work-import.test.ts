@@ -99,6 +99,16 @@ describe("historical work import", () => {
     expect(JSON.stringify(result)).not.toContain("/Users/private");
   });
 
+  it("preserves recognized public model IDs but hashes customer deployment aliases", () => {
+    const importWithModel = (modelRef: string) => importHistoricalWorkJsonl(JSON.stringify({ ...event, modelRef }), {
+      sourceRef: "source", projectRef: "project",
+    }).turns[0].modelRef;
+    expect(importWithModel("gpt-4.1-mini")).toBe("gpt-4.1-mini");
+    expect(importWithModel("claude-sonnet-4-5-20250929")).toBe("claude-sonnet-4-5-20250929");
+    expect(importWithModel("gpt-customer-acme")).toMatch(/^unknown_[a-f0-9]{16}$/);
+    expect(importWithModel("gpt-5-acme-customer")).toMatch(/^unknown_[a-f0-9]{16}$/);
+  });
+
   it("exports a metadata-only JSON report with cost coverage kept separate", () => {
     const reconstruction = reconstructHistoricalWork(importHistoricalWorkJsonl(JSON.stringify(event), { sourceRef: "fixture", projectRef: "project" }));
     const report = exportHistoricalWorkReport(reconstruction);
