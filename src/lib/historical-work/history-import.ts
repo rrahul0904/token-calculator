@@ -85,8 +85,9 @@ export function importHistoricalWorkJsonl(text: string, options: HistoryImportOp
 export function importCodexSessionJsonl(text: string, options: HistoryImportOptions): HistoricalWorkInput {
   const turns: HistoricalWorkInput["turns"] = [];
   let modelRef: string | null = null;
+  let turnId: string | null = null;
   let pendingCompaction = false;
-  let previousTotals: Record<string, number> | null = null;
+  let previousTotals: Record<string, number | null> | null = null;
   const seenTokenEvents = new Set<string>();
 
   for (const record of parseJsonLines(text)) {
@@ -94,6 +95,7 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
     const type = record.type;
     if (type === "turn_context") {
       modelRef = typeof payload.model === "string" ? payload.model : modelRef;
+      turnId = typeof payload.turn_id === "string" ? payload.turn_id : turnId;
       continue;
     }
     if (type === "event_msg" && ["compaction", "context_compacted", "context_compaction"].includes(String(payload.type))) {
@@ -109,29 +111,25 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
     const sourceUsage = isLastUsage ? lastUsage : totalUsage;
     const fields = ["input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens"];
     const totals = Object.fromEntries(fields.map((field) => [field, count(sourceUsage[field])])) as Record<string, number | null>;
-    if (fields.some((field) => totals[field] === null)) continue;
+    if (totals.input_tokens === null || totals.output_tokens === null) continue;
     const timestampValue = typeof record.timestamp === "string" ? record.timestamp : null;
     const fingerprint = JSON.stringify([timestampValue, info.model ?? modelRef, totals]);
     if (seenTokenEvents.has(fingerprint)) continue;
     seenTokenEvents.add(fingerprint);
 
-    let usage: Record<string, number>;
-    if (isLastUsage) {
-      usage = totals as Record<string, number>;
-    } else {
-      usage = Object.fromEntries(fields.map((field) => {
-        const current = totals[field] as number;
-        const previous = previousTotals?.[field] ?? 0;
-        return [field, current >= previous ? current - previous : current];
-      }));
-    }
+    const usage = Object.fromEntries(fields.map((field) => {
+      const current = totals[field];
+      if (current === null || isLastUsage) return [field, current];
+      const previous = previousTotals?.[field];
+      return [field, previous === null || previous === undefined ? current : current >= previous ? current - previous : current];
+    })) as Record<string, number | null>;
     const totalValues = Object.fromEntries(fields.map((field) => [field, count(totalUsage[field])])) as Record<string, number | null>;
-    if (fields.every((field) => totalValues[field] !== null)) previousTotals = totalValues as Record<string, number>;
-    else if (!isLastUsage) previousTotals = totals as Record<string, number>;
+    if (totalValues.input_tokens !== null && totalValues.output_tokens !== null) previousTotals = totalValues;
+    else if (!isLastUsage) previousTotals = totals;
     const timestamp = timestampValue && Number.isFinite(Date.parse(timestampValue))
       ? new Date(timestampValue).toISOString() : null;
     const safeModel = typeof info.model === "string" ? info.model : modelRef;
-    const metadataIdentity = JSON.stringify([timestamp, safeModel, usage, pendingCompaction]);
+    const metadataIdentity = JSON.stringify([timestamp, safeModel, turnId, usage, pendingCompaction]);
     const eventIdentity = createHash("sha256").update(metadataIdentity).digest("hex").slice(0, 24);
     turns.push({
       sourceRef: `codex-event-${eventIdentity}`,

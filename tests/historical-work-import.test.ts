@@ -46,6 +46,17 @@ describe("historical work import", () => {
     expect(JSON.stringify(result)).not.toContain("private assistant response");
   });
 
+  it("preserves Codex turns when optional cache and reasoning counters are absent", () => {
+    const fixture = JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-10-01T12:00:00.000Z",
+      payload: { type: "token_count", info: { last_token_usage: { input_tokens: 12, output_tokens: 3 } } },
+    });
+    const result = reconstructHistoricalWork(importCodexSessionJsonl(fixture, { sourceRef: "source", projectRef: "project" }));
+    expect(result.turns).toHaveLength(1);
+    expect(result.turns[0].usage).toEqual({ inputTokens: 12, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: 3 });
+  });
+
   it("imports Claude Code assistant usage and drops message content and unsafe model labels", () => {
     const fixture = JSON.stringify({
       type: "assistant",
