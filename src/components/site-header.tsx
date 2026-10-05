@@ -16,6 +16,7 @@ const nav = [
 export function SiteHeader() {
   const pathname = usePathname();
   const [theme, setTheme] = useState<"dark" | "light">("light");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("token-intelligence-theme");
@@ -34,6 +35,7 @@ export function SiteHeader() {
   }
 
   return (
+    <>
     <header className="site-header">
       <div className="shell site-header__inner">
         <Link href="/" className="brand" aria-label="Token Intelligence home">
@@ -47,6 +49,16 @@ export function SiteHeader() {
           })}
         </nav>
         <div className="site-header__actions">
+          <button
+            type="button"
+            className="public-nav-toggle"
+            aria-label={mobileOpen ? "Close public navigation" : "Open public navigation"}
+            aria-expanded={mobileOpen}
+            aria-controls="public-mobile-navigation"
+            onClick={() => setMobileOpen((open) => !open)}
+          >
+            {mobileOpen ? "Close" : "Menu"}
+          </button>
           <button type="button" className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
             {theme === "dark" ? "Light" : "Dark"}
           </button>
@@ -55,5 +67,22 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
+    {mobileOpen ? (
+      <nav id="public-mobile-navigation" className="public-mobile-nav" aria-label="Mobile primary navigation">
+        {nav.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={item.href === "/" ? (pathname === "/" ? "public-mobile-nav__active" : undefined) : (pathname === item.href || pathname.startsWith(item.href + "/") ? "public-mobile-nav__active" : undefined)}
+            onClick={() => setMobileOpen(false)}
+          >
+            {item.label}
+          </Link>
+        ))}
+        <Link href="/sign-in" onClick={() => setMobileOpen(false)}>Sign in</Link>
+        <Link href="/app/overview" onClick={() => setMobileOpen(false)}>Workspace</Link>
+      </nav>
+    ) : null}
+    </>
   );
 }
