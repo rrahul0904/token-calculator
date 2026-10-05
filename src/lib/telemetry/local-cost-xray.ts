@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { createHash, randomUUID } from "node:crypto";
 import {
   captureWireAttributionSafely,
   reconcileWireAttribution,
@@ -19,6 +20,9 @@ const redactionReceiptSchema = z.object({
 }).strict();
 
 const localRequestEventSchema = z.object({
+  schemaVersion: z.literal("1").default("1"),
+  eventId: z.string().min(1).max(180).default(() => randomUUID()),
+  occurredAt: z.coerce.date().default(() => new Date()),
   provider: z.string().min(1).max(80),
   request: z.record(z.string(), z.unknown()),
   response: z.record(z.string(), z.unknown()),
@@ -44,6 +48,9 @@ export interface RedactionReceipt {
 }
 
 export interface LocalCostXrayRecord {
+  schemaVersion: "1";
+  eventRef: string;
+  occurredAt: string;
   provider: z.infer<typeof providerSchema>;
   receipt: WireAttributionReceipt;
   redaction: RedactionReceipt;
@@ -69,6 +76,10 @@ function normalizeProvider(value: string): z.infer<typeof providerSchema> {
   if (["anthropic", "claude"].includes(provider)) return "anthropic";
   if (["google", "googleai", "gemini", "googlevertexai", "vertexai"].includes(provider)) return "google";
   throw new Error("Unsupported provider metadata adapter");
+}
+
+function opaqueEventRef(provider: z.infer<typeof providerSchema>, eventId: string): string {
+  return `event_${createHash("sha256").update(`${provider}:${eventId}`).digest("hex").slice(0, 32)}`;
 }
 
 function normalizeModelRef(value: unknown, provider: z.infer<typeof providerSchema>): string {
@@ -219,6 +230,9 @@ export function normalizeLocalRequestEvent(raw: unknown): Omit<LocalCostXrayReco
   const provider = normalizeProvider(input.provider);
   const receipt = makeReceipt(input, provider);
   return {
+    schemaVersion: "1",
+    eventRef: opaqueEventRef(provider, input.eventId),
+    occurredAt: input.occurredAt.toISOString(),
     provider,
     receipt,
     redaction: {
@@ -262,10 +276,15 @@ export function createMetadataOnlyReceiptStore(maxRecords = 500): MetadataOnlyRe
   const records: LocalCostXrayRecord[] = [];
   return {
     append(record) {
+      const eventRef = z.string().regex(/^event_[a-f0-9]{32}$/).parse(record.eventRef);
+      const occurredAt = z.string().datetime().parse(record.occurredAt);
       const receipt = wireAttributionReceiptSchema.parse(record.receipt);
       const redaction = redactionReceiptSchema.parse(record.redaction);
       if (records.length >= capacity) records.shift();
       records.push({
+        schemaVersion: z.literal("1").parse(record.schemaVersion),
+        eventRef,
+        occurredAt,
         provider: providerSchema.parse(record.provider),
         receipt,
         redaction,

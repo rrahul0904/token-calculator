@@ -88,6 +88,27 @@ describe("local cost-xray metadata collector", () => {
     expect(persisted).not.toContain("private tool text");
   });
 
+  it("emits a versioned event identity without retaining caller identifiers", () => {
+    const store = createMetadataOnlyReceiptStore();
+    const raw = {
+      schemaVersion: "1",
+      eventId: "private-user@example.com/local-path",
+      occurredAt: "2026-10-05T12:00:00.000Z",
+      provider: "openai",
+      request: { model: "gpt-test" },
+      response: { usage: { input_tokens: 2, output_tokens: 1 } },
+    };
+    const result = captureLocalRequestEventSafely(raw, store);
+
+    expect(result).toMatchObject({
+      schemaVersion: "1",
+      occurredAt: "2026-10-05T12:00:00.000Z",
+    });
+    expect(result?.eventRef).toMatch(/^event_[a-f0-9]{32}$/);
+    expect(JSON.stringify(store.list())).not.toContain(raw.eventId);
+    expect(captureLocalRequestEventSafely(raw, createMetadataOnlyReceiptStore())?.eventRef).toBe(result?.eventRef);
+  });
+
   it("discards content from storage and fails open for unsupported or malformed optional telemetry", () => {
     const store = createMetadataOnlyReceiptStore();
     const malformed = { provider: "unknown", request: {}, response: {} };
