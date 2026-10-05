@@ -10,9 +10,10 @@ describe("local cost-xray metadata collector", () => {
   it("normalizes OpenAI usage, cache, MCP overhead, and context occupancy without retaining content", () => {
     const raw = {
       provider: "Azure OpenAI",
-      request: { model: "gpt-test", messages: [{ role: "user", content: "private prompt" }], api_key: "never persist" },
+      request: { model: "gpt-test", system: "private system", input: "private input", messages: [{ role: "user", content: "private prompt" }], api_key: "never persist" },
       response: {
         model: "gpt-test",
+        output: "private output",
         usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 30 }, completion_tokens_details: { reasoning_tokens: 4 } },
         choices: [{ message: { content: "private answer" } }],
       },
@@ -28,7 +29,7 @@ describe("local cost-xray metadata collector", () => {
     expect(result?.analysis.context).toEqual({ occupiedTokens: 100, windowTokens: 1_000, occupancyRatio: 0.1 });
     expect(result?.analysis.cache).toMatchObject({ freshTokens: 62, readTokens: 30 });
     expect(result?.analysis.mcpOverhead).toMatchObject({ schemaTokens: 8, toolSchemas: 1, unusedTools: 1 });
-    expect(result?.redaction).toMatchObject({ redactedBeforePersistence: true, rawContentPersisted: false, credentialFieldsDiscarded: 1, contentFieldsDiscarded: 4, retention: "metadata_only" });
+    expect(result?.redaction).toMatchObject({ redactedBeforePersistence: true, rawContentPersisted: false, classification: "key_name_heuristic", credentialFieldsDiscarded: 1, contentFieldsDiscarded: 7, retention: "metadata_only" });
     expect(JSON.stringify(store.list())).not.toContain("private prompt");
     expect(JSON.stringify(store.list())).not.toContain("never persist");
     expect(JSON.stringify(store.list())).not.toContain("private answer");
@@ -44,6 +45,21 @@ describe("local cost-xray metadata collector", () => {
     expect(normalized.receipt.providerUsage).toEqual({ inputTokens: 17, outputTokens: 5, reasoningTokens: null });
     expect(analyzeCostXrayReceipt(normalized.receipt).cache).toMatchObject({ freshTokens: 10, readTokens: 4, writeTokens: 3 });
     expect(normalized.receipt.spans.some((span) => span.category === "unattributed_input")).toBe(true);
+  });
+
+  it("does not count explicit cache spans twice against provider cache totals", () => {
+    const normalized = normalizeLocalRequestEvent({
+      provider: "openai",
+      request: { model: "gpt-test" },
+      response: { usage: { input_tokens: 100, output_tokens: 5, input_tokens_details: { cached_tokens: 30 } } },
+      spans: [
+        { spanRef: "cached", category: "user_content", tokens: 30, cacheState: "read", confidence: "measured" },
+        { spanRef: "fresh", category: "system_prompt", tokens: 70, cacheState: "fresh", confidence: "estimated" },
+      ],
+    });
+
+    expect(analyzeCostXrayReceipt(normalized.receipt).reconciliation.valid).toBe(true);
+    expect(analyzeCostXrayReceipt(normalized.receipt).cache).toMatchObject({ freshTokens: 70, readTokens: 30, writeTokens: 0, unknownTokens: 0 });
   });
 
   it("normalizes Gemini usage metadata and reports absent context window as unknown", () => {

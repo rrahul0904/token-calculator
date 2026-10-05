@@ -12,6 +12,7 @@ const metadataSpanSchema = wireAttributionSpanSchema;
 const redactionReceiptSchema = z.object({
   redactedBeforePersistence: z.literal(true),
   rawContentPersisted: z.literal(false),
+  classification: z.literal("key_name_heuristic"),
   credentialFieldsDiscarded: z.number().int().nonnegative().max(10_000),
   contentFieldsDiscarded: z.number().int().nonnegative().max(10_000),
   retention: z.literal("metadata_only"),
@@ -36,6 +37,7 @@ export type LocalRequestEventInput = z.input<typeof localRequestEventSchema>;
 export interface RedactionReceipt {
   redactedBeforePersistence: true;
   rawContentPersisted: false;
+  classification: "key_name_heuristic";
   credentialFieldsDiscarded: number;
   contentFieldsDiscarded: number;
   retention: "metadata_only";
@@ -76,11 +78,11 @@ function normalizeModelRef(value: unknown, provider: z.infer<typeof providerSche
   return `${provider}:${value}`;
 }
 
-function classifyDiscardedFields(value: unknown): Omit<RedactionReceipt, "redactedBeforePersistence" | "rawContentPersisted" | "retention"> {
+function classifyDiscardedFields(value: unknown): Omit<RedactionReceipt, "redactedBeforePersistence" | "rawContentPersisted" | "classification" | "retention"> {
   const counts = { credentialFieldsDiscarded: 0, contentFieldsDiscarded: 0 };
   const seen = new Set<object>();
   const credentialKey = /authorization|api[_-]?key|secret|(?:^|[_-])(?:access|refresh|auth)?[_-]?token(?:$|[_-])|cookie|password|credential/i;
-  const contentKey = /prompt|content|text|messages?|tool[_-]?(?:input|output|result|schema)|transcript/i;
+  const contentKey = /prompt|content|text|messages?|tool[_-]?(?:input|output|result|schema)|transcript|(?:^|[_-])(?:system|input|output)(?:$|[_-])/i;
   const usageMetadataKey = /(?:^|[_-])tokens?(?:[_-]|$)|tokencount/i;
   let inspectedKeys = 0;
   const inspect = (input: unknown, depth: number): void => {
@@ -175,11 +177,16 @@ function makeReceipt(input: z.infer<typeof localRequestEventSchema>, provider: z
   if (inputSpans.every((span) => span.tokens !== null)) {
     const attributed = inputSpans.reduce((sum, span) => sum + (span.tokens ?? 0), 0);
     if (attributed <= usage.inputTokens) {
-      const freshTokens = usage.inputTokens - attributed - usage.cachedTokens - usage.cacheWriteTokens;
+      const attributedRead = inputSpans.filter((span) => span.cacheState === "read").reduce((sum, span) => sum + (span.tokens ?? 0), 0);
+      const attributedWrite = inputSpans.filter((span) => span.cacheState === "write").reduce((sum, span) => sum + (span.tokens ?? 0), 0);
+      const missingRead = usage.cachedTokens - attributedRead;
+      const missingWrite = usage.cacheWriteTokens - attributedWrite;
+      if (missingRead < 0 || missingWrite < 0) throw new Error("Cache spans exceed provider usage metadata");
+      const freshTokens = usage.inputTokens - attributed - missingRead - missingWrite;
       if (freshTokens < 0) throw new Error("Cache metadata exceeds unattributed input");
       if (freshTokens > 0) spans.push({ spanRef: "provider:unattributed-input", category: "unattributed_input", tokens: freshTokens, cacheState: "fresh", confidence: "unknown" });
-      if (usage.cachedTokens > 0) spans.push({ spanRef: "provider:cache-read", category: "unattributed_input", tokens: usage.cachedTokens, cacheState: "read", confidence: "measured" });
-      if (usage.cacheWriteTokens > 0) spans.push({ spanRef: "provider:cache-write", category: "unattributed_input", tokens: usage.cacheWriteTokens, cacheState: "write", confidence: "measured" });
+      if (missingRead > 0) spans.push({ spanRef: "provider:cache-read", category: "unattributed_input", tokens: missingRead, cacheState: "read", confidence: "measured" });
+      if (missingWrite > 0) spans.push({ spanRef: "provider:cache-write", category: "unattributed_input", tokens: missingWrite, cacheState: "write", confidence: "measured" });
     }
   }
 
@@ -217,6 +224,7 @@ export function normalizeLocalRequestEvent(raw: unknown): Omit<LocalCostXrayReco
     redaction: {
       redactedBeforePersistence: true,
       rawContentPersisted: false,
+      classification: "key_name_heuristic",
       ...classifyDiscardedFields({ request: input.request, response: input.response }),
       retention: "metadata_only",
     },
