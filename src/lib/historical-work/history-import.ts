@@ -87,6 +87,7 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
   let modelRef: string | null = null;
   let pendingCompaction = false;
   let previousTotals: Record<string, number> | null = null;
+  const seenTokenEvents = new Set<string>();
 
   for (const record of parseJsonLines(text)) {
     const payload = asRecord(record.payload);
@@ -109,6 +110,10 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
     const fields = ["input_tokens", "cached_input_tokens", "output_tokens", "reasoning_output_tokens"];
     const totals = Object.fromEntries(fields.map((field) => [field, count(sourceUsage[field])])) as Record<string, number | null>;
     if (fields.some((field) => totals[field] === null)) continue;
+    const timestampValue = typeof record.timestamp === "string" ? record.timestamp : null;
+    const fingerprint = JSON.stringify([timestampValue, info.model ?? modelRef, totals]);
+    if (seenTokenEvents.has(fingerprint)) continue;
+    seenTokenEvents.add(fingerprint);
 
     let usage: Record<string, number>;
     if (isLastUsage) {
@@ -119,11 +124,13 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
         const previous = previousTotals?.[field] ?? 0;
         return [field, current >= previous ? current - previous : current];
       }));
-      previousTotals = totals as Record<string, number>;
     }
-    const timestamp = typeof record.timestamp === "string" && Number.isFinite(Date.parse(record.timestamp))
-      ? new Date(record.timestamp).toISOString() : null;
-    const safeModel = modelRef ?? (typeof info.model === "string" ? info.model : null);
+    const totalValues = Object.fromEntries(fields.map((field) => [field, count(totalUsage[field])])) as Record<string, number | null>;
+    if (fields.every((field) => totalValues[field] !== null)) previousTotals = totalValues as Record<string, number>;
+    else if (!isLastUsage) previousTotals = totals as Record<string, number>;
+    const timestamp = timestampValue && Number.isFinite(Date.parse(timestampValue))
+      ? new Date(timestampValue).toISOString() : null;
+    const safeModel = typeof info.model === "string" ? info.model : modelRef;
     const metadataIdentity = JSON.stringify([timestamp, safeModel, usage, pendingCompaction]);
     const eventIdentity = createHash("sha256").update(metadataIdentity).digest("hex").slice(0, 24);
     turns.push({

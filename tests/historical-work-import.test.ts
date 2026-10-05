@@ -35,7 +35,7 @@ describe("historical work import", () => {
     ];
     const fixture = lines.map((line) => JSON.stringify(line)).join("\n");
     const first = importCodexSessionJsonl(fixture, { sourceRef: "codex-source", projectRef: "project" });
-    const replay = importCodexSessionJsonl(`${fixture}\n${JSON.stringify(lines[1])}`, { sourceRef: "codex-source", projectRef: "project" });
+    const replay = importCodexSessionJsonl(`${fixture}\n${JSON.stringify(lines[1])}\n${JSON.stringify(lines[3])}`, { sourceRef: "codex-source", projectRef: "project" });
     const result = reconstructHistoricalWork(first);
     expect(result.turns).toHaveLength(2);
     expect(result.turns.map((turn) => turn.usage)).toEqual([
