@@ -111,4 +111,17 @@ describe("historical work reconstruction", () => {
     expect(reviewed.tasks).toHaveLength(1);
     expect(reviewed.review.boundaries[1]).toMatchObject({ decision: "continue", evidence: "pause", overrodeEvidence: true });
   });
+
+  it("extends sitting end time through the last turn before and after review", () => {
+    const result = reconstructHistoricalWork(input([
+      turn("a", "2026-10-01T12:00:00.000Z"),
+      turn("b", "2026-10-01T12:05:00.000Z"),
+    ]));
+    expect(result.sittings[0].endedAt).toBe("2026-10-01T12:05:00.000Z");
+    const reviewed = applyHistoricalWorkReview(result, {
+      schemaVersion: "1",
+      boundaries: result.turns.map((entry, index) => ({ beforeTurnRef: entry.turnRef, decision: index === 0 ? "boundary" : "continue" })),
+    });
+    expect(reviewed.sittings[0].endedAt).toBe("2026-10-01T12:05:00.000Z");
+  });
 });

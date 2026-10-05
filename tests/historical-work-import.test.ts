@@ -16,8 +16,12 @@ const event = {
 describe("historical work import", () => {
   it("imports strict metadata JSONL with provenance and stable re-import identity", () => {
     const fixture = JSON.stringify(event);
-    const first = reconstructHistoricalWork(importHistoricalWorkJsonl(fixture, { sourceRef: "fixture", projectRef: "project" }));
-    const replay = reconstructHistoricalWork(importHistoricalWorkJsonl(`${fixture}\n${fixture}`, { sourceRef: "fixture", projectRef: "project" }));
+    const imported = importHistoricalWorkJsonl(fixture, { sourceRef: "/Users/private/history.jsonl", projectRef: "customer prompt" });
+    expect(JSON.stringify(imported)).not.toContain(event.eventId);
+    expect(JSON.stringify(imported)).not.toContain("/Users/private");
+    expect(JSON.stringify(imported)).not.toContain("customer prompt");
+    const first = reconstructHistoricalWork(imported);
+    const replay = reconstructHistoricalWork(importHistoricalWorkJsonl(`${fixture}\n${fixture}`, { sourceRef: "/Users/private/history.jsonl", projectRef: "customer prompt" }));
     expect(first).toEqual(replay);
     expect(first.turns[0].provenance?.adapter).toBe("token-intelligence-history-v1");
     expect(JSON.stringify(first)).not.toContain("fixture-event-1");
@@ -37,6 +41,7 @@ describe("historical work import", () => {
     const first = importCodexSessionJsonl(fixture, { sourceRef: "codex-source", projectRef: "project" });
     const replay = importCodexSessionJsonl(`${fixture}\n${JSON.stringify(lines[1])}\n${JSON.stringify(lines[3])}`, { sourceRef: "codex-source", projectRef: "project" });
     const result = reconstructHistoricalWork(first);
+    expect(JSON.stringify(first)).not.toContain("turn-1");
     expect(result.turns).toHaveLength(2);
     expect(result.turns.map((turn) => turn.usage)).toEqual([
       { inputTokens: 100, cacheReadTokens: 20, cacheWriteTokens: null, outputTokens: 10 },
@@ -57,6 +62,18 @@ describe("historical work import", () => {
     expect(result.turns[0].usage).toEqual({ inputTokens: 12, cacheReadTokens: null, cacheWriteTokens: null, outputTokens: 3 });
   });
 
+  it("keeps same-time, same-usage Codex events distinct when their event turn IDs differ", () => {
+    const usage = { input_tokens: 12, cached_input_tokens: 2, output_tokens: 3, reasoning_output_tokens: 0 };
+    const fixture = ["turn-a", "turn-b"].map((turn_id) => JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-10-01T12:00:00.000Z",
+      payload: { type: "token_count", turn_id, info: { last_token_usage: usage } },
+    })).join("\n");
+    const imported = importCodexSessionJsonl(fixture, { sourceRef: "source", projectRef: "project" });
+    expect(imported.turns).toHaveLength(2);
+    expect(imported.turns[0].sourceRef).not.toBe(imported.turns[1].sourceRef);
+  });
+
   it("imports Claude Code assistant usage and drops message content and unsafe model labels", () => {
     const fixture = JSON.stringify({
       type: "assistant",
@@ -68,7 +85,11 @@ describe("historical work import", () => {
         usage: { input_tokens: 40, cache_read_input_tokens: 12, cache_creation_input_tokens: 5, output_tokens: 9 },
       },
     });
-    const result = reconstructHistoricalWork(importClaudeCodeJsonl(fixture, { sourceRef: "claude-source", projectRef: "project" }));
+    const imported = importClaudeCodeJsonl(fixture, { sourceRef: "/Users/private/claude.jsonl", projectRef: "private customer prompt" });
+    expect(JSON.stringify(imported)).not.toContain("message-1");
+    expect(JSON.stringify(imported)).not.toContain("/Users/private");
+    expect(JSON.stringify(imported)).not.toContain("private customer prompt");
+    const result = reconstructHistoricalWork(imported);
     expect(result.turns[0]).toMatchObject({
       modelRef: expect.stringMatching(/^unknown_[a-f0-9]{16}$/),
       usage: { inputTokens: 40, cacheReadTokens: 12, cacheWriteTokens: 5, outputTokens: 9 },

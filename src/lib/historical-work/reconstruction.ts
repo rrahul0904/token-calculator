@@ -79,8 +79,8 @@ function opaqueRef(kind: string, value: string) {
   return `${kind}_${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
 }
 
-function safeModelRef(value: string | null): string | null {
-  if (!value) return null;
+export function sanitizeHistoricalModelRef(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
   if (/^(?:gpt-[a-z0-9][a-z0-9._-]*|o[1-9](?:-[a-z0-9][a-z0-9._-]*)?|chatgpt-[a-z0-9][a-z0-9._-]*|claude-[a-z0-9][a-z0-9._-]*|gemini-[a-z0-9][a-z0-9._-]*|gemma-[a-z0-9][a-z0-9._-]*|codex-[a-z0-9][a-z0-9._-]*|models\/[a-z0-9][a-z0-9._-]*)$/i.test(value)) {
     return value;
   }
@@ -111,7 +111,7 @@ export function reconstructHistoricalWork(input: unknown): HistoricalWorkReconst
   const turns = ordered.map((turn) => ({
     turnRef: opaqueRef("turn", `${historyRef}:${turn.sourceRef}`),
     occurredAt: turn.occurredAt,
-    modelRef: safeModelRef(turn.modelRef),
+    modelRef: sanitizeHistoricalModelRef(turn.modelRef),
     usage: turn.usage,
     reportedCostUsd: turn.reportedCostUsd,
     estimatedCostUsd: turn.estimatedCostUsd,
@@ -156,6 +156,7 @@ export function reconstructHistoricalWork(input: unknown): HistoricalWorkReconst
   for (let index = 0; index < tasks.length; index += 1) {
     const task = tasks[index];
     const taskStartedAt = occurredAtByTurnRef.get(task.turnRefs[0]) ?? null;
+    const taskEndedAt = occurredAtByTurnRef.get(task.turnRefs.at(-1) ?? "") ?? null;
     const time = taskStartedAt ? Date.parse(taskStartedAt) : null;
     if (time !== null && previousTaskTime !== null && time - previousTaskTime >= 6 * 60 * 60_000) {
       sittings.push({
@@ -169,9 +170,9 @@ export function reconstructHistoricalWork(input: unknown): HistoricalWorkReconst
     sittingTasks.push(task.taskRef);
     if (time !== null) {
       sittingStart ??= taskStartedAt;
-      sittingEnd = taskStartedAt;
       previousTaskTime = time;
     }
+    sittingEnd = taskEndedAt;
   }
   if (sittingTasks.length) sittings.push({
     sittingRef: opaqueRef("sitting", `${historyRef}:${sittingTasks.join(":")}`),

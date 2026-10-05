@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { createHash } from "node:crypto";
-import { historicalWorkInputSchema, type HistoricalWorkInput } from "./reconstruction";
+import { historicalWorkInputSchema, sanitizeHistoricalModelRef, type HistoricalWorkInput } from "./reconstruction";
 import type { HistoricalWorkReconstruction } from "./reconstruction";
 
 const eventSchema = z.object({
@@ -53,6 +53,21 @@ function count(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+function opaque(kind: string, value: string): string {
+  return `${kind}_${createHash("sha256").update(value).digest("hex").slice(0, 32)}`;
+}
+
+function safeOptions(options: HistoryImportOptions): HistoryImportOptions {
+  return {
+    sourceRef: opaque("source", options.sourceRef),
+    projectRef: opaque("project", options.projectRef),
+  };
+}
+
+function safeEventRef(adapter: string, eventId: string): string {
+  return opaque("event", `${adapter}:${eventId}`);
+}
+
 /** Imports the content-free `token-intelligence-history-v1` JSONL interchange format. */
 export function importHistoricalWorkJsonl(text: string, options: HistoryImportOptions): HistoricalWorkInput {
   const lines = text.split(/\r?\n/);
@@ -67,18 +82,19 @@ export function importHistoricalWorkJsonl(text: string, options: HistoryImportOp
       throw new Error(`Invalid history JSON on line ${index + 1}`);
     }
     const event = eventSchema.parse(value);
+    const eventRef = safeEventRef("token-intelligence-history-v1", event.eventId);
     turns.push({
-      sourceRef: event.eventId,
+      sourceRef: eventRef,
       occurredAt: event.occurredAt,
-      modelRef: event.modelRef,
+      modelRef: sanitizeHistoricalModelRef(event.modelRef),
       usage: event.usage,
       reportedCostUsd: event.reportedCostUsd,
       estimatedCostUsd: event.estimatedCostUsd,
       boundaryHint: event.boundaryHint,
-      provenance: { adapter: "token-intelligence-history-v1", sourceEventRef: event.eventId },
+      provenance: { adapter: "token-intelligence-history-v1", sourceEventRef: eventRef },
     });
   }
-  return historicalWorkInputSchema.parse({ schemaVersion: "1", ...options, turns });
+  return historicalWorkInputSchema.parse({ schemaVersion: "1", ...safeOptions(options), turns });
 }
 
 /** Imports usage events from Codex session JSONL without returning message or file content. */
@@ -113,7 +129,9 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
     const totals = Object.fromEntries(fields.map((field) => [field, count(sourceUsage[field])])) as Record<string, number | null>;
     if (totals.input_tokens === null || totals.output_tokens === null) continue;
     const timestampValue = typeof record.timestamp === "string" ? record.timestamp : null;
-    const fingerprint = JSON.stringify([timestampValue, info.model ?? modelRef, totals]);
+    const eventTurnId = typeof payload.turn_id === "string" ? payload.turn_id
+      : typeof info.turn_id === "string" ? info.turn_id : null;
+    const fingerprint = JSON.stringify([timestampValue, info.model ?? modelRef, eventTurnId, totals]);
     if (seenTokenEvents.has(fingerprint)) continue;
     seenTokenEvents.add(fingerprint);
 
@@ -128,8 +146,8 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
     else if (!isLastUsage) previousTotals = totals;
     const timestamp = timestampValue && Number.isFinite(Date.parse(timestampValue))
       ? new Date(timestampValue).toISOString() : null;
-    const safeModel = typeof info.model === "string" ? info.model : modelRef;
-    const metadataIdentity = JSON.stringify([timestamp, safeModel, turnId, usage, pendingCompaction]);
+    const safeModel = sanitizeHistoricalModelRef(typeof info.model === "string" ? info.model : modelRef);
+    const metadataIdentity = JSON.stringify([timestamp, safeModel, eventTurnId ?? turnId, usage, pendingCompaction]);
     const eventIdentity = createHash("sha256").update(metadataIdentity).digest("hex").slice(0, 24);
     turns.push({
       sourceRef: `codex-event-${eventIdentity}`,
@@ -149,7 +167,7 @@ export function importCodexSessionJsonl(text: string, options: HistoryImportOpti
     pendingCompaction = false;
   }
 
-  return historicalWorkInputSchema.parse({ schemaVersion: "1", ...options, turns });
+  return historicalWorkInputSchema.parse({ schemaVersion: "1", ...safeOptions(options), turns });
 }
 
 /** Imports assistant usage records from Claude Code project JSONL, dropping all conversation fields. */
@@ -168,10 +186,11 @@ export function importClaudeCodeJsonl(text: string, options: HistoryImportOption
     const eventId = typeof record.uuid === "string" ? record.uuid
       : typeof message.id === "string" ? message.id : `event-${timestamp ?? "unknown"}-${eventIndex + 1}`;
     eventIndex += 1;
+    const eventRef = safeEventRef("claude-code-project-jsonl-v1", eventId);
     turns.push({
-      sourceRef: `claude-${eventId}`,
+      sourceRef: eventRef,
       occurredAt: timestamp,
-      modelRef: typeof message.model === "string" ? message.model : null,
+      modelRef: sanitizeHistoricalModelRef(message.model),
       usage: {
         inputTokens,
         cacheReadTokens: count(usage.cache_read_input_tokens),
@@ -181,10 +200,10 @@ export function importClaudeCodeJsonl(text: string, options: HistoryImportOption
       reportedCostUsd: null,
       estimatedCostUsd: null,
       boundaryHint: "none",
-      provenance: { adapter: "claude-code-project-jsonl-v1", sourceEventRef: eventId },
+      provenance: { adapter: "claude-code-project-jsonl-v1", sourceEventRef: eventRef },
     });
   }
-  return historicalWorkInputSchema.parse({ schemaVersion: "1", ...options, turns });
+  return historicalWorkInputSchema.parse({ schemaVersion: "1", ...safeOptions(options), turns });
 }
 
 /** Exports a stable, metadata-only JSON report suitable for local review or file output. */
