@@ -10,6 +10,7 @@ import { evaluateOrganizationPolicy } from "@/lib/policy/evaluate-db";
 import { policyCheckSchema } from "@/lib/policy/schemas";
 import { ingestTelemetryEvent } from "@/lib/telemetry/ingest";
 import { mcpTelemetryEventSchema, parseMcpTelemetryEvent } from "@/lib/telemetry/schemas";
+import { evaluateHarnessOptimizations } from "@/lib/optimization/harness";
 
 export interface McpPrincipal {
   organizationId: string;
@@ -30,6 +31,21 @@ const economicsInput = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
   minimumContext: z.number().int().nonnegative().default(0),
+});
+
+const harnessAnalysisInput = z.object({
+  candidates: z.array(z.object({
+    id: z.string().min(1),
+    kind: z.enum(["output_reducer", "lazy_tool_catalog", "context_compaction", "repository_context"]),
+    label: z.string().optional(),
+    baselineTokens: z.number().nonnegative().nullable(),
+    deliveredTokens: z.number().nonnegative().nullable(),
+    sampleSize: z.number().int().nonnegative(),
+    evidenceType: z.enum(["measured_before_after", "historical_observation", "modeled_estimate", "unknown"]),
+    qualityGate: z.enum(["passed", "failed", "not_run"]),
+    evidenceSource: z.string().nullable().optional(),
+  })).min(1).max(50),
+  minimumSampleSize: z.number().int().min(1).max(100).default(5),
 });
 
 function economicRows(input: z.infer<typeof economicsInput>) {
@@ -59,6 +75,11 @@ export function createTokenIntelligenceMcpServer(principal: McpPrincipal) {
   server.registerTool("recommend_model", { description: "Return the lowest-cost compatible model for declared context/provider constraints. Economics only; no unmeasured quality claim.", inputSchema: economicsInput }, async (input) => { const results = economicRows(input); return text(results.length ? { recommendation: results[0], alternatives: results.slice(1, 4), basis: "lowest estimated cost among compatible catalog entries" } : { recommendation: null, reason: "No compatible model in the current catalog." }); });
 
   server.registerTool("check_context", { description: "Check a token workload against one model context window or all compatible catalog entries.", inputSchema: z.object({ inputTokens: z.number().int().nonnegative(), outputTokens: z.number().int().nonnegative().default(0), modelId: z.string().optional() }) }, async ({ inputTokens, outputTokens, modelId }) => text({ results: MODEL_CATALOG.filter((model) => !modelId || model.id === modelId).map((model) => ({ modelId: model.id, model: model.name, contextWindow: model.contextWindow, requestedTokens: inputTokens + outputTokens, utilizationPct: contextUsage(inputTokens, outputTokens, model.contextWindow), fits: inputTokens + outputTokens <= model.contextWindow })) }));
+
+  server.registerTool("analyze_harness", {
+    description: "Evaluate metadata-only coding-agent harness optimizations such as output reduction, lazy tool exposure, context compaction and repository-aware context. Savings are verified only with measured before/after evidence, enough samples and a passed quality gate; overlapping component savings are never summed.",
+    inputSchema: harnessAnalysisInput,
+  }, async ({ candidates, minimumSampleSize }) => text(evaluateHarnessOptimizations(candidates, { minimumSampleSize })));
 
   server.registerTool("check_budget", { description: "Evaluate configured budgets and policies for a projected operation. Gateway enforcement is authoritative; MCP checks are advisory unless the call itself is routed through the gateway.", inputSchema: policyCheckSchema }, async (input) => {
     if (principal.projectId && input.projectId && input.projectId !== principal.projectId) return text({ error: "PROJECT_SCOPE_VIOLATION" });
