@@ -10,6 +10,8 @@ on:
       - "tests/*density*.test.ts"
       - "tests/*cache*.test.ts"
       - "tests/*encoding*.test.ts"
+      - "tests/*routing*.test.ts"
+      - "tests/*optimizer*.test.ts"
       - "tests/reverse-engineering-agents.test.ts"
       - "tests/token-saving-portfolio.test.ts"
       - "docs/reverse-engineering/**"
@@ -48,3 +50,6 @@ jobs:
           tests/reverse-engineering-agents.test.ts
           tests/structured-encoding.test.ts
           tests/semantic-cache.test.ts
+          tests/context-compression.test.ts
+          tests/routing-economics.test.ts
+          tests/optimizer-plan.test.ts
