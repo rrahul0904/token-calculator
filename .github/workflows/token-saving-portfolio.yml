@@ -1,0 +1,50 @@
+name: Token-saving portfolio contracts
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/optimization/**"
+      - "tests/*optimization*.test.ts"
+      - "tests/*reduction*.test.ts"
+      - "tests/*context*.test.ts"
+      - "tests/*density*.test.ts"
+      - "tests/*cache*.test.ts"
+      - "tests/*encoding*.test.ts"
+      - "tests/reverse-engineering-agents.test.ts"
+      - "tests/token-saving-portfolio.test.ts"
+      - "docs/reverse-engineering/**"
+      - ".github/workflows/token-saving-portfolio.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: token-saving-portfolio-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies without mutating the lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Token-saving portfolio contract tests
+        run: >-
+          npx vitest run
+          tests/token-saving-portfolio.test.ts
+          tests/output-reduction.test.ts
+          tests/repository-context.test.ts
+          tests/response-density-policy.test.ts
+          tests/reverse-engineering-agents.test.ts
+          tests/structured-encoding.test.ts
+          tests/semantic-cache.test.ts
