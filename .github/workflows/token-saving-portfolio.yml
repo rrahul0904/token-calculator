@@ -12,6 +12,7 @@ on:
       - "tests/*encoding*.test.ts"
       - "tests/*routing*.test.ts"
       - "tests/*optimizer*.test.ts"
+      - "tests/*memory*.test.ts"
       - "tests/reverse-engineering-agents.test.ts"
       - "tests/token-saving-portfolio.test.ts"
       - "docs/reverse-engineering/**"
@@ -53,3 +54,4 @@ jobs:
           tests/context-compression.test.ts
           tests/routing-economics.test.ts
           tests/optimizer-plan.test.ts
+          tests/persistent-memory.test.ts
