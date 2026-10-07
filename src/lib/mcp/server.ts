@@ -11,6 +11,7 @@ import { policyCheckSchema } from "@/lib/policy/schemas";
 import { ingestTelemetryEvent } from "@/lib/telemetry/ingest";
 import { mcpTelemetryEventSchema, parseMcpTelemetryEvent } from "@/lib/telemetry/schemas";
 import { evaluateHarnessOptimizations } from "@/lib/optimization/harness";
+import { analyzeTokenSavingPortfolio, type TokenSavingAnalysisRequest } from "@/lib/optimization/portfolio-analysis";
 
 export interface McpPrincipal {
   organizationId: string;
@@ -23,6 +24,12 @@ export interface McpPrincipal {
 function text(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
+
+const evidenceTypeSchema = z.enum(["measured_before_after", "historical_observation", "modeled_estimate", "unknown"]);
+const qualityGateSchema = z.enum(["passed", "failed", "not_run"]);
+const nullableTokens = z.number().nonnegative().nullable();
+const optionalNullableTokens = z.number().nonnegative().nullable().optional();
+const optionalStrings = z.array(z.string().min(1)).max(100).optional();
 
 const economicsInput = z.object({
   inputTokens: z.number().int().nonnegative(),
@@ -41,10 +48,221 @@ const harnessAnalysisInput = z.object({
     baselineTokens: z.number().nonnegative().nullable(),
     deliveredTokens: z.number().nonnegative().nullable(),
     sampleSize: z.number().int().nonnegative(),
-    evidenceType: z.enum(["measured_before_after", "historical_observation", "modeled_estimate", "unknown"]),
-    qualityGate: z.enum(["passed", "failed", "not_run"]),
+    evidenceType: evidenceTypeSchema,
+    qualityGate: qualityGateSchema,
     evidenceSource: z.string().nullable().optional(),
   })).min(1).max(50),
+  minimumSampleSize: z.number().int().min(1).max(100).default(5),
+});
+
+const portfolioRequestSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("output_reduction"),
+    candidate: z.object({
+      id: z.string().min(1),
+      label: z.string().optional(),
+      reducerVersion: z.string().nullable().optional(),
+      measurementScope: z.enum(["payload_only", "full_session"]),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      sampleSize: z.number().int().nonnegative(),
+      baselineTokens: nullableTokens,
+      deliveredTokens: nullableTokens,
+      retryTokens: optionalNullableTokens,
+      reducerOverheadTokens: optionalNullableTokens,
+      requiredSignals: optionalStrings,
+      preservedSignals: optionalStrings,
+      fallbackReason: z.string().nullable().optional(),
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("repository_context"),
+    candidate: z.object({
+      id: z.string().min(1),
+      label: z.string().optional(),
+      strategyVersion: z.string().nullable().optional(),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      indexState: z.enum(["fresh", "stale", "unknown", "not_applicable"]),
+      sampleSize: z.number().int().nonnegative(),
+      baselineSessionTokens: nullableTokens,
+      candidateSessionTokens: nullableTokens,
+      fallbackReadTokens: optionalNullableTokens,
+      indexingSetupMs: optionalNullableTokens,
+      retrievalLatencyMs: optionalNullableTokens,
+      requiredEvidenceRefs: optionalStrings,
+      returnedEvidenceRefs: optionalStrings,
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("response_density"),
+    candidate: z.object({
+      id: z.string().min(1),
+      label: z.string().optional(),
+      policyVersion: z.string().nullable().optional(),
+      level: z.enum(["readable", "dense", "extreme"]),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      sampleSize: z.number().int().nonnegative(),
+      baselineOutputTokens: nullableTokens,
+      candidateOutputTokens: nullableTokens,
+      baselineSessionTokens: nullableTokens,
+      candidateSessionTokens: nullableTokens,
+      instructionOverheadTokens: optionalNullableTokens,
+      retryTokens: optionalNullableTokens,
+      requiredPreservationClasses: optionalStrings,
+      preservedClasses: optionalStrings,
+      persistenceVerified: z.boolean().optional(),
+      baselineClarificationTurns: optionalNullableTokens,
+      candidateClarificationTurns: optionalNullableTokens,
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("structured_encoding"),
+    candidate: z.object({
+      id: z.string().min(1),
+      format: z.string().min(1),
+      formatVersion: z.string().nullable().optional(),
+      measurementScope: z.enum(["payload_only", "full_session"]),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      fidelityGate: z.enum(["verified", "failed", "not_run"]),
+      sampleSize: z.number().int().nonnegative(),
+      baselinePayloadTokens: nullableTokens,
+      encodedPayloadTokens: nullableTokens,
+      baselineSessionTokens: optionalNullableTokens,
+      candidateSessionTokens: optionalNullableTokens,
+      formatInstructionTokens: optionalNullableTokens,
+      decodeRepairTokens: optionalNullableTokens,
+      retryTokens: optionalNullableTokens,
+      requiredFields: optionalStrings,
+      preservedFields: optionalStrings,
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("semantic_cache"),
+    candidate: z.object({
+      id: z.string().min(1),
+      cacheMode: z.enum(["exact", "semantic"]),
+      cacheVersion: z.string().nullable().optional(),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      freshness: z.enum(["fresh", "stale", "unknown"]),
+      isolationGate: z.enum(["verified", "failed", "not_run"]),
+      sampleSize: z.number().int().nonnegative(),
+      baselineSessionTokens: nullableTokens,
+      candidateSessionTokens: nullableTokens,
+      lookupOverheadTokens: optionalNullableTokens,
+      validationTokens: optionalNullableTokens,
+      falseHitRecoveryTokens: optionalNullableTokens,
+      providerFallbackTokens: optionalNullableTokens,
+      observedHits: z.number().int().nonnegative(),
+      observedMisses: z.number().int().nonnegative(),
+      observedFalseHits: z.number().int().nonnegative(),
+      maxFalseHitRate: z.number().min(0).max(1).optional(),
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("context_compression"),
+    candidate: z.object({
+      id: z.string().min(1),
+      compressorVersion: z.string().nullable().optional(),
+      measurementScope: z.enum(["payload_only", "full_session"]),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      cachePrefixGate: z.enum(["preserved", "changed", "not_applicable", "not_run"]),
+      sampleSize: z.number().int().nonnegative(),
+      baselineContextTokens: nullableTokens,
+      deliveredContextTokens: nullableTokens,
+      baselineSessionTokens: optionalNullableTokens,
+      candidateSessionTokens: optionalNullableTokens,
+      auxiliaryModelInputTokens: optionalNullableTokens,
+      auxiliaryModelOutputTokens: optionalNullableTokens,
+      recoveryTokens: optionalNullableTokens,
+      retryTokens: optionalNullableTokens,
+      compressionLatencyMs: optionalNullableTokens,
+      requiredEvidenceRefs: optionalStrings,
+      preservedEvidenceRefs: optionalStrings,
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("routing_economics"),
+    candidate: z.object({
+      id: z.string().min(1),
+      policyVersion: z.string().nullable().optional(),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      routeProvenanceGate: z.enum(["verified", "failed", "not_run"]),
+      sampleSize: z.number().int().nonnegative(),
+      baselineCostUsd: z.number().nonnegative().nullable(),
+      candidateCostUsd: z.number().nonnegative().nullable(),
+      routingOverheadCostUsd: z.number().nonnegative().nullable().optional(),
+      fallbackCostUsd: z.number().nonnegative().nullable().optional(),
+      baselineTokens: optionalNullableTokens,
+      candidateTokens: optionalNullableTokens,
+      fallbackTokens: optionalNullableTokens,
+      baselineRoute: z.string().nullable().optional(),
+      resolvedRoutes: optionalStrings,
+      requiredExactRoute: z.boolean().optional(),
+      silentSubstitutionObserved: z.boolean().optional(),
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("persistent_memory"),
+    candidate: z.object({
+      id: z.string().min(1),
+      memoryVersion: z.string().nullable().optional(),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      freshness: z.enum(["fresh", "stale", "unknown"]),
+      provenanceGate: z.enum(["verified", "failed", "not_run"]),
+      isolationGate: z.enum(["verified", "failed", "not_run"]),
+      sampleSize: z.number().int().nonnegative(),
+      baselineSessionTokens: nullableTokens,
+      candidateSessionTokens: nullableTokens,
+      memoryWriteTokens: optionalNullableTokens,
+      memoryIndexTokens: optionalNullableTokens,
+      memoryRetrievalTokens: optionalNullableTokens,
+      recoveryTokens: optionalNullableTokens,
+      requiredEvidenceRefs: optionalStrings,
+      retrievedEvidenceRefs: optionalStrings,
+      contradictoryMemoryCount: z.number().int().nonnegative().optional(),
+      staleMemoryCount: z.number().int().nonnegative().optional(),
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+  z.object({
+    kind: z.literal("optimizer_plan"),
+    candidate: z.object({
+      id: z.string().min(1),
+      components: z.array(z.object({
+        id: z.string().min(1),
+        familyKey: z.string().min(1),
+        claimClass: z.enum(["token_reduction_candidate", "mixed_token_and_cost_candidate", "cost_reduction_only"]),
+        individualClaimable: z.boolean(),
+        individualSavingsPct: z.number().nonnegative().nullable().optional(),
+      })).min(1).max(50),
+      evidenceType: evidenceTypeSchema,
+      qualityGate: qualityGateSchema,
+      sampleSize: z.number().int().nonnegative(),
+      baselineSessionTokens: nullableTokens,
+      candidateSessionTokens: nullableTokens,
+      baselineCostUsd: z.number().nonnegative().nullable().optional(),
+      candidateCostUsd: z.number().nonnegative().nullable().optional(),
+      evidenceSource: z.string().nullable().optional(),
+    }),
+  }),
+]);
+
+const portfolioAnalysisInput = z.object({
+  requests: z.array(portfolioRequestSchema).min(1).max(50),
   minimumSampleSize: z.number().int().min(1).max(100).default(5),
 });
 
@@ -68,7 +286,7 @@ function displayRunCost(run: { reconciledCostUsd: string | null; actualCostUsd: 
 }
 
 export function createTokenIntelligenceMcpServer(principal: McpPrincipal) {
-  const server = new McpServer({ name: "token-intelligence", version: "0.4.0" });
+  const server = new McpServer({ name: "token-intelligence", version: "0.5.0" });
 
   server.registerTool("estimate_cost", { description: "Estimate current model economics for a known token workload. This is cost/context analysis, not a quality guarantee.", inputSchema: economicsInput }, async (input) => text({ source: "current_pricing_catalog", results: economicRows(input) }));
   server.registerTool("compare_models", { description: "Rank compatible current models by estimated request cost while preserving pricing tier and tokenizer precision labels.", inputSchema: economicsInput }, async (input) => text({ results: economicRows(input), caveat: "Lower estimated cost does not establish equal model quality." }));
@@ -80,6 +298,11 @@ export function createTokenIntelligenceMcpServer(principal: McpPrincipal) {
     description: "Evaluate metadata-only coding-agent harness optimizations such as output reduction, lazy tool exposure, context compaction and repository-aware context. Savings are verified only with measured before/after evidence, enough samples and a passed quality gate; overlapping component savings are never summed.",
     inputSchema: harnessAnalysisInput,
   }, async ({ candidates, minimumSampleSize }) => text(evaluateHarnessOptimizations(candidates, { minimumSampleSize })));
+
+  server.registerTool("analyze_token_saving_portfolio", {
+    description: "Evaluate metadata-only token/cost optimization candidates across output reduction, repository context, response density, structured encoding, caching, context compression, memory, routing and combined plans. Token and cost claims remain separate; component savings are never added.",
+    inputSchema: portfolioAnalysisInput,
+  }, async ({ requests, minimumSampleSize }) => text(analyzeTokenSavingPortfolio(requests as TokenSavingAnalysisRequest[], { minimumSampleSize })));
 
   server.registerTool("check_budget", { description: "Evaluate configured budgets and policies for a projected operation. Gateway enforcement is authoritative; MCP checks are advisory unless the call itself is routed through the gateway.", inputSchema: policyCheckSchema }, async (input) => {
     if (principal.projectId && input.projectId && input.projectId !== principal.projectId) return text({ error: "PROJECT_SCOPE_VIOLATION" });
