@@ -19,6 +19,7 @@ on:
       - "tests/*evidence*.test.ts"
       - "tests/*recommendations*.test.ts"
       - "tests/*lifecycle*.test.ts"
+      - "tests/*adapter*.test.ts"
       - "tests/reverse-engineering-agents.test.ts"
       - "tests/mcp.test.ts"
       - "docs/reverse-engineering/**"
@@ -67,4 +68,5 @@ jobs:
           tests/paired-run-evidence.test.ts
           tests/experiment-recommendations.test.ts
           tests/portfolio-lifecycle.test.ts
+          tests/experiment-result-adapter.test.ts
           tests/mcp.test.ts
