@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { adaptPortfolioPairsToExperimentEvidence } from "@/lib/optimization/experiment-result-adapter";
+import {
+  adaptPortfolioPairsToExperimentEvidence,
+  type PortfolioExperimentPairInput,
+} from "@/lib/optimization/experiment-result-adapter";
 import type { StoredRunReceiptInput } from "@/lib/optimization/paired-run-evidence";
 
 function run(id: string, overrides: Partial<StoredRunReceiptInput> = {}): StoredRunReceiptInput {
@@ -22,7 +25,7 @@ function run(id: string, overrides: Partial<StoredRunReceiptInput> = {}): Stored
   };
 }
 
-function pair(index: number) {
+function pair(index: number): PortfolioExperimentPairInput {
   return {
     caseId: `case-${index}`,
     baselineRun: run(`baseline-${index}`),
@@ -57,7 +60,7 @@ describe("portfolio experiment result adapter", () => {
   });
 
   it("refuses verification when any run lacks authoritative measured economics", () => {
-    const pairs = [1, 2, 3, 4, 5].map(pair);
+    const pairs: PortfolioExperimentPairInput[] = [1, 2, 3, 4, 5].map(pair);
     pairs[4].candidateRun = run("candidate-5", {
       usageSource: "estimated",
       reconciledCostUsd: "0.10",
@@ -72,7 +75,7 @@ describe("portfolio experiment result adapter", () => {
   });
 
   it("refuses verification when stored outcome evidence is incomplete", () => {
-    const pairs = [1, 2, 3, 4, 5].map(pair);
+    const pairs: PortfolioExperimentPairInput[] = [1, 2, 3, 4, 5].map(pair);
     pairs[0].candidateOutcome = { score: null, taskCompleted: null, testsPassed: null };
 
     const result = adaptPortfolioPairsToExperimentEvidence({ pairs });
@@ -82,7 +85,7 @@ describe("portfolio experiment result adapter", () => {
   });
 
   it("refuses duplicate case/run identity and non-terminal evidence", () => {
-    const pairs = [1, 2, 3, 4, 5].map(pair);
+    const pairs: PortfolioExperimentPairInput[] = [1, 2, 3, 4, 5].map(pair);
     pairs[1].caseId = "case-1";
     pairs[1].baselineRun = run("baseline-1", { endedAt: null });
 
@@ -94,8 +97,8 @@ describe("portfolio experiment result adapter", () => {
   });
 
   it("lets the existing experiment gate reject quality regressions rather than inventing a portfolio gate", () => {
-    const pairs = [1, 2, 3, 4, 5].map(pair);
-    for (const item of pairs) item.candidateOutcome.score = "0.50";
+    const pairs: PortfolioExperimentPairInput[] = [1, 2, 3, 4, 5].map(pair);
+    for (const item of pairs) item.candidateOutcome = { ...item.candidateOutcome!, score: "0.50" };
 
     const result = adaptPortfolioPairsToExperimentEvidence({
       pairs,
