@@ -1,6 +1,15 @@
 export type RepositoryContextEvidenceType = "measured_before_after" | "historical_observation" | "modeled_estimate" | "unknown";
 export type RepositoryContextQualityGate = "passed" | "failed" | "not_run";
 export type RepositoryContextIndexState = "fresh" | "stale" | "unknown" | "not_applicable";
+export type RepositoryContextStrategyKind =
+  | "semantic"
+  | "lexical"
+  | "hybrid"
+  | "symbol_lsp"
+  | "ast_graph"
+  | "repository_graph"
+  | "precomputed_index"
+  | "other";
 
 export type RepositoryContextStatus =
   | "verified_savings"
@@ -17,6 +26,12 @@ export interface RepositoryContextCandidate {
   id: string;
   label?: string;
   strategyVersion?: string | null;
+  strategyKind?: RepositoryContextStrategyKind | null;
+  strategyId?: string | null;
+  retrievalEngine?: string | null;
+  indexSnapshotRef?: string | null;
+  retrievalBudgetTokens?: number | null;
+  retrievedContextTokens?: number | null;
   evidenceType: RepositoryContextEvidenceType;
   qualityGate: RepositoryContextQualityGate;
   indexState: RepositoryContextIndexState;
@@ -35,6 +50,13 @@ export interface RepositoryContextEvaluation {
   id: string;
   label: string;
   strategyVersion: string | null;
+  strategyKind: RepositoryContextStrategyKind | null;
+  strategyId: string | null;
+  retrievalEngine: string | null;
+  indexSnapshotRef: string | null;
+  retrievalBudgetTokens: number | null;
+  retrievedContextTokens: number | null;
+  retrievalBudgetExceeded: boolean | null;
   status: RepositoryContextStatus;
   claimable: boolean;
   evidenceType: RepositoryContextEvidenceType;
@@ -66,6 +88,10 @@ function nonNegative(value: number | null | undefined): number {
 
 function normalizedRefs(values: string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))].sort();
+}
+
+function normalizedText(value: string | null | undefined): string | null {
+  return value?.trim() || null;
 }
 
 function round(value: number, digits = 2): number {
@@ -100,7 +126,8 @@ function requirementFor(status: RepositoryContextStatus, missingRefs: string[], 
  * Evidence gate for semantic search, symbol/LSP retrieval, repository indexes,
  * code graphs and persistent code-context systems. Full-session token totals
  * include fallback file reads; stale indexes and required-evidence misses fail
- * closed even when the retrieved context is small.
+ * closed even when the retrieved context is small. Strategy/index provenance is
+ * recorded so heterogeneous donors can be compared through one owned contract.
  */
 export function evaluateRepositoryContext(
   candidate: RepositoryContextCandidate,
@@ -122,6 +149,11 @@ export function evaluateRepositoryContext(
   const returnedSet = new Set(returnedEvidenceRefs);
   const missingEvidenceRefs = requiredEvidenceRefs.filter((ref) => !returnedSet.has(ref));
   const sampleSize = Math.max(0, Math.trunc(candidate.sampleSize));
+  const retrievalBudgetTokens = nullableNonNegative(candidate.retrievalBudgetTokens);
+  const retrievedContextTokens = nullableNonNegative(candidate.retrievedContextTokens);
+  const retrievalBudgetExceeded = retrievalBudgetTokens !== null && retrievedContextTokens !== null
+    ? retrievedContextTokens > retrievalBudgetTokens
+    : null;
 
   let status: RepositoryContextStatus;
   if (candidate.indexState === "stale") status = "stale_index";
@@ -137,7 +169,14 @@ export function evaluateRepositoryContext(
   return {
     id: candidate.id,
     label: candidate.label?.trim() || candidate.id,
-    strategyVersion: candidate.strategyVersion?.trim() || null,
+    strategyVersion: normalizedText(candidate.strategyVersion),
+    strategyKind: candidate.strategyKind ?? null,
+    strategyId: normalizedText(candidate.strategyId),
+    retrievalEngine: normalizedText(candidate.retrievalEngine),
+    indexSnapshotRef: normalizedText(candidate.indexSnapshotRef),
+    retrievalBudgetTokens,
+    retrievedContextTokens,
+    retrievalBudgetExceeded,
     status,
     claimable: status === "verified_savings",
     evidenceType: candidate.evidenceType,
@@ -155,7 +194,7 @@ export function evaluateRepositoryContext(
     requiredEvidenceRefs,
     returnedEvidenceRefs,
     missingEvidenceRefs,
-    evidenceSource: candidate.evidenceSource?.trim() || null,
+    evidenceSource: normalizedText(candidate.evidenceSource),
     verificationRequired: requirementFor(status, missingEvidenceRefs, minimumSampleSize),
   };
 }
