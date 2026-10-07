@@ -13,6 +13,7 @@ on:
       - "tests/*routing*.test.ts"
       - "tests/*optimizer*.test.ts"
       - "tests/*memory*.test.ts"
+      - "tests/*source*.test.ts"
       - "tests/reverse-engineering-agents.test.ts"
       - "tests/token-saving-portfolio.test.ts"
       - "docs/reverse-engineering/**"
@@ -45,6 +46,7 @@ jobs:
         run: >-
           npx vitest run
           tests/token-saving-portfolio.test.ts
+          tests/source-evidence.test.ts
           tests/output-reduction.test.ts
           tests/repository-context.test.ts
           tests/response-density-policy.test.ts
