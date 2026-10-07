@@ -14,8 +14,8 @@ on:
       - "tests/*optimizer*.test.ts"
       - "tests/*memory*.test.ts"
       - "tests/*source*.test.ts"
+      - "tests/*portfolio*.test.ts"
       - "tests/reverse-engineering-agents.test.ts"
-      - "tests/token-saving-portfolio.test.ts"
       - "docs/reverse-engineering/**"
       - ".github/workflows/token-saving-portfolio.yml"
   workflow_dispatch:
@@ -57,3 +57,4 @@ jobs:
           tests/routing-economics.test.ts
           tests/optimizer-plan.test.ts
           tests/persistent-memory.test.ts
+          tests/portfolio-analysis.test.ts
