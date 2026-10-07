@@ -33,6 +33,28 @@ export interface PortfolioRunPair {
   qualityEquivalent: boolean | null;
 }
 
+export interface StoredRunReceiptInput {
+  id: string;
+  endedAt: Date | string | null;
+  reconciledCostUsd: string | null;
+  actualCostUsd: string | null;
+  usageSource: string;
+  agentVendor: string;
+  freshInputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  outputTokens: number;
+  retryCount: number;
+  fallbackCount: number;
+}
+
+export interface StoredOutcomeReceiptInput {
+  score?: string | number | null;
+  taskCompleted?: boolean | null;
+  testsPassed?: boolean | null;
+}
+
 export interface PairedRunEvidence {
   evidenceType: "measured_before_after" | "unknown";
   qualityGate: "passed" | "failed" | "not_run";
@@ -61,6 +83,90 @@ function economics(run: PortfolioLinkedRunReceipt) {
     run: run.economics,
     submitted: { costUsd: null, tokens: null, retries: 0, fallbacks: 0 },
   });
+}
+
+function finiteNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function storedRunToPortfolioReceipt(
+  run: StoredRunReceiptInput,
+  caseId: string,
+): PortfolioLinkedRunReceipt {
+  return {
+    runId: run.id,
+    caseId,
+    terminal: run.endedAt !== null,
+    economics: {
+      reconciledCostUsd: run.reconciledCostUsd,
+      actualCostUsd: run.actualCostUsd,
+      usageSource: run.usageSource,
+      agentVendor: run.agentVendor,
+      freshInputTokens: run.freshInputTokens,
+      cacheReadTokens: run.cacheReadTokens,
+      cacheWriteTokens: run.cacheWriteTokens,
+      reasoningTokens: run.reasoningTokens,
+      outputTokens: run.outputTokens,
+      retryCount: run.retryCount,
+      fallbackCount: run.fallbackCount,
+    },
+  };
+}
+
+/**
+ * Compare stored outcome receipts without reading prompt/output content. The
+ * result is null when there is no comparable stored quality signal. Numeric
+ * scores use the same default 0.02 non-inferiority margin as the evaluation
+ * engine, while task/test booleans cannot regress from true to false.
+ */
+export function compareStoredOutcomeQuality(args: {
+  baseline: StoredOutcomeReceiptInput | null | undefined;
+  candidate: StoredOutcomeReceiptInput | null | undefined;
+  qualityNonInferiorityMargin?: number;
+}): boolean | null {
+  if (!args.baseline || !args.candidate) return null;
+  const margin = Math.max(0, args.qualityNonInferiorityMargin ?? 0.02);
+  const checks: boolean[] = [];
+
+  const baselineScore = finiteNumber(args.baseline.score);
+  const candidateScore = finiteNumber(args.candidate.score);
+  if (baselineScore !== null && candidateScore !== null) {
+    checks.push(candidateScore >= baselineScore - margin);
+  }
+
+  if (args.baseline.taskCompleted !== null && args.baseline.taskCompleted !== undefined
+    && args.candidate.taskCompleted !== null && args.candidate.taskCompleted !== undefined) {
+    checks.push(!args.baseline.taskCompleted || args.candidate.taskCompleted);
+  }
+
+  if (args.baseline.testsPassed !== null && args.baseline.testsPassed !== undefined
+    && args.candidate.testsPassed !== null && args.candidate.testsPassed !== undefined) {
+    checks.push(!args.baseline.testsPassed || args.candidate.testsPassed);
+  }
+
+  return checks.length ? checks.every(Boolean) : null;
+}
+
+export function storedRunPair(args: {
+  caseId: string;
+  baselineRun: StoredRunReceiptInput;
+  candidateRun: StoredRunReceiptInput;
+  baselineOutcome?: StoredOutcomeReceiptInput | null;
+  candidateOutcome?: StoredOutcomeReceiptInput | null;
+  qualityNonInferiorityMargin?: number;
+}): PortfolioRunPair {
+  return {
+    caseId: args.caseId,
+    baseline: storedRunToPortfolioReceipt(args.baselineRun, args.caseId),
+    candidate: storedRunToPortfolioReceipt(args.candidateRun, args.caseId),
+    qualityEquivalent: compareStoredOutcomeQuality({
+      baseline: args.baselineOutcome,
+      candidate: args.candidateOutcome,
+      qualityNonInferiorityMargin: args.qualityNonInferiorityMargin,
+    }),
+  };
 }
 
 /**
