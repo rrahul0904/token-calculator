@@ -52,6 +52,7 @@ jobs:
           npx vitest run
           tests/token-saving-portfolio.test.ts
           tests/source-evidence.test.ts
+          tests/source-identification-backlog.test.ts
           tests/output-reduction.test.ts
           tests/repository-context.test.ts
           tests/response-density-policy.test.ts
