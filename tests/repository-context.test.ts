@@ -76,10 +76,61 @@ describe("repository context evidence", () => {
     expect(small.status).toBe("insufficient_samples");
   });
 
+  it("records heterogeneous repository strategy and index provenance", () => {
+    const result = evaluateRepositoryContext({
+      id: "hybrid-retrieval",
+      strategyKind: "hybrid",
+      strategyId: "owned-hybrid-v1",
+      strategyVersion: "1.2.0",
+      retrievalEngine: "bm25+embedding+reranker",
+      indexSnapshotRef: "repo:abc123:index:def456",
+      retrievalBudgetTokens: 4_000,
+      retrievedContextTokens: 3_500,
+      evidenceType: "measured_before_after",
+      qualityGate: "passed",
+      indexState: "fresh",
+      sampleSize: 10,
+      baselineSessionTokens: 20_000,
+      candidateSessionTokens: 10_000,
+    });
+
+    expect(result.strategyKind).toBe("hybrid");
+    expect(result.strategyId).toBe("owned-hybrid-v1");
+    expect(result.retrievalEngine).toBe("bm25+embedding+reranker");
+    expect(result.indexSnapshotRef).toBe("repo:abc123:index:def456");
+    expect(result.retrievalBudgetTokens).toBe(4_000);
+    expect(result.retrievedContextTokens).toBe(3_500);
+    expect(result.retrievalBudgetExceeded).toBe(false);
+  });
+
+  it("observes retrieval budget overruns without hiding full-session economics", () => {
+    const result = evaluateRepositoryContext({
+      id: "budget-overrun",
+      strategyKind: "symbol_lsp",
+      retrievalBudgetTokens: 2_000,
+      retrievedContextTokens: 2_500,
+      evidenceType: "measured_before_after",
+      qualityGate: "passed",
+      indexState: "fresh",
+      sampleSize: 10,
+      baselineSessionTokens: 20_000,
+      candidateSessionTokens: 12_000,
+    });
+
+    expect(result.retrievalBudgetExceeded).toBe(true);
+    expect(result.measuredSavingsPct).toBe(40);
+  });
+
   it("verifies only fresh, complete, quality-gated full-session evidence", () => {
     const result = evaluateRepositoryContext({
       id: "verified-repository-context",
       strategyVersion: "clean-room-v1",
+      strategyKind: "repository_graph",
+      strategyId: "ti-repository-context-v1",
+      retrievalEngine: "owned-graph-retriever",
+      indexSnapshotRef: "repo:snapshot-001",
+      retrievalBudgetTokens: 6_000,
+      retrievedContextTokens: 5_500,
       evidenceType: "measured_before_after",
       qualityGate: "passed",
       indexState: "fresh",
@@ -99,6 +150,7 @@ describe("repository context evidence", () => {
     expect(result.measuredSavingsPct).toBe(46.67);
     expect(result.status).toBe("verified_savings");
     expect(result.claimable).toBe(true);
+    expect(result.retrievalBudgetExceeded).toBe(false);
     expect(result.verificationRequired).toBeNull();
   });
 });
