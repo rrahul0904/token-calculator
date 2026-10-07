@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
 
+import type { LinkedRunEconomics } from "@/lib/evaluations/run-economics";
 import {
   optimizerPlanFromRunPairs,
   resolvePairedRunEvidence,
   routingEconomicsFromRunPairs,
+  type PortfolioLinkedRunReceipt,
   type PortfolioRunPair,
 } from "@/lib/optimization/paired-run-evidence";
 import { evaluateOptimizerPlan } from "@/lib/optimization/optimizer-plan";
 import { evaluateRoutingEconomics } from "@/lib/optimization/routing-economics";
 
-function run(runId: string, caseId: string, overrides: Record<string, unknown> = {}) {
+function run(
+  runId: string,
+  caseId: string,
+  overrides: Partial<LinkedRunEconomics> = {},
+): PortfolioLinkedRunReceipt {
   return {
     runId,
     caseId,
