@@ -97,7 +97,7 @@ Implemented: `src/lib/optimization/portfolio-analysis.ts`.
 
 This facade gives supervisor/benchmark agents one metadata-only interface over output reduction, repository context, response density, structured encoding, semantic caching, context compression, persistent memory, routing economics and optimizer plans. Results normalize claim class, claimability, savings metric and remaining verification requirement while preserving the strict cost-only classification for routing.
 
-The facade intentionally returns no aggregate savings percentage.
+The facade intentionally returns no aggregate savings percentage. `tests/portfolio-analysis.test.ts` verifies token-vs-cost claim separation, response-density session normalization and non-additive portfolio summaries.
 
 ## Clean-room behavior contracts
 
