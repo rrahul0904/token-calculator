@@ -8,6 +8,8 @@ export interface TokenSavingSourceEvidence {
   sourceClass: SourceEvidenceClass;
   confidence: SourceEvidenceConfidence;
   reviewedOn: string;
+  reviewedCommit?: string;
+  licenseBoundary?: string;
   notes?: string;
 }
 
@@ -72,6 +74,56 @@ export const TOKEN_SAVING_SOURCE_EVIDENCE: readonly TokenSavingSourceEvidence[] 
     sourceClass: "official_source",
     confidence: "verified",
     reviewedOn: "2026-10-06",
+  },
+  {
+    donorId: "serena",
+    canonicalProject: "oraios/serena",
+    repositoryUrl: "https://github.com/oraios/serena",
+    sourceClass: "official_source",
+    confidence: "verified",
+    reviewedOn: "2026-10-06",
+    reviewedCommit: "3b99f8b024dafd58c962ea6e74f37c8a730ef532",
+    licenseBoundary: "Serena application GPL-3.0-or-later; embedded SolidLSP component MIT. Clean-room behavior mapping only; do not copy GPL application implementation into Token Intelligence.",
+  },
+  {
+    donorId: "repowise",
+    canonicalProject: "repowise-dev/repowise",
+    repositoryUrl: "https://github.com/repowise-dev/repowise",
+    sourceClass: "official_source",
+    confidence: "verified",
+    reviewedOn: "2026-10-06",
+    reviewedCommit: "7f84ae07908de40595fc64b3fe3c910123367a1e",
+    licenseBoundary: "AGPL-3.0. Treat as a behavior/benchmark donor only unless separate licensing review authorizes code reuse.",
+  },
+  {
+    donorId: "cocoindex-code",
+    canonicalProject: "cocoindex-io/cocoindex-code",
+    repositoryUrl: "https://github.com/cocoindex-io/cocoindex-code",
+    sourceClass: "official_source",
+    confidence: "verified",
+    reviewedOn: "2026-10-06",
+    reviewedCommit: "b883be0b5d762c9e2d7d82afdedeade5df21d5be",
+    licenseBoundary: "Apache-2.0. Token Intelligence still uses clean-room contracts rather than importing donor architecture wholesale.",
+  },
+  {
+    donorId: "semble",
+    canonicalProject: "MinishLab/semble",
+    repositoryUrl: "https://github.com/MinishLab/semble",
+    sourceClass: "official_source",
+    confidence: "verified",
+    reviewedOn: "2026-10-06",
+    reviewedCommit: "44785838c41a026c3c022a0b894b69b32a1e0ac6",
+    licenseBoundary: "MIT. Source may inform implementation subject to attribution, but this portfolio continues to use independently designed Token Intelligence contracts.",
+  },
+  {
+    donorId: "jcodemunch-mcp",
+    canonicalProject: "jgravelle/jcodemunch-mcp",
+    repositoryUrl: "https://github.com/jgravelle/jcodemunch-mcp",
+    sourceClass: "official_source",
+    confidence: "verified",
+    reviewedOn: "2026-10-06",
+    reviewedCommit: "95b0cd09652ac14b2806c12c01af7262ae125313",
+    licenseBoundary: "Dual-use license: free only for non-commercial use; commercial/for-profit/internal revenue-supporting use requires a paid license. Do not copy implementation into Token Intelligence without explicit commercial-license review.",
   },
   {
     donorId: "mex",
