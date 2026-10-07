@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { LinkedRunEconomics } from "@/lib/evaluations/run-economics";
 import {
+  compareStoredOutcomeQuality,
   optimizerPlanFromRunPairs,
   resolvePairedRunEvidence,
   routingEconomicsFromRunPairs,
+  storedRunPair,
+  storedRunToPortfolioReceipt,
   type PortfolioLinkedRunReceipt,
   type PortfolioRunPair,
+  type StoredRunReceiptInput,
 } from "@/lib/optimization/paired-run-evidence";
 import { evaluateOptimizerPlan } from "@/lib/optimization/optimizer-plan";
 import { evaluateRoutingEconomics } from "@/lib/optimization/routing-economics";
@@ -34,6 +38,25 @@ function run(
       fallbackCount: 0,
       ...overrides,
     },
+  };
+}
+
+function storedRun(runId: string, overrides: Partial<StoredRunReceiptInput> = {}): StoredRunReceiptInput {
+  return {
+    id: runId,
+    endedAt: new Date("2026-10-06T00:00:00Z"),
+    reconciledCostUsd: "1.00",
+    actualCostUsd: "1.00",
+    usageSource: "provider_measured",
+    agentVendor: "openai",
+    freshInputTokens: 1_000,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    outputTokens: 500,
+    retryCount: 0,
+    fallbackCount: 0,
+    ...overrides,
   };
 }
 
@@ -111,6 +134,62 @@ describe("paired optimizer run evidence", () => {
 
     expect(evidence.qualityGate).toBe("failed");
     expect(evidence.blockers).toContain("quality_regression");
+  });
+
+  it("adapts stored run receipts without caller-supplied economics", () => {
+    const receipt = storedRunToPortfolioReceipt(storedRun("run-1", {
+      reconciledCostUsd: "0.75",
+      freshInputTokens: 700,
+      outputTokens: 200,
+      retryCount: 1,
+    }), "case-stored");
+
+    expect(receipt.runId).toBe("run-1");
+    expect(receipt.caseId).toBe("case-stored");
+    expect(receipt.terminal).toBe(true);
+    expect(receipt.economics.reconciledCostUsd).toBe("0.75");
+    expect(receipt.economics.freshInputTokens).toBe(700);
+    expect(receipt.economics.retryCount).toBe(1);
+  });
+
+  it("derives stored quality with the existing 0.02 non-inferiority margin and boolean non-regression", () => {
+    expect(compareStoredOutcomeQuality({
+      baseline: { score: "0.90", taskCompleted: true, testsPassed: true },
+      candidate: { score: "0.89", taskCompleted: true, testsPassed: true },
+    })).toBe(true);
+
+    expect(compareStoredOutcomeQuality({
+      baseline: { score: "0.90", taskCompleted: true, testsPassed: true },
+      candidate: { score: "0.87", taskCompleted: true, testsPassed: true },
+    })).toBe(false);
+
+    expect(compareStoredOutcomeQuality({
+      baseline: { score: "0.90", taskCompleted: true, testsPassed: true },
+      candidate: { score: "0.90", taskCompleted: true, testsPassed: false },
+    })).toBe(false);
+
+    expect(compareStoredOutcomeQuality({ baseline: {}, candidate: {} })).toBeNull();
+  });
+
+  it("builds a pair directly from stored run and outcome receipts", () => {
+    const storedPair = storedRunPair({
+      caseId: "case-stored",
+      baselineRun: storedRun("baseline-stored"),
+      candidateRun: storedRun("candidate-stored", {
+        reconciledCostUsd: "0.60",
+        actualCostUsd: "0.60",
+        freshInputTokens: 600,
+        outputTokens: 300,
+      }),
+      baselineOutcome: { score: "0.90", taskCompleted: true, testsPassed: true },
+      candidateOutcome: { score: "0.90", taskCompleted: true, testsPassed: true },
+    });
+
+    const evidence = resolvePairedRunEvidence([storedPair]);
+    expect(evidence.evidenceType).toBe("measured_before_after");
+    expect(evidence.qualityGate).toBe("passed");
+    expect(evidence.baselineTokens).toBe(1_500);
+    expect(evidence.candidateTokens).toBe(900);
   });
 
   it("builds a measured optimizer-plan candidate from five authoritative paired cases", () => {
