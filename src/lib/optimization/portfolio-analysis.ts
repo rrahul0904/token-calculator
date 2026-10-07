@@ -92,7 +92,7 @@ function normalize(
 
   const savingsPct = costOnly
     ? asNullableNumber(result.measuredCostSavingsPct)
-    : kind === "structured_encoding"
+    : kind === "structured_encoding" || kind === "response_density"
       ? asNullableNumber(result.measuredSessionSavingsPct)
       : kind === "optimizer_plan"
         ? asNullableNumber(result.measuredPlanSavingsPct)
