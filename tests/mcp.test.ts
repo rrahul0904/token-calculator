@@ -28,6 +28,7 @@ const REQUIRED_TOOLS = [
   "recommend_model",
   "check_context",
   "analyze_harness",
+  "analyze_token_saving_portfolio",
   "check_budget",
   "record_usage",
   "get_usage",
@@ -103,6 +104,58 @@ describe("MCP production contract", () => {
     expect(parsed.summary.verifiedComponents).toBe(1);
     expect(parsed.summary.bestVerifiedSavingsPct).toBe(60);
     expect(parsed.summary.additiveSavingsClaimed).toBe(false);
+    expect(parsed.privacy.promptContentRequired).toBe(false);
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
+  it("evaluates the unified token-saving portfolio without a database round trip or additive claim", async () => {
+    mocks.getDb.mockClear();
+    const result = await rpc("tools/call", {
+      name: "analyze_token_saving_portfolio",
+      arguments: {
+        requests: [
+          {
+            kind: "output_reduction",
+            candidate: {
+              id: "output-reducer",
+              measurementScope: "full_session",
+              evidenceType: "measured_before_after",
+              qualityGate: "passed",
+              sampleSize: 10,
+              baselineTokens: 20_000,
+              deliveredTokens: 10_000,
+              requiredSignals: ["error"],
+              preservedSignals: ["error"],
+            },
+          },
+          {
+            kind: "routing_economics",
+            candidate: {
+              id: "route-policy",
+              evidenceType: "measured_before_after",
+              qualityGate: "passed",
+              routeProvenanceGate: "verified",
+              sampleSize: 10,
+              baselineCostUsd: 10,
+              candidateCostUsd: 5,
+              baselineTokens: 10_000,
+              candidateTokens: 15_000,
+              resolvedRoutes: ["economy/model"],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.error).toBeUndefined();
+    const parsed = JSON.parse(result.payload.result?.content?.[0]?.text ?? "{}");
+    expect(parsed.summary.candidates).toBe(2);
+    expect(parsed.summary.claimable).toBe(2);
+    expect(parsed.summary.tokenReductionClaims).toBe(1);
+    expect(parsed.summary.costOnlyClaims).toBe(1);
+    expect(parsed.summary.additiveSavingsClaimed).toBe(false);
+    expect(parsed.summary.aggregateSavingsPct).toBeNull();
     expect(parsed.privacy.promptContentRequired).toBe(false);
     expect(mocks.getDb).not.toHaveBeenCalled();
   });
