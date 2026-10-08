@@ -19,7 +19,6 @@ interface CodexQuotaFetchOptions {
 interface InternalCodexCredentials {
   accessToken: string;
   accountId: string | null;
-  plan: string | null;
 }
 
 type CredentialParseResult =
@@ -34,17 +33,6 @@ function safeRecord(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim().length ? value.trim() : null;
-}
-
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const text = Buffer.from(parts[1], "base64url").toString("utf8");
-    return safeRecord(JSON.parse(text));
-  } catch {
-    return null;
-  }
 }
 
 function parseCredentials(raw: string): CredentialParseResult {
@@ -74,15 +62,12 @@ function parseCredentials(raw: string): CredentialParseResult {
     return { ok: false, state: "malformed", note: "Codex OAuth credentials do not contain an access token." };
   }
 
-  const idToken = stringValue(tokens.id_token);
-  const claims = idToken ? decodeJwtPayload(idToken) : null;
-  const authClaims = safeRecord(claims?.["https://api.openai.com/auth"]);
-  const accountId = stringValue(authClaims?.account_id)
-    ?? stringValue(authClaims?.chatgpt_account_id)
-    ?? stringValue(tokens.account_id);
-  const plan = stringValue(authClaims?.chatgpt_plan_type);
+  // Use the account identifier persisted by Codex itself. Do not decode or trust
+  // unverified ID-token claims for request routing or plan metadata. The provider
+  // quota response remains the authority for plan information.
+  const accountId = stringValue(tokens.account_id);
 
-  return { ok: true, credentials: { accessToken, accountId, plan } };
+  return { ok: true, credentials: { accessToken, accountId } };
 }
 
 function opaqueAccountRef(accountId: string | null): string | null {
@@ -218,7 +203,7 @@ export async function fetchCodexQuotaSnapshot(
     return failureSnapshot(credentialResult.state, credentialResult.note, now);
   }
 
-  const { accessToken, accountId, plan } = credentialResult.credentials;
+  const { accessToken, accountId } = credentialResult.credentials;
   const headers: Record<string, string> = {
     accept: "application/json",
     authorization: `Bearer ${accessToken}`,
@@ -254,7 +239,6 @@ export async function fetchCodexQuotaSnapshot(
 
   return normalizeCodexUsagePayload(payload, {
     now,
-    plan,
     accountRef: opaqueAccountRef(accountId),
   });
 }
