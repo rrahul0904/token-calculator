@@ -31,10 +31,10 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Lint quota and checkpoint slices
-        run: npx eslint src/lib/quota src/lib/collectors/checkpoints.ts scripts/ti.ts tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts --max-warnings=0
+        run: npx eslint src/lib/quota src/lib/collectors/checkpoints.ts scripts/ti.ts tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/provider-quota-antigravity.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts --max-warnings=0
       - name: Typecheck repository contracts
         run: npm run typecheck
       - name: Provider quota and checkpoint contract tests
-        run: npx vitest run tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts
+        run: npx vitest run tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/provider-quota-antigravity.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts
       - name: CLI help smoke
         run: npm run ti -- --help
