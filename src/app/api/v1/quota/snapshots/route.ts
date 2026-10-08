@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { providerQuotaSnapshots } from "@/db/quota-schema";
 import { authenticateApiKey, authenticateRequest } from "@/lib/auth/api-auth";
-import { hostedQuotaBatchSchema } from "@/lib/quota/hosted";
+import { hostedQuotaBatchSchema, hostedQuotaReceiptId } from "@/lib/quota/hosted";
 
 const MAX_BYTES = 128 * 1024;
 
@@ -36,7 +35,11 @@ export async function POST(request: Request) {
 
   const now = new Date();
   const rows = parsed.data.snapshots.map((snapshot) => ({
-    id: `quota_${randomUUID()}`,
+    id: hostedQuotaReceiptId({
+      organizationId: principal.organizationId,
+      projectId: principal.projectId,
+      snapshot,
+    }),
     organizationId: principal.organizationId,
     projectId: principal.projectId,
     provider: snapshot.provider,
@@ -49,14 +52,20 @@ export async function POST(request: Request) {
     receivedAt: now,
   }));
 
-  await getDb().insert(providerQuotaSnapshots).values(rows);
+  const inserted = await getDb()
+    .insert(providerQuotaSnapshots)
+    .values(rows)
+    .onConflictDoNothing({ target: providerQuotaSnapshots.id })
+    .returning({ id: providerQuotaSnapshots.id, provider: providerQuotaSnapshots.provider });
+
   return reply({
     data: {
-      accepted: rows.length,
-      providers: rows.map((row) => row.provider),
+      accepted: inserted.length,
+      duplicatesIgnored: rows.length - inserted.length,
+      providers: [...new Set(inserted.map((row) => row.provider))],
       receivedAt: now.toISOString(),
     },
-  }, 201);
+  }, inserted.length ? 201 : 200);
 }
 
 export async function GET(request: Request) {
