@@ -33,7 +33,7 @@ describe("live context transform", () => {
     ], null, 2);
 
     const result = transformLiveContextBlock({
-      id: "tool-json",
+      id: "sensitive-caller-block-id",
       zone: "live_zone",
       content: original,
     }, store);
@@ -44,6 +44,7 @@ describe("live context transform", () => {
     expect(result.estimatedTokensAfter).toBeLessThan(result.estimatedTokensBefore);
     expect(result.recoverable).toBe(true);
     expect(result.recoveryRef).not.toBeNull();
+    expect(result.recoveryRef).not.toContain("sensitive-caller-block-id");
     expect(store.get(result.recoveryRef!)).toBe(original);
   });
 
