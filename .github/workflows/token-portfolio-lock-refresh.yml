@@ -1,11 +1,13 @@
 name: Token portfolio lock refresh
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - codex/token-saving-portfolio-20261006
     paths:
       - .github/workflows/token-portfolio-lock-refresh.yml
+      - package.json
 
 permissions:
   contents: write
