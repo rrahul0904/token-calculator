@@ -1,4 +1,4 @@
-import { open, readdir, stat } from "node:fs/promises";
+import { open, readdir } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import type { ProviderQuotaSnapshot, ProviderQuotaWindow } from "@/lib/quota/types";
@@ -11,7 +11,6 @@ interface AntigravityQuotaFetchOptions {
   now?: Date;
   fetchImpl?: typeof fetch;
   homeDirectory?: string;
-  logPaths?: string[];
   port?: number;
 }
 
@@ -43,12 +42,14 @@ function normalizeReset(value: unknown): string | null {
 
 async function readTail(path: string): Promise<string | null> {
   try {
-    const info = await stat(path);
-    if (!info.isFile()) return null;
-    const start = Math.max(0, info.size - LOG_TAIL_BYTES);
-    const length = info.size - start;
+    // Open first and derive metadata from the same descriptor used for the read.
+    // This prevents path replacement between a stat check and file access.
     const handle = await open(path, "r");
     try {
+      const info = await handle.stat();
+      if (!info.isFile()) return null;
+      const start = Math.max(0, info.size - LOG_TAIL_BYTES);
+      const length = info.size - start;
       const buffer = Buffer.alloc(length);
       if (length) await handle.read(buffer, 0, length, start);
       return buffer.toString("utf8");
@@ -98,9 +99,14 @@ async function recentIdeLogs(homeDirectory: string): Promise<string[]> {
       for (const filename of ["Antigravity.log", "Antigravity IDE.log"]) {
         const path = join(extensionDir, filename);
         try {
-          const info = await stat(path);
-          if (info.isFile()) candidates.push({ path, modified: info.mtimeMs });
-        } catch { /* Candidate does not exist. */ }
+          const handle = await open(path, "r");
+          try {
+            const info = await handle.stat();
+            if (info.isFile()) candidates.push({ path, modified: info.mtimeMs });
+          } finally {
+            await handle.close();
+          }
+        } catch { /* Candidate does not exist or is unreadable. */ }
       }
     }
   }
@@ -112,8 +118,8 @@ export async function antigravityLogCandidates(homeDirectory = homedir()): Promi
   return [cli, ...(await recentIdeLogs(homeDirectory))];
 }
 
-export async function discoverAntigravityPort(options: Pick<AntigravityQuotaFetchOptions, "homeDirectory" | "logPaths"> = {}): Promise<number | null> {
-  const candidates = options.logPaths ?? await antigravityLogCandidates(options.homeDirectory ?? homedir());
+export async function discoverAntigravityPort(options: Pick<AntigravityQuotaFetchOptions, "homeDirectory"> = {}): Promise<number | null> {
+  const candidates = await antigravityLogCandidates(options.homeDirectory ?? homedir());
   for (const path of candidates) {
     const text = await readTail(path);
     if (!text) continue;
@@ -134,6 +140,7 @@ async function callLanguageServer(fetchImpl: typeof fetch, port: number, method:
     },
     body: "{}",
     cache: "no-store",
+    redirect: "error",
     signal: AbortSignal.timeout(4_000),
   });
   if (!response.ok) throw new Error(`Antigravity ${method} request failed with HTTP ${response.status}.`);
