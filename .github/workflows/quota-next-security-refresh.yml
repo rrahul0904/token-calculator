@@ -1,0 +1,45 @@
+name: Quota Next Security Refresh
+
+on:
+  push:
+    branches:
+      - codex/quota-monitor-20261007
+    paths:
+      - .github/workflows/quota-next-security-refresh.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-next:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: codex/quota-monitor-20261007
+          persist-credentials: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Refresh patched Next.js dependencies
+        run: |
+          npm install --save-exact next@16.4.0 --ignore-scripts
+          npm install --save-dev --save-exact eslint-config-next@16.4.0 --ignore-scripts
+      - name: Verify production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Verify TypeScript contracts
+        run: npm run typecheck
+      - name: Commit lockfile refresh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "No dependency changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(security): update Next.js to patched release"
+          git push origin HEAD:codex/quota-monitor-20261007
