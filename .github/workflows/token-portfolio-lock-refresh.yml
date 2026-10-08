@@ -29,8 +29,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      - name: Refresh only the vulnerable transitive packages in the lockfile
-        run: npm update sharp source-map-js --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Refresh bounded vulnerable dependencies in the lockfile
+        run: npm update sharp source-map-js next@16.4.0 eslint-config-next@16.4.0 --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Refuse package manifest changes
         run: |
           if ! git diff --quiet -- package.json; then
@@ -63,5 +63,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add package-lock.json
-          git commit -m 'fix: refresh vulnerable production transitive dependencies'
+          git commit -m 'fix: refresh vulnerable production dependencies'
           git push origin HEAD:codex/token-saving-portfolio-20261006
