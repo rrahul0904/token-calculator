@@ -1,17 +1,9 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
 import process from "node:process";
 import { fetchAllProviderQuotas, fetchProviderQuota, isSupportedLocalQuotaProvider, supportedLocalQuotaProviders } from "@/lib/quota/registry";
 import { toHostedQuotaSnapshot } from "@/lib/quota/hosted";
 
-interface CliConfig {
-  baseUrl?: string;
-  apiKey?: string;
-}
-
-const CONFIG_PATH = resolve(homedir(), ".config", "token-intelligence", "config.json");
+const DEFAULT_BASE_URL = "https://token-intelligence-eight.vercel.app";
 
 function argValue(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -22,25 +14,29 @@ function has(args: string[], name: string): boolean {
   return args.includes(name);
 }
 
-async function readConfig(): Promise<CliConfig> {
+function hostedBaseUrl(args: string[]): string {
+  const raw = argValue(args, "--base-url")
+    ?? process.env.TOKEN_INTELLIGENCE_BASE_URL
+    ?? DEFAULT_BASE_URL;
+  let parsed: URL;
   try {
-    return JSON.parse(await readFile(CONFIG_PATH, "utf8")) as CliConfig;
+    parsed = new URL(raw);
   } catch {
-    return {};
+    throw new Error("Quota sync --base-url must be an absolute HTTPS URL.");
   }
+  if (parsed.protocol !== "https:") {
+    throw new Error("Quota sync refuses non-HTTPS hosted destinations.");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error("Quota sync --base-url must not contain credentials, query parameters, or fragments.");
+  }
+  parsed.pathname = parsed.pathname.replace(/\/$/, "");
+  return parsed.toString().replace(/\/$/, "");
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const provider = args[0] ?? "all";
-  const config = await readConfig();
-  const baseUrl = (argValue(args, "--base-url")
-    ?? process.env.TOKEN_INTELLIGENCE_BASE_URL
-    ?? config.baseUrl
-    ?? "https://token-intelligence-eight.vercel.app").replace(/\/$/, "");
-  const apiKey = argValue(args, "--api-key")
-    ?? process.env.TOKEN_INTELLIGENCE_API_KEY
-    ?? config.apiKey;
   const dryRun = has(args, "--dry-run");
 
   if (provider !== "all" && !isSupportedLocalQuotaProvider(provider)) {
@@ -56,8 +52,15 @@ async function main() {
     process.stdout.write(`${JSON.stringify({ dryRun: true, snapshots }, null, 2)}\n`);
     return;
   }
+
+  // Hosted upload is intentionally more explicit than local monitoring. The
+  // destination and API credential must come from this invocation or its
+  // environment; quota-sync never reads a local config file and then uses that
+  // file content to choose an outbound HTTP destination or authorization value.
+  const baseUrl = hostedBaseUrl(args);
+  const apiKey = argValue(args, "--api-key") ?? process.env.TOKEN_INTELLIGENCE_API_KEY;
   if (!apiKey) {
-    throw new Error("TOKEN_INTELLIGENCE_API_KEY is required. Run `npm run ti -- login` or provide --api-key.");
+    throw new Error("TOKEN_INTELLIGENCE_API_KEY is required for hosted quota sync; provide --api-key or the environment variable.");
   }
 
   const response = await fetch(`${baseUrl}/api/v1/quota/snapshots`, {
@@ -69,6 +72,7 @@ async function main() {
     },
     body: JSON.stringify({ snapshots }),
     cache: "no-store",
+    redirect: "error",
     signal: AbortSignal.timeout(30_000),
   });
   const payload = await response.json().catch(() => null);
