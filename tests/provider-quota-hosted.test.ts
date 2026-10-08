@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hostedQuotaBatchSchema, hostedQuotaSnapshotSchema, toHostedQuotaSnapshot } from "@/lib/quota/hosted";
+import { hostedQuotaBatchSchema, hostedQuotaReceiptId, hostedQuotaSnapshotSchema, toHostedQuotaSnapshot } from "@/lib/quota/hosted";
 import type { ProviderQuotaSnapshot } from "@/lib/quota/types";
 
 function localSnapshot(): ProviderQuotaSnapshot {
@@ -44,6 +44,23 @@ describe("hosted quota receipt boundary", () => {
       "source",
       "windows",
     ]);
+  });
+
+  it("derives a stable tenant-scoped receipt id for retry idempotency", () => {
+    const hosted = toHostedQuotaSnapshot(localSnapshot());
+    const first = hostedQuotaReceiptId({ organizationId: "org_a", projectId: "project_a", snapshot: hosted });
+    const retry = hostedQuotaReceiptId({ organizationId: "org_a", projectId: "project_a", snapshot: hosted });
+    const otherTenant = hostedQuotaReceiptId({ organizationId: "org_b", projectId: "project_a", snapshot: hosted });
+    const changedSnapshot = hostedQuotaReceiptId({
+      organizationId: "org_a",
+      projectId: "project_a",
+      snapshot: { ...hosted, fetchedAt: "2026-10-08T03:01:00.000Z" },
+    });
+
+    expect(first).toBe(retry);
+    expect(first).toMatch(/^quota_[a-f0-9]{32}$/);
+    expect(otherTenant).not.toBe(first);
+    expect(changedSnapshot).not.toBe(first);
   });
 
   it("rejects unknown top-level fields such as token-like material", () => {
