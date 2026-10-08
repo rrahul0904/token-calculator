@@ -56,6 +56,22 @@ export async function resetCheckpoint(collector: CollectorName, filePath: string
   try { await chmod(path, 0o600); } catch { /* POSIX permissions may be unavailable. */ }
 }
 
+/**
+ * Incremental collectors are newline-delimited JSON by contract. Refuse the
+ * whole chunk when a complete line is malformed so callers cannot upload a
+ * partial interpretation and then advance the durable checkpoint past input
+ * they did not understand. The raw record is intentionally never echoed.
+ */
+export function assertCompleteJsonLines(lines: string[]) {
+  for (let index = 0; index < lines.length; index += 1) {
+    try {
+      JSON.parse(lines[index]);
+    } catch {
+      throw new Error(`Incremental source contains malformed JSON at complete record ${index + 1}; checkpoint was not advanced.`);
+    }
+  }
+}
+
 export async function readIncrementalJsonLines(collector: CollectorName, filePath: string, options: { reset?: boolean; checkpointPath?: string } = {}) {
   const absolute = resolve(filePath);
   const checkpointPath = options.checkpointPath ?? DEFAULT_CHECKPOINT_PATH;
@@ -63,8 +79,13 @@ export async function readIncrementalJsonLines(collector: CollectorName, filePat
   const identity = await fileIdentity(absolute);
   const info = await stat(absolute);
   const previous = await getCheckpoint(collector, absolute, checkpointPath);
-  const reusable = previous && previous.fileIdentity === identity && previous.byteOffset <= info.size;
-  const start = reusable ? previous.byteOffset : 0;
+  const sameIdentity = previous?.fileIdentity === identity;
+  const offsetFits = previous ? previous.byteOffset <= info.size : false;
+  const reusable = Boolean(previous && sameIdentity && offsetFits);
+  const resetReason = previous && !reusable
+    ? (!sameIdentity ? "identity_changed" : "truncated")
+    : null;
+  const start = reusable && previous ? previous.byteOffset : 0;
   const handle = await open(absolute, "r");
   try {
     const length = Math.max(0, info.size - start);
@@ -82,6 +103,7 @@ export async function readIncrementalJsonLines(collector: CollectorName, filePat
       startOffset: start,
       fileSize: info.size,
       checkpointPath,
+      resetReason,
     };
   } finally { await handle.close(); }
 }
