@@ -118,7 +118,7 @@ describe("Codex provider quota", () => {
   });
 
   it("resolves CODEX_HOME without inspecting provider contents", () => {
-    expect(codexAuthPath({ CODEX_HOME: "/tmp/custom-codex" }, "/ignored-home")).toBe("/tmp/custom-codex/auth.json");
-    expect(codexAuthPath({}, "/users/tester")).toBe("/users/tester/.codex/auth.json");
+    expect(codexAuthPath({ CODEX_HOME: "/tmp/custom-codex" } as NodeJS.ProcessEnv, "/ignored-home")).toBe("/tmp/custom-codex/auth.json");
+    expect(codexAuthPath({} as NodeJS.ProcessEnv, "/users/tester")).toBe("/users/tester/.codex/auth.json");
   });
 });
