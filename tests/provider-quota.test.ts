@@ -23,6 +23,10 @@ function oauthAuthJson() {
   });
 }
 
+function syntheticEnv(values: Record<string, string>): NodeJS.ProcessEnv {
+  return values as unknown as NodeJS.ProcessEnv;
+}
+
 describe("Codex provider quota", () => {
   it("normalizes provider windows while keeping raw credentials out of the snapshot", async () => {
     const now = new Date("2026-10-07T20:00:00.000Z");
@@ -118,7 +122,7 @@ describe("Codex provider quota", () => {
   });
 
   it("resolves CODEX_HOME without inspecting provider contents", () => {
-    expect(codexAuthPath({ CODEX_HOME: "/tmp/custom-codex" } as NodeJS.ProcessEnv, "/ignored-home")).toBe("/tmp/custom-codex/auth.json");
-    expect(codexAuthPath({} as NodeJS.ProcessEnv, "/users/tester")).toBe("/users/tester/.codex/auth.json");
+    expect(codexAuthPath(syntheticEnv({ CODEX_HOME: "/tmp/custom-codex" }), "/ignored-home")).toBe("/tmp/custom-codex/auth.json");
+    expect(codexAuthPath(syntheticEnv({}), "/users/tester")).toBe("/users/tester/.codex/auth.json");
   });
 });
