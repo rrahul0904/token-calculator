@@ -193,6 +193,63 @@ describe("Claude normalized cache evidence", () => {
     expect(report.materiality.crossedBy).toEqual(["cost"]);
   });
 
+  it("stays unknown when 5-minute and 1-hour writes occur in separate calls", () => {
+    const lines = [
+      JSON.stringify({ type: "user", uuid: "mix-u1", sessionId: "mixed-cache-session", timestamp: "2026-10-08T12:00:00.000Z" }),
+      JSON.stringify({
+        type: "assistant",
+        uuid: "mix-a1",
+        requestId: "mix-r1",
+        sessionId: "mixed-cache-session",
+        timestamp: "2026-10-08T12:00:02.000Z",
+        message: {
+          id: "mix-m1",
+          model: "claude-sonnet-4-6",
+          stop_reason: "end_turn",
+          content: [],
+          usage: {
+            input_tokens: 1_000,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 20_000,
+            cache_creation: { ephemeral_5m_input_tokens: 20_000, ephemeral_1h_input_tokens: 0 },
+            output_tokens: 50,
+          },
+        },
+      }),
+      JSON.stringify({ type: "user", uuid: "mix-u2", sessionId: "mixed-cache-session", timestamp: "2026-10-08T12:01:00.000Z" }),
+      JSON.stringify({
+        type: "assistant",
+        uuid: "mix-a2",
+        requestId: "mix-r2",
+        sessionId: "mixed-cache-session",
+        timestamp: "2026-10-08T12:01:02.000Z",
+        message: {
+          id: "mix-m2",
+          model: "claude-sonnet-4-6",
+          stop_reason: "end_turn",
+          content: [],
+          usage: {
+            input_tokens: 1_000,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 60_000,
+            cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 60_000 },
+            output_tokens: 50,
+          },
+        },
+      }),
+    ];
+
+    const parsed = claudeCollector.parseJsonLines(lines, { projectId: "mixed-cache-test", environment: "test" });
+    const report = deriveSessionCacheRiskFromCollector(parsed, {
+      now: "2026-10-08T12:02:00.000Z",
+      policy: { minContextTokens: null, minCostUsd: null },
+    });
+
+    expect(report.state).toBe("unknown");
+    expect(report.anchorEvidence).toBe("mixed_ttl_write");
+    expect(report.cacheExpiresAt).toBeNull();
+  });
+
   it("stays unknown for collectors that expose cache reads without a supported TTL class", () => {
     const parsed = {
       collector: "codex" as const,
