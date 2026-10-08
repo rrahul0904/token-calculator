@@ -1,6 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 import type { ProviderQuotaSnapshot } from "@/lib/quota/types";
+
+const RECEIPT_ID_DOMAIN = "token-intelligence-hosted-quota-receipt-v1";
 
 export const hostedQuotaWindowSchema = z.object({
   label: z.string().trim().min(1).max(120),
@@ -74,5 +76,5 @@ export function hostedQuotaReceiptId(options: {
     options.snapshot.plan ?? "",
     options.snapshot.windows,
   ]);
-  return `quota_${createHash("sha256").update(canonical).digest("hex").slice(0, 32)}`;
+  return `quota_${createHmac("sha256", RECEIPT_ID_DOMAIN).update(canonical).digest("hex").slice(0, 32)}`;
 }
