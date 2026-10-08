@@ -1,8 +1,5 @@
-import { createHmac } from "node:crypto";
 import { z } from "zod";
 import type { ProviderQuotaSnapshot } from "@/lib/quota/types";
-
-const RECEIPT_ID_DOMAIN = "token-intelligence-hosted-quota-receipt-v1";
 
 export const hostedQuotaWindowSchema = z.object({
   label: z.string().trim().min(1).max(120),
@@ -53,28 +50,4 @@ export function toHostedQuotaSnapshot(snapshot: ProviderQuotaSnapshot): HostedQu
       resetAt: window.resetAt,
     })),
   });
-}
-
-/**
- * Stable receipt identity for hosted retries. Tenant identity is supplied by
- * authenticated server context, never by the upload payload. The snapshot has
- * already passed the strict hosted allow-list before it reaches this function.
- */
-export function hostedQuotaReceiptId(options: {
-  organizationId: string;
-  projectId: string | null;
-  snapshot: HostedQuotaSnapshot;
-}): string {
-  const canonical = JSON.stringify([
-    options.organizationId,
-    options.projectId ?? "",
-    options.snapshot.provider,
-    options.snapshot.authState,
-    options.snapshot.source,
-    options.snapshot.fetchedAt,
-    options.snapshot.accountRef ?? "",
-    options.snapshot.plan ?? "",
-    options.snapshot.windows,
-  ]);
-  return `quota_${createHmac("sha256", RECEIPT_ID_DOMAIN).update(canonical).digest("hex").slice(0, 32)}`;
 }
