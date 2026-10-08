@@ -1,6 +1,6 @@
 # OpenTokenMonitor → Token Intelligence donor dossier
 
-Status: donor evidence captured; Phase B/C implementation and verification in progress  
+Status: Phase B/C implemented and exact-head verified; Phase D incremental ingestion scoped  
 Tracking: #62  
 Implementation PR: #63  
 Intake: https://www.reddit.com/r/coolgithubprojects/comments/1x00nor/opentoken_monitor_see_your_claude_code_codex_and/  
@@ -150,7 +150,9 @@ Already present on the #63 branch before this donor extension:
 - `ti quota codex` CLI integration;
 - dedicated quota-monitor CI workflow.
 
-Therefore OpenTokenMonitor should **extend #62/#63**, not create another reverse-engineered product or parallel provider-quota subsystem.
+The later Phase D audit also found an existing local usage plane in `src/lib/optimization/local-usage-scan.ts` with recursive Codex/Claude history discovery, session/event deduplication, model/project/run rankings, daily/weekly/monthly rollups, privacy receipts, and offline CLI coverage. The scanner currently rereads discovered files rather than maintaining a durable append cursor.
+
+Therefore OpenTokenMonitor should **extend #62/#63 and the existing local collector plane**, not create another reverse-engineered product or parallel scanner/quota subsystem.
 
 ## 8. Product thesis and target boundary
 
@@ -168,7 +170,7 @@ Current clean-room target boundary:
 - quota-derived forecasts are advisory and evidence-qualified;
 - no quota percentage is converted into invented token or dollar savings;
 - no provider credential is uploaded or persisted by hosted Token Intelligence;
-- local-log ingestion, if added, uses explicit stable IDs/cursors and privacy filtering.
+- local-log ingestion reuses the existing collector plane and adds only missing stable checkpoint/restart semantics.
 
 ## 9. Behavior contracts and acceptance tests
 
@@ -202,13 +204,14 @@ Current clean-room target boundary:
 - a restart/re-scan cannot double-count a record;
 - cursor advancement and durable write are atomic from the consumer's perspective;
 - parser failure does not silently skip unknown input;
-- file rotation/truncation is detected and recovered explicitly.
+- file rotation/truncation is detected and recovered explicitly;
+- the implementation extends the existing collector plane rather than introducing a second source of truth.
 
 ## 10. Implementation slices
 
 ### Phase A — provider adapter foundation
 
-Status: implemented on #63 before this donor extension; verification remains evidence-gated.
+Status: implemented on #63 and previously focused-verified.
 
 - normalized quota snapshot/window/auth states;
 - Codex local read-only adapter;
@@ -217,7 +220,7 @@ Status: implemented on #63 before this donor extension; verification remains evi
 
 ### Phase B — freshness and forecast primitives
 
-Status: implementation added to #63 on 2026-10-07.
+Status: implemented and exact-head verified on 2026-10-07.
 
 - quota freshness classification;
 - last-known-good resolution with explicit degraded state;
@@ -228,7 +231,7 @@ Status: implementation added to #63 on 2026-10-07.
 
 ### Phase C — alert decision contract
 
-Status: implementation added to #63 on 2026-10-07.
+Status: implemented and exact-head verified on 2026-10-07.
 
 - low-remaining threshold decision;
 - forecast-before-reset decision;
@@ -240,23 +243,33 @@ Status: implementation added to #63 on 2026-10-07.
 
 This phase currently defines the pure decision contract. Durable storage/native notifications are later integration work and must not be claimed yet.
 
-### Phase D — local project/session usage ingestion
+### Phase D — restart-safe incremental local ingestion
 
-Status: not implemented from this donor yet.
+Status: internal audit complete; implementation not yet added from this donor.
 
-Before implementation, audit existing Token Intelligence local-session collectors to avoid a second ingestion plane. Reuse existing run/turn/tool receipts where they already provide stable attribution. Add only missing checkpoint/dedup contracts.
+The existing local scan/collector plane already owns discovery, normalization, attribution, dedupe within a scan, privacy receipts, and rollups. The missing bounded slice is durable checkpointing and restart behavior: per-source cursor, append resume, truncation/rotation detection, durable-write-before-cursor advancement, and restart-stable dedupe.
 
 ## 11. Independent verification
 
-Required evidence before Phase B/C is complete:
+Exact-head verification for Phase B/C:
 
-1. exact-head lint for `src/lib/quota` plus quota tests;
-2. repository TypeScript typecheck;
-3. deterministic provider quota + derived-state Vitest suite;
-4. CLI help smoke test;
-5. independent review of stale/reset edge cases;
-6. exact-head GitHub Actions result attached to #63;
-7. no new credential persistence/network behavior introduced by the pure derived-state module.
+Head: `6db6ae47da0b3c98bb5258058235b54d297b054e`
+
+Passed:
+
+1. Provider Quota Monitor run `37717641703` — focused ESLint;
+2. repository TypeScript typecheck in the same run;
+3. provider quota + derived-state Vitest suites in the same run;
+4. CLI help smoke in the same run;
+5. Token-saving portfolio contracts run `37717641764`;
+6. Security CodeQL Actions workflow run `37717641903`;
+7. full-history secret scan in repository CI run `37717641696`.
+
+Open gates:
+
+- repository CI run `37717641696` stops at the inherited production dependency vulnerability audit before remaining release checks;
+- GitHub Advanced Security aggregate CodeQL reports two open alerts in PR-changed code (one high, one medium); annotation details were not available through the connected repository API, so these are not waived;
+- bounded live-provider certification and independent privacy review remain pending.
 
 Synthetic tests verify contracts, not live provider stability.
 
@@ -275,19 +288,21 @@ Before that later phase can ship:
 
 ## 13. Tracker state / non-claims
 
-Evidence-backed state after this donor intake:
+Evidence-backed state after this donor intake and exact-head verification:
 
 - donor identified: **yes**;
 - source/evidence collected: **yes**;
 - workflow/capability/failure reconstruction: **yes**;
 - feedback/competitive/internal audit: **yes**;
 - behavior contracts: **yes**;
-- Phase B/C pure implementation: **added, exact-head CI pending**;
+- Phase B freshness/forecast implementation: **implemented + exact-head verified**;
+- Phase C alert-decision implementation: **implemented + exact-head verified**;
+- Phase D existing collector audit: **complete**;
+- Phase D restart-safe checkpointing: **scoped, not implemented yet**;
 - durable alert persistence/native notifications: **not yet implemented**;
-- local project/session scanner extension: **not yet implemented from this donor**;
 - hosted UI certification: **not applicable yet**;
-- deployment/production readiness: **not claimed**;
+- deployment/production readiness: **blocked / not claimed**;
 - parity with OpenTokenMonitor: **not claimed**;
 - token/cost savings caused by monitoring: **not claimed**.
 
-The project tracker must advance only after exact-head verification evidence, not because files exist on the branch.
+The project tracker advances only on exact-head evidence, not because files exist on a branch.
