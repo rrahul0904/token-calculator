@@ -2,23 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { codexAuthPath, fetchCodexQuotaSnapshot, normalizeCodexUsagePayload } from "@/lib/quota/codex";
 import { formatProviderQuotaSnapshot } from "@/lib/quota/types";
 
-function jwt(payload: Record<string, unknown>) {
-  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  return `header.${encoded}.signature`;
-}
-
 function oauthAuthJson() {
   return JSON.stringify({
     tokens: {
       access_token: "synthetic-access-token-value",
-      account_id: "raw-account-id-fallback",
-      id_token: jwt({
-        "https://api.openai.com/auth": {
-          account_id: "raw-account-id-primary",
-          chatgpt_plan_type: "plus",
-        },
-        email: "private@example.test",
-      }),
+      account_id: "raw-account-id-persisted",
+      // This value is intentionally untrusted. The adapter must not decode it
+      // for request routing or plan metadata.
+      id_token: "header.untrusted-payload.signature",
     },
   });
 }
@@ -33,7 +24,7 @@ describe("Codex provider quota", () => {
     const fakeFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe("Bearer synthetic-access-token-value");
-      expect(headers.get("ChatGPT-Account-Id")).toBe("raw-account-id-primary");
+      expect(headers.get("ChatGPT-Account-Id")).toBe("raw-account-id-persisted");
       return new Response(JSON.stringify({
         plan_type: "plus",
         rate_limit: {
@@ -67,10 +58,38 @@ describe("Codex provider quota", () => {
 
     const serialized = JSON.stringify(snapshot);
     expect(serialized).not.toContain("synthetic-access-token-value");
-    expect(serialized).not.toContain("raw-account-id-primary");
-    expect(serialized).not.toContain("raw-account-id-fallback");
-    expect(serialized).not.toContain("private@example.test");
+    expect(serialized).not.toContain("raw-account-id-persisted");
+    expect(serialized).not.toContain("untrusted-payload");
     expect(formatProviderQuotaSnapshot(snapshot)).not.toContain("synthetic-access-token-value");
+  });
+
+  it("does not use ID-token claims as a fallback account identity", async () => {
+    const fakeFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.has("ChatGPT-Account-Id")).toBe(false);
+      return new Response(JSON.stringify({
+        plan_type: "plus",
+        rate_limit: {
+          primary_window: { used_percent: 50 },
+          secondary_window: { used_percent: 50 },
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+
+    const snapshot = await fetchCodexQuotaSnapshot({
+      authJson: JSON.stringify({
+        tokens: {
+          access_token: "synthetic-access-token-value",
+          id_token: "header.claims-must-not-be-decoded.signature",
+        },
+      }),
+      now: new Date("2026-10-07T20:00:00.000Z"),
+      fetchImpl: fakeFetch,
+    });
+
+    expect(snapshot.authState).toBe("active");
+    expect(snapshot.accountRef).toBeNull();
+    expect(JSON.stringify(snapshot)).not.toContain("claims-must-not-be-decoded");
   });
 
   it("refuses API-key-only auth because it has no ChatGPT subscription window", async () => {
