@@ -110,6 +110,7 @@ export function deriveQuotaWindowState(options: {
   };
 
   if (!currentWindow || currentWindow.remainingPercent === null || freshness !== "fresh") return base;
+  const currentRemainingPercent = currentWindow.remainingPercent;
 
   const currentAt = timestamp(options.current.fetchedAt);
   if (currentAt === null) return base;
@@ -130,24 +131,24 @@ export function deriveQuotaWindowState(options: {
 
   const nearest = candidates[0];
   if (!nearest || !sameResetWindow(currentWindow, nearest.window)) return base;
-  if ((nearest.window.remainingPercent ?? 0) <= currentWindow.remainingPercent) return base;
+  if ((nearest.window.remainingPercent ?? 0) <= currentRemainingPercent) return base;
 
   const earliest = [...candidates]
     .reverse()
     .find((entry) => sameResetWindow(currentWindow, entry.window)
-      && (entry.window.remainingPercent ?? 0) > currentWindow.remainingPercent);
+      && (entry.window.remainingPercent ?? 0) > currentRemainingPercent);
   if (!earliest) return base;
 
   const sampleSpanMs = currentAt - earliest.at;
   if (sampleSpanMs < minSampleSpanMs) return base;
 
-  const consumedPercent = (earliest.window.remainingPercent ?? currentWindow.remainingPercent)
-    - currentWindow.remainingPercent;
+  const consumedPercent = (earliest.window.remainingPercent ?? currentRemainingPercent)
+    - currentRemainingPercent;
   const hours = sampleSpanMs / (60 * 60 * 1_000);
   const rate = consumedPercent / hours;
   if (!Number.isFinite(rate) || rate <= 0) return base;
 
-  const exhaustAtMs = currentAt + (currentWindow.remainingPercent / rate) * 60 * 60 * 1_000;
+  const exhaustAtMs = currentAt + (currentRemainingPercent / rate) * 60 * 60 * 1_000;
   const resetAtMs = timestamp(currentWindow.resetAt);
   return {
     ...base,
