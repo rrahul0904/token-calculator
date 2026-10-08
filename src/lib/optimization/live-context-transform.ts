@@ -40,15 +40,17 @@ export interface LiveContextTransformReceipt {
  *
  * The original payload never needs to travel with the compressed request. The
  * caller owns the lifetime of this store; it is intentionally in-memory only
- * and has no persistence or network behavior.
+ * and has no persistence or network behavior. Recovery handles are deliberately
+ * opaque and contain no caller-provided block IDs. They are local lookup keys,
+ * not authentication secrets.
  */
 export class LocalContextRecoveryStore {
   private readonly originals = new Map<string, string>();
   private sequence = 0;
 
-  put(blockId: string, original: string): string {
+  put(original: string): string {
     this.sequence += 1;
-    const ref = `ctx:${sanitizeRefPart(blockId)}:${this.sequence}`;
+    const ref = `ctx:${this.sequence.toString(36)}`;
     this.originals.set(ref, original);
     return ref;
   }
@@ -68,11 +70,6 @@ export class LocalContextRecoveryStore {
   get size(): number {
     return this.originals.size;
   }
-}
-
-function sanitizeRefPart(value: string): string {
-  const cleaned = value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 48);
-  return cleaned || "block";
 }
 
 /**
@@ -296,7 +293,7 @@ export function transformLiveContextBlock(
     };
   }
 
-  const recoveryRef = recoveryStore.put(block.id, block.content);
+  const recoveryRef = recoveryStore.put(block.content);
   return {
     blockId: block.id,
     zone: block.zone,
