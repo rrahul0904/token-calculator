@@ -1,0 +1,36 @@
+name: Provider Quota Monitor
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/quota/**"
+      - "scripts/ti.ts"
+      - "tests/provider-quota.test.ts"
+      - "docs/reverse-engineering/QUOTA_PROVIDER_QUOTA_MONITOR.md"
+      - ".github/workflows/quota-monitor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-quota-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Lint quota slice
+        run: npx eslint src/lib/quota scripts/ti.ts tests/provider-quota.test.ts --max-warnings=0
+      - name: Typecheck repository contracts
+        run: npm run typecheck
+      - name: Provider quota contract tests
+        run: npx vitest run tests/provider-quota.test.ts
+      - name: CLI help smoke
+        run: npm run ti -- --help
