@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import { hasNumericQuota } from "@/lib/quota/types";
 
 const CLAUDE_USAGE_ENDPOINT = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_OAUTH_BETA = "oauth-2025-04-20";
+const ACCOUNT_REF_DOMAIN = "token-intelligence-provider-account-ref-v1:claude";
 
 interface ClaudeQuotaFetchOptions {
   credentialsPath?: string;
@@ -74,7 +75,7 @@ function parseCredentials(raw: string): CredentialParseResult {
 
 function opaqueAccountRef(organizationUuid: string | null): string | null {
   if (!organizationUuid) return null;
-  return `org_${createHash("sha256").update(organizationUuid).digest("hex").slice(0, 12)}`;
+  return `org_${createHmac("sha256", ACCOUNT_REF_DOMAIN).update(organizationUuid).digest("hex").slice(0, 12)}`;
 }
 
 export function claudeCredentialsPath(homeDirectory: string = homedir()): string {
@@ -153,8 +154,9 @@ export function normalizeClaudeUsagePayload(
 /**
  * Read the Claude Code CLI OAuth session and fetch provider-reported usage locally.
  * The provider access token never leaves this function except in the Authorization
- * header sent directly to Anthropic. Token Intelligence never refreshes, rewrites,
- * uploads, persists, or prints the provider credential.
+ * header sent directly to the fixed Anthropic HTTPS endpoint; redirects are refused.
+ * Token Intelligence never refreshes, rewrites, uploads, persists, or prints the
+ * provider credential.
  */
 export async function fetchClaudeQuotaSnapshot(
   options: ClaudeQuotaFetchOptions = {},
@@ -201,6 +203,7 @@ export async function fetchClaudeQuotaSnapshot(
         "user-agent": "token-intelligence-quota/0.1",
       },
       cache: "no-store",
+      redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
