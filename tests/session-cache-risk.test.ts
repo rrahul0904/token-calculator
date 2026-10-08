@@ -149,7 +149,7 @@ describe("Claude normalized cache evidence", () => {
     expect(report.materiality.crossedBy).toEqual(["context"]);
   });
 
-  it("preserves canonical provider-measured cost as a provider receipt", () => {
+  it("preserves canonical provider-measured cost provenance without calling it an invoice receipt", () => {
     const parsed = {
       collector: "claude" as const,
       sessionId: "provider-cost-session",
@@ -189,7 +189,7 @@ describe("Claude normalized cache evidence", () => {
 
     expect(report.state).toBe("warning");
     expect(report.materiality.costUsd).toBe(0.75);
-    expect(report.materiality.costBasis).toBe("provider_receipt");
+    expect(report.materiality.costBasis).toBe("provider_measured");
     expect(report.materiality.crossedBy).toEqual(["cost"]);
   });
 
