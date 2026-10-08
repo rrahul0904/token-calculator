@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { ProviderQuotaSnapshot } from "@/lib/quota/types";
 
@@ -50,4 +51,28 @@ export function toHostedQuotaSnapshot(snapshot: ProviderQuotaSnapshot): HostedQu
       resetAt: window.resetAt,
     })),
   });
+}
+
+/**
+ * Stable receipt identity for hosted retries. Tenant identity is supplied by
+ * authenticated server context, never by the upload payload. The snapshot has
+ * already passed the strict hosted allow-list before it reaches this function.
+ */
+export function hostedQuotaReceiptId(options: {
+  organizationId: string;
+  projectId: string | null;
+  snapshot: HostedQuotaSnapshot;
+}): string {
+  const canonical = JSON.stringify([
+    options.organizationId,
+    options.projectId ?? "",
+    options.snapshot.provider,
+    options.snapshot.authState,
+    options.snapshot.source,
+    options.snapshot.fetchedAt,
+    options.snapshot.accountRef ?? "",
+    options.snapshot.plan ?? "",
+    options.snapshot.windows,
+  ]);
+  return `quota_${createHash("sha256").update(canonical).digest("hex").slice(0, 32)}`;
 }
