@@ -22,7 +22,7 @@ const optimizerComponentSchema = z.object({
   claimClass: z.enum(["token_reduction_candidate", "mixed_token_and_cost_candidate", "cost_reduction_only"]),
   individualClaimable: z.boolean(),
   individualSavingsPct: z.number().nonnegative().nullable().optional(),
-});
+}).strict();
 
 const receiptBackedOptimizerPlanInput = z.object({
   id: z.string().min(1),
@@ -31,12 +31,12 @@ const receiptBackedOptimizerPlanInput = z.object({
     caseId: z.string().min(1),
     baselineRunId: z.string().min(1),
     candidateRunId: z.string().min(1),
-  })).min(1).max(100),
+  }).strict()).min(1).max(100),
   minimumSampleSize: z.number().int().min(1).max(100).default(5),
   qualityNonInferiorityMargin: z.number().min(0).max(1).default(0.02),
   minimumQualityScore: z.number().min(0).max(1).nullable().optional(),
   maxCostRegressionPct: z.number().min(0).max(1000).default(0),
-});
+}).strict();
 
 type RunDetail = NonNullable<Awaited<ReturnType<typeof getRunDetail>>>;
 
