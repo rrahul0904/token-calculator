@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +6,7 @@ import type { ProviderQuotaAuthState, ProviderQuotaSnapshot, ProviderQuotaWindow
 import { hasNumericQuota } from "@/lib/quota/types";
 
 const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
+const ACCOUNT_REF_DOMAIN = "token-intelligence-provider-account-ref-v1";
 
 interface CodexQuotaFetchOptions {
   authPath?: string;
@@ -72,7 +73,10 @@ function parseCredentials(raw: string): CredentialParseResult {
 
 function opaqueAccountRef(accountId: string | null): string | null {
   if (!accountId) return null;
-  return `acct_${createHash("sha256").update(accountId).digest("hex").slice(0, 12)}`;
+  // This is a pseudonymous stable identifier, not a password hash. A keyed MAC
+  // gives the derivation a dedicated cryptographic domain and avoids treating a
+  // credential-file identifier as a reusable general-purpose digest.
+  return `acct_${createHmac("sha256", ACCOUNT_REF_DOMAIN).update(accountId).digest("hex").slice(0, 12)}`;
 }
 
 export function codexAuthPath(
@@ -217,6 +221,7 @@ export async function fetchCodexQuotaSnapshot(
       method: "GET",
       headers,
       cache: "no-store",
+      redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
