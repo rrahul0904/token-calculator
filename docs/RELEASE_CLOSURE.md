@@ -36,7 +36,7 @@ The launch product is implemented end to end at the repository level, including:
 - WorkOS/AuthKit session/callback/sign-out hardening;
 - Stripe Checkout/portal/webhook entitlement implementation;
 - ephemeral WorkOS release-certification users created, masked and deleted by Preview/Production workflows;
-- forward migrations through `0011_verified_savings_revalidations`;
+- forward repository migrations from `0000` through `0012`, with `0012_provider_quota_snapshots.sql` adding metadata-only provider quota receipt storage;
 - exact-SHA Preview certification, staged Production certification/promotion and automatic rollback controls.
 
 Authenticated browser acceptance now covers the experiment lifecycle, saved scenario history, budget/policy/approval control plane and the existing tenant/API-key/privacy/workspace journeys. Prompt content remains non-durable in Cost Lab and evaluation workflows.
@@ -48,9 +48,9 @@ Issue #1 is closed as completed. Issue #3 remains open only for broader post-lau
 | Area | Status | Evidence |
 |---|---|---|
 | Repository implementation | PASS | Canonical `main` and release-candidate paths require full CI, production build and Playwright smoke on the exact release SHA; no open code PR may be treated as release evidence |
-| Migration chain | PASS | CI applies `0000` through `0011` on disposable PostgreSQL and verifies checksums/schema/triggers; release manifests derive this inventory from checked-in SQL |
-| Neon validation branch | PASS | Schema through `0011` is present on `br-small-haze-aeqj7d25`; transaction pooling is enabled |
-| Neon Production baseline | PASS | Production `br-muddy-sun-aeyodc4h` records migrations `0000` through `0011`; required tables, outcome identity columns, indexes and tenant triggers were verified; transaction pooling is enabled |
+| Migration chain | PASS | Repository CI applies checked-in migrations `0000` through `0012` on disposable PostgreSQL and verifies checksums/schema/triggers; release manifests derive this inventory from checked-in SQL |
+| Neon validation branch | PASS | Previously certified schema through `0011` is present on `br-small-haze-aeqj7d25`; transaction pooling is enabled. Migration `0012` requires the normal Preview release migration/certification path before this row may be advanced. |
+| Neon Production baseline | PASS | Production `br-muddy-sun-aeyodc4h` records migrations `0000` through `0011`; required tables, outcome identity columns, indexes and tenant triggers were verified; transaction pooling is enabled. This does not claim that new migration `0012` is applied in Production. |
 | WorkOS Staging | PASS_PROVIDER | AuthKit/API key, Preview origins, MCP OAuth resources, Directory Sync webhook and ephemeral-user create/delete smoke verified |
 | Stripe live catalog/webhook | PASS_PROVIDER | Pro $15/month, Team $29/seat/month and exact Production lifecycle webhook verified |
 | Vercel deployment credential | BLOCKED_EXTERNAL | GitHub Actions `VERCEL_TOKEN` is still absent; fresh Preview preflight re-check confirmed it |
@@ -59,7 +59,7 @@ Issue #1 is closed as completed. Issue #3 remains open only for broader post-lau
 | WorkOS Production activation | BLOCKED_EXTERNAL | WorkOS reports Production `Inactive`; billing address/default payment method are absent |
 | WorkOS Production objects | BLOCKED_EXTERNAL | Production redirects/logout/origins/MCP resource/webhook cannot be configured while inactive; even a dry-run redirect mutation returns `FORBIDDEN` |
 | Vercel Production runtime | BLOCKED_EXTERNAL | Stable deployment is old and does not yet contain the launch-critical Production runtime contract |
-| Exact-SHA Preview certification | BLOCKED_EXTERNAL | Cannot deploy until Vercel credential/runtime gates above are resolved |
+| Exact-SHA Preview certification | BLOCKED_EXTERNAL | Cannot deploy through the existing GitHub release workflow until its Vercel credential/runtime gates above are resolved |
 | Production certification | NOT_RUN | Must consume a certified Preview manifest; no Production traffic change is allowed before staged certification |
 
 GitHub outcome attribution, OTEL and Redis are optional and are not launch-critical release checks.
@@ -70,7 +70,7 @@ GitHub outcome attribution, OTEL and Redis are optional and are not launch-criti
 
 `VERCEL_TOKEN` is the only mandatory GitHub deployment secret remaining. Permanent release-user credentials were removed; release workflows provision temporary WorkOS users themselves.
 
-The connected GitHub integration intentionally excludes Actions-secret mutation. The connected Vercel integration exposes project/deployment inspection but not environment-variable or Git-link writes. Vercel CLI pull/deploy/promote requires an authorization token, so bypassing this credential would weaken or break the certified release path.
+The connected GitHub integration intentionally excludes Actions-secret mutation. The connected Vercel integration may be used for bounded Preview inspection/deployment work, but the repository release workflow still requires its own Vercel credential and runtime contract for certified release evidence.
 
 Required account-side state:
 
@@ -100,10 +100,10 @@ Live Stripe provider resources are already correct. Preview billing certificatio
 ## Required final release sequence
 
 1. Final exact-head CI passes.
-2. Install `VERCEL_TOKEN` and correct Preview runtime values.
+2. Install `VERCEL_TOKEN` and correct Preview runtime values for the certified GitHub release path.
 3. Release Preview verifies Neon identity/migrations, provisions temporary WorkOS Staging users, deploys the exact SHA, certifies AuthKit/onboarding/Stripe TEST/MCP/health/5xx, cleans temporary users and emits `preview_certified` evidence.
 4. Activate WorkOS Production with real billing information and install the Production runtime contract.
-5. Release Production downloads/re-certifies the Preview manifest, verifies WorkOS/live Stripe/Neon and runs the forward-only migration verifier against the verified Production branch. With the current schema, `0000` through `0011` must already checksum-match; future migrations are applied only by this gated path.
+5. Release Production downloads/re-certifies the Preview manifest, verifies WorkOS/live Stripe/Neon and runs the forward-only migration verifier against the verified Production branch. The repository migration inventory is now `0000` through `0012`; the currently recorded Production baseline remains through `0011`, so `0012` may only be applied by the gated forward migration path after Preview certification.
 6. The workflow creates a staged Production deployment without moving traffic, provisions a temporary Production AuthKit user, and certifies build identity/health/auth/MCP/5xx.
 7. It promotes the already-certified staged deployment and proves the stable domain serves the same deployment ID.
 8. Any failed post-promotion certification triggers automatic rollback; temporary auth users are cleaned up.
