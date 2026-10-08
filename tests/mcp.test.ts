@@ -29,6 +29,7 @@ const REQUIRED_TOOLS = [
   "check_context",
   "analyze_harness",
   "analyze_token_saving_portfolio",
+  "analyze_receipt_backed_optimizer_plan",
   "check_budget",
   "record_usage",
   "get_usage",
