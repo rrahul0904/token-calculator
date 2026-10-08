@@ -13,9 +13,10 @@ This runbook restores service after a failed Token Intelligence release without 
 - Neon project: `token-intelligence` (`restless-queen-06517393`)
 - Neon production branch: `main` (`br-muddy-sun-aeyodc4h`)
 - Release validation branch: `release-validation-full-site` (`br-small-haze-aeqj7d25`)
-- Production migration ledger: `0000` through `0011` recorded with checksums; transaction pooling is enabled.
+- Repository migration inventory: `0000` through `0012`; `0012_provider_quota_snapshots.sql` is additive metadata-only quota storage.
+- Known pre-release Production migration ledger: `0000` through `0011` recorded with checksums; transaction pooling is enabled. This baseline does not claim that `0012` has been applied to Production.
 
-Update this section with the final certified release SHA and production deployment ID immediately before promotion.
+Update this section with the final certified release SHA, production deployment ID, and applied migration ledger immediately before promotion.
 
 ## Vercel rollback
 
@@ -40,7 +41,7 @@ The migration runner is forward-only and checksum-pinned. Never edit an applied 
 If a release fails after a schema migration:
 
 1. Determine whether the previous application artifact is compatible with the current schema.
-2. Prefer application rollback when migrations are additive/backward compatible.
+2. Prefer application rollback when migrations are additive/backward compatible. `0012_provider_quota_snapshots.sql` is designed as additive storage, so the previous application can ignore that table if application rollback is required after it has been applied.
 3. Use the pre-release Neon branch/snapshot only when database state itself must be recovered.
 4. Before any restore, capture current production LSN/timestamp and migration ledger.
 5. Never reset or restore production destructively without explicit incident approval and a verified recovery target.

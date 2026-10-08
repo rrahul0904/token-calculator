@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { commitCheckpoint, getCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
+import { assertCompleteJsonLines, commitCheckpoint, getCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
 
 describe("collector checkpoints", () => {
   it("reads only complete appended JSONL records and resumes after commit", async () => {
@@ -15,11 +15,13 @@ describe("collector checkpoints", () => {
     expect(first.lines).toEqual(['{"a":1}', '{"a":2}']);
     expect(first.nextOffset).toBeGreaterThan(0);
     expect(first.nextOffset).toBeLessThan(first.fileSize);
+    expect(first.resetReason).toBeNull();
 
     await commitCheckpoint({ collector: "codex", filePath: file, fileIdentity: first.fileIdentity, nextOffset: first.nextOffset, checkpointPath });
     await writeFile(file, '{"a":1}\n{"a":2}\n{"partial":true}\n{"a":3}\n', "utf8");
     const second = await readIncrementalJsonLines("codex", file, { checkpointPath });
     expect(second.lines).toEqual(['{"partial":true}', '{"a":3}']);
+    expect(second.resetReason).toBeNull();
   });
 
   it("stores checkpoint files as a versioned local structure", async () => {
@@ -36,7 +38,7 @@ describe("collector checkpoints", () => {
     expect(await getCheckpoint("claude", file, checkpointPath)).toBeNull();
   });
 
-  it("resets safely when a file is truncated", async () => {
+  it("resets safely and reports the reason when a file is truncated", async () => {
     const dir = await mkdtemp(join(tmpdir(), "ti-checkpoint-"));
     const file = join(dir, "session.jsonl");
     const checkpointPath = join(dir, "checkpoints.json");
@@ -47,5 +49,17 @@ describe("collector checkpoints", () => {
     const reset = await readIncrementalJsonLines("antigravity", file, { checkpointPath });
     expect(reset.startOffset).toBe(0);
     expect(reset.lines).toEqual(['{"b":1}']);
+    expect(reset.resetReason).toBe("truncated");
+  });
+
+  it("refuses malformed complete records without echoing their content", () => {
+    expect(() => assertCompleteJsonLines(['{"ok":true}', '{malformed secret-value'])).toThrow(
+      "Incremental source contains malformed JSON at complete record 2; checkpoint was not advanced.",
+    );
+    try {
+      assertCompleteJsonLines(['{malformed secret-value']);
+    } catch (error) {
+      expect(error instanceof Error ? error.message : String(error)).not.toContain("secret-value");
+    }
   });
 });
