@@ -10,7 +10,8 @@ import { collectorCapabilities, getCollector } from "@/lib/collectors/registry";
 import type { CollectorName } from "@/lib/collectors/types";
 import { auditCollectorResult, formatLocalUsageAuditReport } from "@/lib/optimization/local-usage-audit";
 import { formatLocalUsageScanReport, scanLocalUsage } from "@/lib/optimization/local-usage-scan";
-import { fetchCodexQuotaSnapshot } from "@/lib/quota/codex";
+import { formatQuotaMonitorResult, observeQuotaSnapshot } from "@/lib/quota/local-state";
+import { fetchAllProviderQuotas, fetchProviderQuota, isSupportedLocalQuotaProvider, supportedLocalQuotaProviders } from "@/lib/quota/registry";
 import { formatProviderQuotaSnapshot } from "@/lib/quota/types";
 import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
 
@@ -90,7 +91,7 @@ async function status(args: string[]) {
   const healthResponse = await fetch(`${current.baseUrl}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
   const health = await healthResponse.json().catch(() => null);
   const capabilities = await collectorCapabilities();
-  print({ baseUrl: current.baseUrl, apiKeyConfigured: Boolean(current.apiKey), projectId: current.projectId, health: { httpStatus: healthResponse.status, data: health }, collectors: capabilities });
+  print({ baseUrl: current.baseUrl, apiKeyConfigured: Boolean(current.apiKey), projectId: current.projectId, health: { httpStatus: healthResponse.status, data: health }, collectors: capabilities, quotaProviders: supportedLocalQuotaProviders() });
 }
 
 async function estimate(args: string[]) {
@@ -105,12 +106,45 @@ async function compare(args: string[]) {
 
 async function providerQuota(args: string[]) {
   const provider = args[0];
-  if (provider !== "codex") {
-    throw new Error("Phase A provider quota monitoring currently supports `codex` only.");
+  const rest = args.slice(1);
+  const asJson = has(rest, "--json");
+  const raw = has(rest, "--raw");
+
+  if (provider === "providers") {
+    return print({ providers: supportedLocalQuotaProviders() });
   }
-  const snapshot = await fetchCodexQuotaSnapshot();
-  if (has(args.slice(1), "--json")) print(snapshot);
-  else process.stdout.write(formatProviderQuotaSnapshot(snapshot));
+
+  if (provider === "all") {
+    const snapshots = await fetchAllProviderQuotas();
+    if (raw) {
+      if (asJson) print({ snapshots });
+      else for (const snapshot of snapshots) process.stdout.write(formatProviderQuotaSnapshot(snapshot));
+      return;
+    }
+
+    const observations = [];
+    for (const snapshot of snapshots) {
+      observations.push(await observeQuotaSnapshot(snapshot));
+    }
+    if (asJson) print({ providers: observations });
+    else for (const observation of observations) process.stdout.write(formatQuotaMonitorResult(observation));
+    return;
+  }
+
+  if (!provider || !isSupportedLocalQuotaProvider(provider)) {
+    throw new Error(`Unsupported quota provider '${provider ?? ""}'. Supported: ${supportedLocalQuotaProviders().join(", ")}, all.`);
+  }
+
+  const snapshot = await fetchProviderQuota(provider);
+  if (raw) {
+    if (asJson) print(snapshot);
+    else process.stdout.write(formatProviderQuotaSnapshot(snapshot));
+    return;
+  }
+
+  const observation = await observeQuotaSnapshot(snapshot);
+  if (asJson) print(observation);
+  else process.stdout.write(formatQuotaMonitorResult(observation));
 }
 
 async function parseLocalCollector(name: CollectorName, file: string, args: string[]) {
@@ -196,7 +230,7 @@ async function watch(name: CollectorName, file: string, args: string[]) {
 }
 
 function help() {
-  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  quota codex [--json]\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--tokens N] [--turns N] [--retries N] [--tools N] [--elapsed-ms N] [--provider-rounds N] [--result-bytes N] [--provider P] [--model M] [--action-risk low|medium|high|critical] [--action-category C] [--action-name NAME]\n  audit <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--json]\n  scan <codex|claude|cursor|antigravity> [ROOT] [--project ID] [--since 7d] [--max-files N] [--json]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nQuota is local-first: it reads the provider-owned local OAuth session read-only, calls the provider quota endpoint directly, and never uploads, refreshes, rotates, rewrites, or prints provider bearer/refresh tokens. Audit and scan are strictly local: they analyze normalized metadata and do not require an API key or make a Token Intelligence API request. Scan auto-discovers repository-certified Codex/Claude history paths; Cursor/Antigravity require an explicit ROOT until stable on-disk paths are certified. Scan deduplicates sessions and emits daily/weekly/monthly session-end rollups without adding overlapping findings into a fake savings total. Sync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
+  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  quota <codex|claude|all> [--json] [--raw]\n  quota providers\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--tokens N] [--turns N] [--retries N] [--tools N] [--elapsed-ms N] [--provider-rounds N] [--result-bytes N] [--provider P] [--model M] [--action-risk low|medium|high|critical] [--action-category C] [--action-name NAME]\n  audit <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--json]\n  scan <codex|claude|cursor|antigravity> [ROOT] [--project ID] [--since 7d] [--max-files N] [--json]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nQuota is local-first. By default, quota commands persist only normalized provider quota metadata under ~/.config/token-intelligence/quota-state.json so the CLI can provide freshness, last-known-good fallback, burn rate, exhaustion forecasts, and deduplicated alert decisions across restarts. Use --raw to skip the local history/forecast layer for one fetch. Provider-owned OAuth sessions are read-only: Token Intelligence never uploads, refreshes, rotates, rewrites, or prints provider bearer/refresh tokens. Audit and scan are strictly local: they analyze normalized metadata and do not require an API key or make a Token Intelligence API request. Scan auto-discovers repository-certified Codex/Claude history paths; Cursor/Antigravity require an explicit ROOT until stable on-disk paths are certified. Scan deduplicates sessions and emits daily/weekly/monthly session-end rollups without adding overlapping findings into a fake savings total. Sync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
 }
 
 async function main() {
