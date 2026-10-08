@@ -149,7 +149,7 @@ export function evaluateSessionCacheRisk(input: SessionCacheRiskInput): SessionC
 
   if (!anchor || ttlSeconds === null || ttlSeconds <= 0 || input.anchorEvidence === "none" || input.anchorEvidence === "mixed_ttl_write") {
     const reason = input.anchorEvidence === "mixed_ttl_write"
-      ? "The latest normalized cache write contains mixed TTL classes, so a single expiry deadline would be misleading."
+      ? "The normalized cache history contains mixed TTL classes, so a single expiry deadline would be misleading."
       : "A supported cache anchor and positive TTL are not both available.";
     return unknownReport(input, now, policy, [reason]);
   }
@@ -212,7 +212,7 @@ export function evaluateSessionCacheRisk(input: SessionCacheRiskInput): SessionC
     reasons,
     limitations: [
       "The horizon is a normalized local observation, not a provider guarantee that every cached prefix shares one TTL.",
-      "Mixed 5-minute and 1-hour cache writes are refused as a single timer because their economic impact cannot be reconstructed safely from aggregate cache-read tokens.",
+      "Mixed 5-minute and 1-hour cache histories are refused as a single timer because their economic impact cannot be reconstructed safely from aggregate cache-read tokens.",
       "API-equivalent cost is an optimization yardstick unless a provider charge receipt says otherwise.",
       "This evaluator only recommends an action class; it never sends keepalive messages or modifies provider sessions.",
     ],
@@ -256,6 +256,7 @@ export interface CollectorCacheRiskOptions {
 export function deriveSessionCacheRiskFromCollector(parsed: CollectorParseResult, options: CollectorCacheRiskOptions = {}): SessionCacheRiskReport {
   const events = [...parsed.events].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.sourceEventId.localeCompare(b.sourceEventId));
   const turnStarts = eventTurnStartMap(events);
+  const seenTtlClasses = new Set<number>();
   let knownTtlSeconds: number | null = null;
   let latestInputTokens: number | null = null;
   let latestCostUsd: number | null = null;
@@ -284,7 +285,9 @@ export function deriveSessionCacheRiskFromCollector(parsed: CollectorParseResult
     latestCostUsd = finiteNumber(payload.costUsd);
     latestCostBasis = eventCostBasis(payload);
 
-    if (write5m > 0 && write1h > 0) {
+    if (write5m > 0) seenTtlClasses.add(5 * 60);
+    if (write1h > 0) seenTtlClasses.add(60 * 60);
+    if (seenTtlClasses.size > 1) {
       knownTtlSeconds = null;
       latestAnchorAt = null;
       latestEvidence = "mixed_ttl_write";
