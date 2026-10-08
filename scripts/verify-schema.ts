@@ -16,7 +16,7 @@ const requiredTables = [
   "workos_directory_events", "workos_directory_users", "workos_directory_groups", "organization_data_controls",
   "platform_admins", "platform_admin_audit_events", "platform_cost_entries", "platform_daily_metrics",
   "inference_endpoints", "pricing_catalog_snapshots", "pricing_rates", "pricing_overrides", "scenario_versions",
-  "_token_intelligence_migrations",
+  "provider_quota_snapshots", "_token_intelligence_migrations",
 ];
 
 const requiredMigrations = [
@@ -32,6 +32,7 @@ const requiredMigrations = [
   "0009_verified_savings_ledger.sql",
   "0010_stable_outcome_identities.sql",
   "0011_verified_savings_revalidations.sql",
+  "0012_provider_quota_snapshots.sql",
 ];
 
 const requiredTriggers = [
@@ -68,6 +69,8 @@ const requiredIndexes = [
   "verified_savings_org_verified_idx",
   "outcomes_ci_run_idx", "outcomes_deployment_idx",
   "verified_savings_revalidations_org_checked_idx", "verified_savings_revalidations_experiment_checked_idx",
+  "provider_quota_snapshots_org_fetched_idx", "provider_quota_snapshots_org_provider_fetched_idx",
+  "provider_quota_snapshots_project_fetched_idx",
 ];
 
 async function main() {
