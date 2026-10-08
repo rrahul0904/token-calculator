@@ -10,7 +10,7 @@ function jwt(payload: Record<string, unknown>) {
 function oauthAuthJson() {
   return JSON.stringify({
     tokens: {
-      access_token: "super-secret-access-token",
+      access_token: "synthetic-access-token-value",
       account_id: "raw-account-id-fallback",
       id_token: jwt({
         "https://api.openai.com/auth": {
@@ -28,7 +28,7 @@ describe("Codex provider quota", () => {
     const now = new Date("2026-10-07T20:00:00.000Z");
     const fakeFetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer super-secret-access-token");
+      expect(headers.get("authorization")).toBe("Bearer synthetic-access-token-value");
       expect(headers.get("ChatGPT-Account-Id")).toBe("raw-account-id-primary");
       return new Response(JSON.stringify({
         plan_type: "plus",
@@ -62,17 +62,17 @@ describe("Codex provider quota", () => {
     expect(snapshot.accountRef).toMatch(/^acct_[a-f0-9]{12}$/);
 
     const serialized = JSON.stringify(snapshot);
-    expect(serialized).not.toContain("super-secret-access-token");
+    expect(serialized).not.toContain("synthetic-access-token-value");
     expect(serialized).not.toContain("raw-account-id-primary");
     expect(serialized).not.toContain("raw-account-id-fallback");
     expect(serialized).not.toContain("private@example.test");
-    expect(formatProviderQuotaSnapshot(snapshot)).not.toContain("super-secret-access-token");
+    expect(formatProviderQuotaSnapshot(snapshot)).not.toContain("synthetic-access-token-value");
   });
 
   it("refuses API-key-only auth because it has no ChatGPT subscription window", async () => {
     const fakeFetch = vi.fn() as unknown as typeof fetch;
     const snapshot = await fetchCodexQuotaSnapshot({
-      authJson: JSON.stringify({ OPENAI_API_KEY: "sk-test-placeholder" }),
+      authJson: JSON.stringify({ OPENAI_API_KEY: "synthetic-api-key-value" }),
       now: new Date("2026-10-07T20:00:00.000Z"),
       fetchImpl: fakeFetch,
     });
@@ -80,17 +80,17 @@ describe("Codex provider quota", () => {
     expect(snapshot.authState).toBe("unsupported_auth");
     expect(snapshot.windows).toEqual([]);
     expect(fakeFetch).not.toHaveBeenCalled();
-    expect(JSON.stringify(snapshot)).not.toContain("sk-test-placeholder");
+    expect(JSON.stringify(snapshot)).not.toContain("synthetic-api-key-value");
   });
 
   it("fails closed on malformed local auth without echoing the source", async () => {
     const snapshot = await fetchCodexQuotaSnapshot({
-      authJson: "{not-json super-secret-value",
+      authJson: "{not-json synthetic-secret-value",
       now: new Date("2026-10-07T20:00:00.000Z"),
     });
 
     expect(snapshot.authState).toBe("malformed");
-    expect(JSON.stringify(snapshot)).not.toContain("super-secret-value");
+    expect(JSON.stringify(snapshot)).not.toContain("synthetic-secret-value");
   });
 
   it("reports rejected OAuth as expired without refreshing or returning the token", async () => {
@@ -103,7 +103,7 @@ describe("Codex provider quota", () => {
 
     expect(snapshot.authState).toBe("expired");
     expect(snapshot.note).toContain("Reauthenticate with the Codex CLI");
-    expect(JSON.stringify(snapshot)).not.toContain("super-secret-access-token");
+    expect(JSON.stringify(snapshot)).not.toContain("synthetic-access-token-value");
   });
 
   it("distinguishes a signed-in account with no numeric allocation from a provider failure", () => {
