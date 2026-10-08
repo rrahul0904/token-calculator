@@ -149,6 +149,50 @@ describe("Claude normalized cache evidence", () => {
     expect(report.materiality.crossedBy).toEqual(["context"]);
   });
 
+  it("preserves canonical provider-measured cost as a provider receipt", () => {
+    const parsed = {
+      collector: "claude" as const,
+      sessionId: "provider-cost-session",
+      usageClassification: "agent_measured" as const,
+      events: [{
+        sourceEventId: "claude:provider-cost:usage",
+        source: "claude" as const,
+        eventType: "llm_call.recorded" as const,
+        occurredAt: new Date("2026-10-08T12:00:05.000Z"),
+        projectId: null,
+        runId: "run-provider-cost",
+        payload: {
+          id: "call-provider-cost",
+          runId: "run-provider-cost",
+          turnId: "turn-provider-cost",
+          provider: "Anthropic",
+          freshInputTokens: 1_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 60_000,
+          outputTokens: 100,
+          costUsd: 0.75,
+          costSource: "provider_measured" as const,
+          startedAt: new Date("2026-10-08T12:00:00.000Z"),
+          metadata: { cacheWrite5mTokens: 0, cacheWrite1hTokens: 60_000 },
+        },
+      }],
+      warnings: [],
+      measuredFields: ["cache_write_tokens", "cost_usd"],
+      estimatedFields: [],
+      missingFields: [],
+    };
+
+    const report = deriveSessionCacheRiskFromCollector(parsed, {
+      now: "2026-10-08T12:56:00.000Z",
+      policy: { minContextTokens: null, minCostUsd: 0.5 },
+    });
+
+    expect(report.state).toBe("warning");
+    expect(report.materiality.costUsd).toBe(0.75);
+    expect(report.materiality.costBasis).toBe("provider_receipt");
+    expect(report.materiality.crossedBy).toEqual(["cost"]);
+  });
+
   it("stays unknown for collectors that expose cache reads without a supported TTL class", () => {
     const parsed = {
       collector: "codex" as const,
