@@ -237,7 +237,7 @@ function eventInputTokens(payload: Record<string, unknown>) {
 
 function eventCostBasis(payload: Record<string, unknown>): "provider_receipt" | "api_equivalent_estimate" | "unknown" {
   const source = stringValue(payload.costSource);
-  if (source === "provider_actual") return "provider_receipt";
+  if (source === "provider_measured") return "provider_receipt";
   if (finiteNumber(payload.costUsd) !== null) return "api_equivalent_estimate";
   return "unknown";
 }
