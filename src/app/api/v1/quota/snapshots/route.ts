@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
 import { providerQuotaSnapshots } from "@/db/quota-schema";
 import { authenticateApiKey, authenticateRequest } from "@/lib/auth/api-auth";
-import { hostedQuotaBatchSchema, hostedQuotaReceiptId } from "@/lib/quota/hosted";
+import { hostedQuotaBatchSchema } from "@/lib/quota/hosted";
 
 const MAX_BYTES = 128 * 1024;
 
@@ -35,11 +36,7 @@ export async function POST(request: Request) {
 
   const now = new Date();
   const rows = parsed.data.snapshots.map((snapshot) => ({
-    id: hostedQuotaReceiptId({
-      organizationId: principal.organizationId,
-      projectId: principal.projectId,
-      snapshot,
-    }),
+    id: `quota_${randomUUID()}`,
     organizationId: principal.organizationId,
     projectId: principal.projectId,
     provider: snapshot.provider,
@@ -52,10 +49,13 @@ export async function POST(request: Request) {
     receivedAt: now,
   }));
 
+  // The database observation-uniqueness constraint is the retry boundary. This
+  // remains race-safe across parallel requests and avoids hashing authenticated
+  // tenant context into application-generated IDs.
   const inserted = await getDb()
     .insert(providerQuotaSnapshots)
     .values(rows)
-    .onConflictDoNothing({ target: providerQuotaSnapshots.id })
+    .onConflictDoNothing()
     .returning({ id: providerQuotaSnapshots.id, provider: providerQuotaSnapshots.provider });
 
   return reply({
