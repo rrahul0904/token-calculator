@@ -4,9 +4,11 @@ on:
   pull_request:
     paths:
       - "src/lib/quota/**"
+      - "src/lib/collectors/checkpoints.ts"
       - "scripts/ti.ts"
       - "tests/provider-quota*.test.ts"
       - "tests/quota-*.test.ts"
+      - "tests/collector-checkpoints.test.ts"
       - "docs/reverse-engineering/QUOTA_PROVIDER_QUOTA_MONITOR.md"
       - "docs/reverse-engineering/OPENTOKENMONITOR_DONOR.md"
       - ".github/workflows/quota-monitor.yml"
@@ -28,11 +30,11 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Lint quota slice
-        run: npx eslint src/lib/quota scripts/ti.ts tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts --max-warnings=0
+      - name: Lint quota and checkpoint slices
+        run: npx eslint src/lib/quota src/lib/collectors/checkpoints.ts scripts/ti.ts tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts --max-warnings=0
       - name: Typecheck repository contracts
         run: npm run typecheck
-      - name: Provider quota contract tests
-        run: npx vitest run tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts
+      - name: Provider quota and checkpoint contract tests
+        run: npx vitest run tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts
       - name: CLI help smoke
         run: npm run ti -- --help
