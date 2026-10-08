@@ -5,14 +5,14 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { stdin as input, stdout as output } from "node:process";
-import { commitCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
+import { assertCompleteJsonLines, commitCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
 import { collectorCapabilities, getCollector } from "@/lib/collectors/registry";
 import type { CollectorName } from "@/lib/collectors/types";
 import { auditCollectorResult, formatLocalUsageAuditReport } from "@/lib/optimization/local-usage-audit";
 import { formatLocalUsageScanReport, scanLocalUsage } from "@/lib/optimization/local-usage-scan";
 import { formatQuotaMonitorResult, observeQuotaSnapshot } from "@/lib/quota/local-state";
 import { fetchAllProviderQuotas, fetchProviderQuota, isSupportedLocalQuotaProvider, supportedLocalQuotaProviders } from "@/lib/quota/registry";
-import { formatProviderQuotaSnapshot } from "@/lib/quota/types";
+import { formatProviderQuotaSnapshot, type ProviderQuotaSnapshot } from "@/lib/quota/types";
 import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
 
 interface CliConfig { baseUrl?: string; apiKey?: string; projectId?: string; environment?: string }
@@ -109,42 +109,38 @@ async function providerQuota(args: string[]) {
   const rest = args.slice(1);
   const asJson = has(rest, "--json");
   const raw = has(rest, "--raw");
+  const watching = has(rest, "--watch");
+  const statePath = argValue(rest, "--state-file");
+  const intervalSeconds = Math.max(60, Math.trunc(numberArg(rest, "--interval-seconds", 300) ?? 300));
 
   if (provider === "providers") {
     return print({ providers: supportedLocalQuotaProviders() });
   }
 
-  if (provider === "all") {
-    const snapshots = await fetchAllProviderQuotas();
+  const render = async (snapshots: ProviderQuotaSnapshot[]) => {
     if (raw) {
       if (asJson) print({ snapshots });
       else for (const snapshot of snapshots) process.stdout.write(formatProviderQuotaSnapshot(snapshot));
       return;
     }
-
     const observations = [];
-    for (const snapshot of snapshots) {
-      observations.push(await observeQuotaSnapshot(snapshot));
-    }
+    for (const snapshot of snapshots) observations.push(await observeQuotaSnapshot(snapshot, { statePath }));
     if (asJson) print({ providers: observations });
     else for (const observation of observations) process.stdout.write(formatQuotaMonitorResult(observation));
-    return;
-  }
+  };
 
-  if (!provider || !isSupportedLocalQuotaProvider(provider)) {
+  if (provider !== "all" && (!provider || !isSupportedLocalQuotaProvider(provider))) {
     throw new Error(`Unsupported quota provider '${provider ?? ""}'. Supported: ${supportedLocalQuotaProviders().join(", ")}, all.`);
   }
 
-  const snapshot = await fetchProviderQuota(provider);
-  if (raw) {
-    if (asJson) print(snapshot);
-    else process.stdout.write(formatProviderQuotaSnapshot(snapshot));
-    return;
-  }
-
-  const observation = await observeQuotaSnapshot(snapshot);
-  if (asJson) print(observation);
-  else process.stdout.write(formatQuotaMonitorResult(observation));
+  do {
+    const snapshots = provider === "all"
+      ? await fetchAllProviderQuotas()
+      : [await fetchProviderQuota(provider)];
+    await render(snapshots);
+    if (!watching) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, intervalSeconds * 1_000));
+  } while (watching);
 }
 
 async function parseLocalCollector(name: CollectorName, file: string, args: string[]) {
@@ -200,12 +196,13 @@ async function sync(name: CollectorName, file: string, args: string[]) {
   if (has(args, "--reset-checkpoint")) await resetCheckpoint(name, absolute);
   const chunk = await readIncrementalJsonLines(name, absolute);
   if (!chunk.lines.length) {
-    print({ collector: name, eventCount: 0, uploaded: false, checkpointOffset: chunk.startOffset, fileSize: chunk.fileSize, reason: "NO_COMPLETE_NEW_RECORDS" });
+    print({ collector: name, eventCount: 0, uploaded: false, checkpointOffset: chunk.startOffset, fileSize: chunk.fileSize, resetReason: chunk.resetReason, reason: "NO_COMPLETE_NEW_RECORDS" });
     return;
   }
+  assertCompleteJsonLines(chunk.lines);
   const parsed = collector.parseJsonLines(chunk.lines, { projectId: current.projectId, environment: current.environment });
   const events = filterSince(parsed.events, sinceCutoff(argValue(args, "--since")));
-  const summary = { collector: parsed.collector, sessionId: parsed.sessionId, usageClassification: parsed.usageClassification, eventCount: events.length, warnings: parsed.warnings, measuredFields: parsed.measuredFields, estimatedFields: parsed.estimatedFields, missingFields: parsed.missingFields, startOffset: chunk.startOffset, nextOffset: chunk.nextOffset };
+  const summary = { collector: parsed.collector, sessionId: parsed.sessionId, usageClassification: parsed.usageClassification, eventCount: events.length, warnings: parsed.warnings, measuredFields: parsed.measuredFields, estimatedFields: parsed.estimatedFields, missingFields: parsed.missingFields, startOffset: chunk.startOffset, nextOffset: chunk.nextOffset, resetReason: chunk.resetReason };
   if (has(args, "--dry-run")) { print({ dryRun: true, ...summary, events }); return; }
   if (!current.apiKey) throw new Error("TOKEN_INTELLIGENCE_API_KEY is required to sync telemetry");
   const result = events.length ? await requestJson("/api/v1/events/batch", args, { events }) : { inserted: 0, reason: "NO_EVENTS_IN_WINDOW" };
@@ -230,7 +227,7 @@ async function watch(name: CollectorName, file: string, args: string[]) {
 }
 
 function help() {
-  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  quota <codex|claude|all> [--json] [--raw]\n  quota providers\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--tokens N] [--turns N] [--retries N] [--tools N] [--elapsed-ms N] [--provider-rounds N] [--result-bytes N] [--provider P] [--model M] [--action-risk low|medium|high|critical] [--action-category C] [--action-name NAME]\n  audit <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--json]\n  scan <codex|claude|cursor|antigravity> [ROOT] [--project ID] [--since 7d] [--max-files N] [--json]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nQuota is local-first. By default, quota commands persist only normalized provider quota metadata under ~/.config/token-intelligence/quota-state.json so the CLI can provide freshness, last-known-good fallback, burn rate, exhaustion forecasts, and deduplicated alert decisions across restarts. Use --raw to skip the local history/forecast layer for one fetch. Provider-owned OAuth sessions are read-only: Token Intelligence never uploads, refreshes, rotates, rewrites, or prints provider bearer/refresh tokens. Audit and scan are strictly local: they analyze normalized metadata and do not require an API key or make a Token Intelligence API request. Scan auto-discovers repository-certified Codex/Claude history paths; Cursor/Antigravity require an explicit ROOT until stable on-disk paths are certified. Scan deduplicates sessions and emits daily/weekly/monthly session-end rollups without adding overlapping findings into a fake savings total. Sync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
+  console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  quota <codex|claude|all> [--json] [--raw] [--watch] [--interval-seconds N] [--state-file PATH]\n  quota providers\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--tokens N] [--turns N] [--retries N] [--tools N] [--elapsed-ms N] [--provider-rounds N] [--result-bytes N] [--provider P] [--model M] [--action-risk low|medium|high|critical] [--action-category C] [--action-name NAME]\n  audit <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--json]\n  scan <codex|claude|cursor|antigravity> [ROOT] [--project ID] [--since 7d] [--max-files N] [--json]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nQuota is local-first. By default, quota commands persist only normalized provider quota metadata under ~/.config/token-intelligence/quota-state.json so the CLI can provide freshness, last-known-good fallback, burn rate, exhaustion forecasts, and deduplicated alert decisions across restarts. Use --raw to skip the local history/forecast layer for one fetch. --watch repeats the provider fetch locally; it defaults to five minutes and refuses intervals below 60 seconds to reduce accidental provider polling pressure. Provider-owned OAuth sessions are read-only: Token Intelligence never uploads, refreshes, rotates, rewrites, or prints provider bearer/refresh tokens. Audit and scan are strictly local: they analyze normalized metadata and do not require an API key or make a Token Intelligence API request. Scan auto-discovers repository-certified Codex/Claude history paths; Cursor/Antigravity require an explicit ROOT until stable on-disk paths are certified. Scan deduplicates sessions and emits daily/weekly/monthly session-end rollups without adding overlapping findings into a fake savings total. Sync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json and refuse to advance past malformed complete JSONL records. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
 }
 
 async function main() {
