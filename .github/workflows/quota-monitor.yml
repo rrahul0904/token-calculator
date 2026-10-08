@@ -5,7 +5,12 @@ on:
     paths:
       - "src/lib/quota/**"
       - "src/lib/collectors/checkpoints.ts"
+      - "src/db/quota-schema.ts"
+      - "src/app/api/v1/quota/**"
       - "scripts/ti.ts"
+      - "scripts/quota-sync.ts"
+      - "drizzle/0012_provider_quota_snapshots.sql"
+      - "drizzle.config.ts"
       - "tests/provider-quota*.test.ts"
       - "tests/quota-*.test.ts"
       - "tests/collector-checkpoints.test.ts"
@@ -31,10 +36,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Lint quota and checkpoint slices
-        run: npx eslint src/lib/quota src/lib/collectors/checkpoints.ts scripts/ti.ts tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/provider-quota-antigravity.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts --max-warnings=0
+        run: npx eslint src/lib/quota src/lib/collectors/checkpoints.ts src/db/quota-schema.ts src/app/api/v1/quota scripts/ti.ts scripts/quota-sync.ts tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/provider-quota-antigravity.test.ts tests/provider-quota-hosted.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts --max-warnings=0
       - name: Typecheck repository contracts
         run: npm run typecheck
       - name: Provider quota and checkpoint contract tests
-        run: npx vitest run tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/provider-quota-antigravity.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts
+        run: npx vitest run tests/provider-quota.test.ts tests/provider-quota-claude.test.ts tests/provider-quota-antigravity.test.ts tests/provider-quota-hosted.test.ts tests/quota-derived.test.ts tests/quota-local-state.test.ts tests/collector-checkpoints.test.ts
+      - name: Drizzle schema check
+        run: npm run db:check
       - name: CLI help smoke
         run: npm run ti -- --help
+      - name: Hosted quota sync dry-run smoke
+        run: npm run quota:sync -- antigravity --dry-run
