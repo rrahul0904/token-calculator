@@ -1,26 +1,20 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  discoverAntigravityPort,
   discoverAntigravityPortFromText,
   fetchAntigravityQuotaSnapshot,
   normalizeAntigravityPayloads,
 } from "@/lib/quota/antigravity";
 
 describe("Antigravity provider quota", () => {
-  it("discovers the last valid plain-HTTP language-server port from local logs", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "ti-antigravity-"));
-    const log = join(dir, "cli.log");
-    await writeFile(log, [
+  it("discovers the last valid plain-HTTP language-server port from log text", () => {
+    const text = [
       "listening on random port at 61000 for HTTPS",
       "listening on random port at 62000 for HTTP",
       "later listening on random port at 63000 for HTTP",
-    ].join("\n"), "utf8");
+    ].join("\n");
 
-    expect(discoverAntigravityPortFromText(await import("node:fs/promises").then(({ readFile }) => readFile(log, "utf8")))).toBe(63000);
-    expect(await discoverAntigravityPort({ logPaths: [log] })).toBe(63000);
+    expect(discoverAntigravityPortFromText(text)).toBe(63000);
   });
 
   it("normalizes only Google model quotas and provider reset timestamps", () => {
@@ -74,7 +68,7 @@ describe("Antigravity provider quota", () => {
 
   it("returns unavailable when no local language-server port is discoverable", async () => {
     const snapshot = await fetchAntigravityQuotaSnapshot({
-      logPaths: [join(tmpdir(), "definitely-not-an-antigravity-log")],
+      homeDirectory: join(process.cwd(), "__missing_antigravity_home__"),
       now: new Date("2026-10-07T23:00:00.000Z"),
     });
     expect(snapshot.authState).toBe("unavailable");
