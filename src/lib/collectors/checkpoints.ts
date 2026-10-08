@@ -1,4 +1,4 @@
-import { chmod, mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -20,9 +20,21 @@ interface CheckpointStore { version: 1; checkpoints: Record<string, CollectorChe
 const emptyStore = (): CheckpointStore => ({ version: 1, checkpoints: {} });
 const keyFor = (collector: CollectorName, filePath: string) => `${collector}:${resolve(filePath)}`;
 
+function identityFromStat(filePath: string, info: { dev: number | bigint; ino: number | bigint }) {
+  return createHash("sha256")
+    .update(`${resolve(filePath)}:${String(info.dev)}:${String(info.ino)}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
 export async function fileIdentity(filePath: string) {
-  const info = await stat(filePath);
-  return createHash("sha256").update(`${resolve(filePath)}:${info.dev}:${info.ino}`).digest("hex").slice(0, 24);
+  const handle = await open(filePath, "r");
+  try {
+    const info = await handle.stat();
+    return identityFromStat(filePath, info);
+  } finally {
+    await handle.close();
+  }
 }
 
 export async function readCheckpointStore(path = DEFAULT_CHECKPOINT_PATH): Promise<CheckpointStore> {
@@ -76,18 +88,23 @@ export async function readIncrementalJsonLines(collector: CollectorName, filePat
   const absolute = resolve(filePath);
   const checkpointPath = options.checkpointPath ?? DEFAULT_CHECKPOINT_PATH;
   if (options.reset) await resetCheckpoint(collector, absolute, checkpointPath);
-  const identity = await fileIdentity(absolute);
-  const info = await stat(absolute);
-  const previous = await getCheckpoint(collector, absolute, checkpointPath);
-  const sameIdentity = previous?.fileIdentity === identity;
-  const offsetFits = previous ? previous.byteOffset <= info.size : false;
-  const reusable = Boolean(previous && sameIdentity && offsetFits);
-  const resetReason = previous && !reusable
-    ? (!sameIdentity ? "identity_changed" : "truncated")
-    : null;
-  const start = reusable && previous ? previous.byteOffset : 0;
+
+  // Open once, then derive identity/size and read from that same descriptor. This
+  // removes the stat-then-open race where a path could be replaced between the
+  // metadata check and the actual read.
   const handle = await open(absolute, "r");
   try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw new Error("Incremental source is not a regular file.");
+    const identity = identityFromStat(absolute, info);
+    const previous = await getCheckpoint(collector, absolute, checkpointPath);
+    const sameIdentity = previous?.fileIdentity === identity;
+    const offsetFits = previous ? previous.byteOffset <= info.size : false;
+    const reusable = Boolean(previous && sameIdentity && offsetFits);
+    const resetReason = previous && !reusable
+      ? (!sameIdentity ? "identity_changed" : "truncated")
+      : null;
+    const start = reusable && previous ? previous.byteOffset : 0;
     const length = Math.max(0, info.size - start);
     const buffer = Buffer.alloc(length);
     if (length) await handle.read(buffer, 0, length, start);
@@ -105,7 +122,9 @@ export async function readIncrementalJsonLines(collector: CollectorName, filePat
       checkpointPath,
       resetReason,
     };
-  } finally { await handle.close(); }
+  } finally {
+    await handle.close();
+  }
 }
 
 export async function commitCheckpoint(args: { collector: CollectorName; filePath: string; fileIdentity: string; nextOffset: number; sourceVersion?: string | null; checkpointPath?: string }) {
