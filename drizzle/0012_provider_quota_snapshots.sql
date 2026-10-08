@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS "provider_quota_snapshots" (
   "account_ref" text,
   "plan" text,
   "windows" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "received_at" timestamptz NOT NULL DEFAULT now()
+  "received_at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "provider_quota_snapshots_observation_unique"
+    UNIQUE NULLS NOT DISTINCT ("organization_id", "project_id", "provider", "fetched_at", "account_ref")
 );
 
 CREATE INDEX IF NOT EXISTS "provider_quota_snapshots_org_fetched_idx"
