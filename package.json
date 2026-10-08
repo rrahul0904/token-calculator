@@ -18,6 +18,7 @@
     "db:check": "drizzle-kit check",
     "sdk:build": "npm --prefix packages/sdk-typescript run build",
     "ti": "tsx scripts/ti.ts",
+    "quota:sync": "tsx scripts/quota-sync.ts",
     "verify": "npm run predeploy",
     "pricing:diff": "tsx scripts/pricing-diff.ts",
     "admin:rollup": "tsx scripts/admin-rollup.ts",
