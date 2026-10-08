@@ -35,7 +35,7 @@ export interface SessionCacheRiskInput {
   anchorEvidence: CacheAnchorEvidence;
   contextInputTokens: number | null;
   costUsd: number | null;
-  costBasis?: "provider_receipt" | "api_equivalent_estimate" | "unknown";
+  costBasis?: "provider_measured" | "api_equivalent_estimate" | "unknown";
   policy?: Partial<SessionCacheRiskPolicy>;
 }
 
@@ -58,7 +58,7 @@ export interface SessionCacheRiskReport {
     minContextTokens: number | null;
     costUsd: number | null;
     minCostUsd: number | null;
-    costBasis: "provider_receipt" | "api_equivalent_estimate" | "unknown";
+    costBasis: "provider_measured" | "api_equivalent_estimate" | "unknown";
     crossedBy: Array<"context" | "cost">;
   };
   reasons: string[];
@@ -134,7 +134,7 @@ function unknownReport(input: SessionCacheRiskInput, now: Date, policy: SessionC
     reasons,
     limitations: [
       "No cache deadline is claimed without an evidence-backed cache interaction anchor and TTL.",
-      "API-equivalent cost is an optimization yardstick unless a provider charge receipt says otherwise.",
+      "API-equivalent cost is an optimization yardstick unless provider-measured billing evidence says otherwise.",
       "This evaluator only recommends an action class; it never sends keepalive messages or modifies provider sessions.",
     ],
   };
@@ -213,7 +213,7 @@ export function evaluateSessionCacheRisk(input: SessionCacheRiskInput): SessionC
     limitations: [
       "The horizon is a normalized local observation, not a provider guarantee that every cached prefix shares one TTL.",
       "Mixed 5-minute and 1-hour cache histories are refused as a single timer because their economic impact cannot be reconstructed safely from aggregate cache-read tokens.",
-      "API-equivalent cost is an optimization yardstick unless a provider charge receipt says otherwise.",
+      "API-equivalent cost is an optimization yardstick unless provider-measured billing evidence says otherwise.",
       "This evaluator only recommends an action class; it never sends keepalive messages or modifies provider sessions.",
     ],
   };
@@ -235,9 +235,9 @@ function eventInputTokens(payload: Record<string, unknown>) {
   return nonNegativeNumber(payload.freshInputTokens) + nonNegativeNumber(payload.cacheReadTokens) + nonNegativeNumber(payload.cacheWriteTokens);
 }
 
-function eventCostBasis(payload: Record<string, unknown>): "provider_receipt" | "api_equivalent_estimate" | "unknown" {
+function eventCostBasis(payload: Record<string, unknown>): "provider_measured" | "api_equivalent_estimate" | "unknown" {
   const source = stringValue(payload.costSource);
-  if (source === "provider_measured") return "provider_receipt";
+  if (source === "provider_measured") return "provider_measured";
   if (finiteNumber(payload.costUsd) !== null) return "api_equivalent_estimate";
   return "unknown";
 }
@@ -260,7 +260,7 @@ export function deriveSessionCacheRiskFromCollector(parsed: CollectorParseResult
   let knownTtlSeconds: number | null = null;
   let latestInputTokens: number | null = null;
   let latestCostUsd: number | null = null;
-  let latestCostBasis: "provider_receipt" | "api_equivalent_estimate" | "unknown" = "unknown";
+  let latestCostBasis: "provider_measured" | "api_equivalent_estimate" | "unknown" = "unknown";
   let latestProvider: string | null = null;
   let latestAnchorAt: Date | null = null;
   let latestEvidence: CacheAnchorEvidence = "none";
