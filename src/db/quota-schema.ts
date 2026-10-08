@@ -1,4 +1,4 @@
-import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { organizations, projects } from "@/db/schema";
 import type { ProviderQuotaWindow } from "@/lib/quota/types";
 
@@ -26,5 +26,11 @@ export const providerQuotaSnapshots = pgTable(
     index("provider_quota_snapshots_org_fetched_idx").on(table.organizationId, table.fetchedAt),
     index("provider_quota_snapshots_org_provider_fetched_idx").on(table.organizationId, table.provider, table.fetchedAt),
     index("provider_quota_snapshots_project_fetched_idx").on(table.projectId, table.fetchedAt),
+    // One logical provider observation is accepted at most once per tenant/project.
+    // NULLS NOT DISTINCT makes retries idempotent even when project/account metadata
+    // is intentionally absent, without deriving IDs from authenticated context.
+    unique("provider_quota_snapshots_observation_unique")
+      .on(table.organizationId, table.projectId, table.provider, table.fetchedAt, table.accountRef)
+      .nullsNotDistinct(),
   ],
 );
