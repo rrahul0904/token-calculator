@@ -1,5 +1,7 @@
 name: Token portfolio lock refresh
 
+# This workflow intentionally self-triggers when its definition changes so a
+# manifest/lock mismatch can be repaired on the protected feature branch.
 on:
   workflow_dispatch:
   push:
