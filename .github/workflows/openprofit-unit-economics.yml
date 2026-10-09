@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - "src/lib/finops/unit-economics.ts"
+      - "src/lib/finops/stripe-revenue.ts"
       - "tests/unit-economics.test.ts"
+      - "tests/stripe-revenue.test.ts"
       - "tests/finops.test.ts"
       - "docs/OPENPROFIT_UNIT_ECONOMICS_REVERSE_ENGINEERING.md"
       - ".github/workflows/openprofit-unit-economics.yml"
@@ -29,6 +31,6 @@ jobs:
       - name: Repository typecheck
         run: npm run typecheck
       - name: Focused lint
-        run: npx eslint src/lib/finops/unit-economics.ts tests/unit-economics.test.ts
+        run: npx eslint src/lib/finops/unit-economics.ts src/lib/finops/stripe-revenue.ts tests/unit-economics.test.ts tests/stripe-revenue.test.ts
       - name: FinOps and unit-economics contracts
-        run: npx vitest run tests/finops.test.ts tests/unit-economics.test.ts
+        run: npx vitest run tests/finops.test.ts tests/unit-economics.test.ts tests/stripe-revenue.test.ts
