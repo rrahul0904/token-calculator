@@ -31,6 +31,9 @@ export interface NormalizedStripeEconomicLine {
   sourceProvider: "stripe";
   /** Stable provider identity used by persistence to make replay idempotent. */
   sourceId: string;
+  /** Provider-native money retained for reconciliation and future FX replay. */
+  sourceCurrency: string;
+  sourceAmountMinor: number | null;
   row: EconomicLedgerRow;
 }
 
@@ -55,9 +58,13 @@ function usdFromMinor(value: number) {
   return value / 100;
 }
 
+function normalizedCurrency(currency: string) {
+  return currency.toLowerCase();
+}
+
 function assertUsd(currency: string, sourceId: string) {
-  if (currency.toLowerCase() !== "usd") {
-    throw new Error(`STRIPE_CURRENCY_NOT_NORMALIZED:${sourceId}:${currency.toLowerCase()}`);
+  if (normalizedCurrency(currency) !== "usd") {
+    throw new Error(`STRIPE_CURRENCY_NOT_NORMALIZED:${sourceId}:${normalizedCurrency(currency)}`);
   }
 }
 
@@ -101,10 +108,13 @@ export function normalizeStripeChargeRevenue(
 
   const customerId = charge.customerId ?? null;
   const chargeOccurredAt = new Date(charge.createdUnixSeconds * 1000);
+  const chargeCurrency = normalizedCurrency(charge.currency);
   const lines: NormalizedStripeEconomicLine[] = [
     {
       sourceProvider: "stripe",
       sourceId: `charge:${charge.id}:gross`,
+      sourceCurrency: chargeCurrency,
+      sourceAmountMinor: charge.amountCapturedMinor,
       row: {
         ...baseRow(attribution, chargeOccurredAt, customerId),
         role: "gross_revenue",
@@ -120,6 +130,8 @@ export function normalizeStripeChargeRevenue(
     lines.push({
       sourceProvider: "stripe",
       sourceId: `balance_transaction:${charge.balanceTransaction.id}:fee`,
+      sourceCurrency: normalizedCurrency(charge.balanceTransaction.currency),
+      sourceAmountMinor: charge.balanceTransaction.feeMinor,
       row: {
         ...baseRow(attribution, chargeOccurredAt, customerId),
         role: "processor_fee",
@@ -132,6 +144,8 @@ export function normalizeStripeChargeRevenue(
     lines.push({
       sourceProvider: "stripe",
       sourceId: `charge:${charge.id}:fee:unknown`,
+      sourceCurrency: chargeCurrency,
+      sourceAmountMinor: null,
       row: {
         ...baseRow(attribution, chargeOccurredAt, customerId),
         role: "processor_fee",
@@ -156,6 +170,8 @@ export function normalizeStripeChargeRevenue(
     lines.push({
       sourceProvider: "stripe",
       sourceId: `refund:${refund.id}`,
+      sourceCurrency: normalizedCurrency(refund.currency),
+      sourceAmountMinor: refund.amountMinor,
       row: {
         ...baseRow(attribution, new Date(refund.createdUnixSeconds * 1000), customerId),
         role: "refund",
