@@ -30,6 +30,10 @@ const REQUIRED_TOOLS = [
   "analyze_harness",
   "analyze_token_saving_portfolio",
   "analyze_receipt_backed_optimizer_plan",
+  "analyze_prompt_cache_economics",
+  "analyze_budget_control",
+  "analyze_orchestration_efficiency",
+  "get_token_saving_capability_coverage",
   "check_budget",
   "record_usage",
   "get_usage",
@@ -161,6 +165,47 @@ describe("MCP production contract", () => {
     expect(mocks.getDb).not.toHaveBeenCalled();
   });
 
+  it("exposes a complete clean-room donor coverage map", async () => {
+    mocks.getDb.mockClear();
+    const result = await rpc("tools/call", {
+      name: "get_token_saving_capability_coverage",
+      arguments: {},
+    });
+
+    expect(result.response.status).toBe(200);
+    expect(result.payload.error).toBeUndefined();
+    const parsed = JSON.parse(result.payload.result?.content?.[0]?.text ?? "{}");
+    expect(parsed.complete).toBe(true);
+    expect(parsed.donorCount).toBe(50);
+    expect(parsed.techniqueCount).toBe(11);
+    expect(parsed.evaluatorCount).toBe(11);
+    expect(parsed.uncoveredDonorIds).toEqual([]);
+    expect(mocks.getDb).not.toHaveBeenCalled();
+  });
+
+  it("keeps prompt-cache savings cost-only at the MCP boundary", async () => {
+    const result = await rpc("tools/call", {
+      name: "analyze_prompt_cache_economics",
+      arguments: {
+        id: "cache-policy",
+        evidenceType: "measured_before_after",
+        qualityGate: "passed",
+        cacheAccountingGate: "verified",
+        sampleSize: 10,
+        baselineCostUsd: 10,
+        candidateCostUsd: 5,
+        baselineLogicalTokens: 10_000,
+        candidateLogicalTokens: 10_000,
+      },
+    });
+
+    expect(result.payload.error).toBeUndefined();
+    const parsed = JSON.parse(result.payload.result?.content?.[0]?.text ?? "{}");
+    expect(parsed.status).toBe("verified_cost_savings");
+    expect(parsed.costSavingsClaimable).toBe(true);
+    expect(parsed.tokenSavingsClaimable).toBe(false);
+  });
+
   it("returns a JSON-RPC error for an unknown tool", async () => {
     const result = await rpc("tools/call", { name: "not_a_real_tool", arguments: {} });
     expect(result.response.status).toBe(200);
@@ -179,7 +224,7 @@ describe("MCP production contract", () => {
   it("uses JSON-safe tool schemas and converts ISO datetimes at the MCP application boundary", () => {
     expect(() => z.toJSONSchema(mcpTelemetryEventSchema)).not.toThrow();
     const wireSchema = z.toJSONSchema(mcpTelemetryEventSchema);
-    expect(JSON.stringify(wireSchema)).not.toContain('"type":"date"');
+    expect(JSON.stringify(wireSchema)).not.toContain('\"type\":\"date\"');
 
     const event = parseMcpTelemetryEvent({
       sourceEventId: "mcp-event-001",
