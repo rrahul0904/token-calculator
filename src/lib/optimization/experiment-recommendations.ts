@@ -38,11 +38,18 @@ const REMEDIATION_STATUSES = new Set([
   "tenant_isolation_failure",
   "evidence_loss",
   "cache_prefix_regression",
+  "cache_accounting_failure",
+  "prefix_instability",
   "isolation_failure",
   "provenance_failure",
   "stale_memory",
   "contradiction_regression",
   "route_provenance_failure",
+  "enforcement_failure",
+  "policy_bypass",
+  "budget_breach",
+  "required_work_denied",
+  "fanout_guardrail_breach",
 ]);
 
 const EVIDENCE_STATUSES = new Set([
@@ -52,6 +59,8 @@ const EVIDENCE_STATUSES = new Set([
   "isolation_unverified",
   "provenance_unverified",
   "route_provenance_unverified",
+  "cache_accounting_unverified",
+  "enforcement_unverified",
   "no_savings_evidence",
   "no_cost_savings_evidence",
   "plan_evidence_required",
@@ -67,6 +76,10 @@ function evidenceFor(kind: TokenSavingAnalysisKind): string[] {
   switch (kind) {
     case "routing_economics":
       return [...shared, "authoritative provider/model route provenance", "measured baseline and candidate cost"];
+    case "prompt_cache_economics":
+      return [...shared, "authoritative cache read/write accounting", "stable reusable-prefix evidence", "cache-control and fallback cost"];
+    case "budget_control":
+      return [...shared, "authoritative budget-enforcement receipts", "policy-bypass and hard-limit-breach observations", "required-work denial evidence"];
     case "semantic_cache":
       return [...shared, "tenant/authorization isolation evidence", "cache freshness/invalidation evidence", "false-hit observations"];
     case "persistent_memory":
@@ -81,17 +94,35 @@ function evidenceFor(kind: TokenSavingAnalysisKind): string[] {
       return [...shared, "required error/warning signal preservation", "reducer/retry overhead"];
     case "response_density":
       return [...shared, "policy persistence", "required response-class preservation", "clarification/retry overhead"];
+    case "orchestration_efficiency":
+      return [...shared, "authoritative worker/coordinator provenance", "coordinator/handoff/retry/fallback accounting", "bounded fanout evidence"];
     case "optimizer_plan":
       return [...shared, "complete plan-level receipts", "component interaction evidence", "no summed component savings"];
   }
 }
 
 function criteriaFor(decision: NormalizedPortfolioDecision): string[] {
-  if (decision.claimClass === "cost_reduction_only") {
+  if (decision.kind === "routing_economics") {
     return [
       "candidate quality is non-inferior to baseline",
       "resolved route provenance matches policy",
       "measured candidate cost including routing/fallback overhead is below baseline",
+      "result remains classified as cost savings, not token savings",
+    ];
+  }
+  if (decision.kind === "prompt_cache_economics") {
+    return [
+      "candidate quality is non-inferior to baseline",
+      "cache accounting is authoritative and the reusable prefix is stable",
+      "measured candidate cost including cache-control and fallback overhead is below baseline",
+      "result remains classified as cost savings, not token savings",
+    ];
+  }
+  if (decision.kind === "budget_control") {
+    return [
+      "candidate quality is non-inferior to baseline",
+      "authoritative enforcement has no policy bypass, hard-limit breach, or required-work denial",
+      "measured candidate cost including control-plane overhead is below baseline and within budget",
       "result remains classified as cost savings, not token savings",
     ];
   }
