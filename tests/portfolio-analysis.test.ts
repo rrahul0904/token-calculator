@@ -72,6 +72,64 @@ describe("token-saving portfolio analysis facade", () => {
     expect(decision.savingsPct).toBe(25);
   });
 
+  it("integrates prompt cache, budgets and orchestration without crossing claim boundaries", () => {
+    const report = analyzeTokenSavingPortfolio([
+      {
+        kind: "prompt_cache_economics",
+        candidate: {
+          id: "prompt-cache",
+          evidenceType: "measured_before_after",
+          qualityGate: "passed",
+          cacheAccountingGate: "verified",
+          sampleSize: 10,
+          baselineCostUsd: 10,
+          candidateCostUsd: 5,
+          baselineLogicalTokens: 10_000,
+          candidateLogicalTokens: 10_000,
+        },
+      },
+      {
+        kind: "budget_control",
+        candidate: {
+          id: "hard-budget",
+          evidenceType: "measured_before_after",
+          qualityGate: "passed",
+          enforcementGate: "verified",
+          sampleSize: 10,
+          budgetLimitUsd: 8,
+          baselineCostUsd: 10,
+          candidateCostUsd: 6,
+        },
+      },
+      {
+        kind: "orchestration_efficiency",
+        candidate: {
+          id: "bounded-orchestration",
+          evidenceType: "measured_before_after",
+          qualityGate: "passed",
+          provenanceGate: "verified",
+          sampleSize: 10,
+          baselineSessionTokens: 20_000,
+          candidateWorkerTokens: 10_000,
+          coordinatorTokens: 2_000,
+          handoffTokens: 1_000,
+          observedMaxFanout: 3,
+          maxAllowedFanout: 4,
+        },
+      },
+    ]);
+
+    expect(report.summary.candidates).toBe(3);
+    expect(report.summary.claimable).toBe(3);
+    expect(report.summary.costOnlyClaims).toBe(2);
+    expect(report.summary.tokenReductionClaims).toBe(1);
+    expect(report.decisions.map((decision) => decision.claimClass)).toEqual([
+      "cost_reduction_only",
+      "cost_reduction_only",
+      "token_reduction",
+    ]);
+  });
+
   it("returns one metadata-only report without additive savings", () => {
     const report = analyzeTokenSavingPortfolio([
       {
