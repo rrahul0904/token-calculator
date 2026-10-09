@@ -1,0 +1,65 @@
+name: OpenProfit Revenue Ledger Verify
+
+on:
+  pull_request:
+    paths:
+      - "src/db/economics-schema.ts"
+      - "src/lib/finops/economic-ledger-store.ts"
+      - "src/lib/finops/stripe-revenue.ts"
+      - "tests/economic-ledger-store.test.ts"
+      - "tests/stripe-revenue.test.ts"
+      - "tests/integration/economic-ledger.test.ts"
+      - "drizzle/0012_revenue_economics_ledger.sql"
+      - "drizzle.config.ts"
+      - ".github/workflows/openprofit-revenue-ledger.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: token_intelligence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d token_intelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
+      DATABASE_SSL: disable
+      TOKEN_INTELLIGENCE_INTEGRATION_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies without weakening repository audit policy
+        run: npm ci --no-audit --no-fund
+      - name: Repository typecheck
+        run: npm run typecheck
+      - name: Focused lint
+        run: >-
+          npx eslint src/db/economics-schema.ts src/lib/finops/economic-ledger-store.ts
+          src/lib/finops/stripe-revenue.ts tests/economic-ledger-store.test.ts
+          tests/stripe-revenue.test.ts tests/integration/economic-ledger.test.ts
+      - name: Drizzle schema check
+        run: npm run db:check
+      - name: Apply migrations
+        run: npm run db:migrate
+      - name: Durable ledger contracts
+        run: >-
+          npx vitest run tests/economic-ledger-store.test.ts tests/stripe-revenue.test.ts
+          tests/integration/economic-ledger.test.ts
