@@ -3,6 +3,7 @@
 Date: 2026-10-09
 Tracker: GitHub issue #67
 Implementation branch: `reverse/openprofit-unit-economics`
+Integration base: reconciliation PR #53, `codex/token-intelligence-reconciliation-20261001@9f918e8d2753ca07e8026c30b13005f4f176bf67` (repository CI + Security CodeQL green before this slice)
 Disposition: capability donor to Token Intelligence; **not** a standalone clone.
 
 ## 1. Source identification
