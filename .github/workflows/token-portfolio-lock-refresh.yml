@@ -34,7 +34,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Refresh bounded vulnerable dependencies in the lockfile
-        run: npm update sharp source-map-js next@16.4.0 eslint-config-next@16.4.0 --package-lock-only --ignore-scripts --no-audit --no-fund
+        run: npm update sharp source-map-js next eslint-config-next --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Refuse package manifest changes
         run: |
           if ! git diff --quiet -- package.json; then
