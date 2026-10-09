@@ -14,6 +14,9 @@ on:
       - "tests/*routing*.test.ts"
       - "tests/*optimizer*.test.ts"
       - "tests/*memory*.test.ts"
+      - "tests/*budget*.test.ts"
+      - "tests/*orchestration*.test.ts"
+      - "tests/*coverage*.test.ts"
       - "tests/*source*.test.ts"
       - "tests/*portfolio*.test.ts"
       - "tests/*evidence*.test.ts"
@@ -61,7 +64,11 @@ jobs:
           tests/structured-encoding.test.ts
           tests/semantic-cache.test.ts
           tests/context-compression.test.ts
+          tests/prompt-cache-economics.test.ts
           tests/routing-economics.test.ts
+          tests/budget-control.test.ts
+          tests/orchestration-efficiency.test.ts
+          tests/capability-coverage.test.ts
           tests/optimizer-plan.test.ts
           tests/persistent-memory.test.ts
           tests/portfolio-analysis.test.ts
