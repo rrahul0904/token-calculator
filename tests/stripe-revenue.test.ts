@@ -33,6 +33,7 @@ describe("Stripe revenue normalization", () => {
       "charge:ch_1:gross",
       "balance_transaction:txn_1:fee",
     ]);
+    expect(result.lines[0]).toMatchObject({ sourceCurrency: "usd", sourceAmountMinor: 10_000 });
     expect(result.lines[0]?.row).toMatchObject({
       role: "gross_revenue",
       amountUsd: 100,
@@ -43,6 +44,7 @@ describe("Stripe revenue normalization", () => {
       provider: "stripe",
       evidence: "provider_measured",
     });
+    expect(result.lines[1]).toMatchObject({ sourceCurrency: "usd", sourceAmountMinor: 320 });
     expect(result.lines[1]?.row).toMatchObject({ role: "processor_fee", amountUsd: 3.2 });
 
     const summary = summarizeUnitEconomics(result.lines.map((line) => line.row));
@@ -54,6 +56,8 @@ describe("Stripe revenue normalization", () => {
     const fee = result.lines.find((line) => line.row.role === "processor_fee");
 
     expect(fee?.sourceId).toBe("charge:ch_1:fee:unknown");
+    expect(fee?.sourceCurrency).toBe("usd");
+    expect(fee?.sourceAmountMinor).toBeNull();
     expect(fee?.row.amountUsd).toBeNull();
     expect(fee?.row.evidence).toBe("unknown");
 
@@ -85,7 +89,8 @@ describe("Stripe revenue normalization", () => {
       attribution,
     );
 
-    expect(result.lines.map((line) => line.sourceId)).toContain("refund:re_success");
+    const succeededRefund = result.lines.find((line) => line.sourceId === "refund:re_success");
+    expect(succeededRefund).toMatchObject({ sourceCurrency: "usd", sourceAmountMinor: 1_500 });
     expect(result.lines.map((line) => line.sourceId)).not.toContain("refund:re_pending");
     expect(result.skipped).toEqual([{ sourceId: "refund:re_pending", reason: "refund_status:pending" }]);
 
