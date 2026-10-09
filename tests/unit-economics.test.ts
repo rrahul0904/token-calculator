@@ -31,6 +31,7 @@ describe("revenue-aware unit economics", () => {
     expect(summary.knownNetRevenueUsd).toBe(90);
     expect(summary.netRevenueUsd).toBe(90);
     expect(summary.knownOperatingProfitUsd).toBe(90);
+    expect(summary.evidenceCounts.provider_measured).toBe(3);
   });
 
   it("keeps unknown monetary values unknown instead of coercing them to zero", () => {
@@ -93,6 +94,43 @@ describe("revenue-aware unit economics", () => {
     expect(grouped.map((group) => group.key)).toEqual(["customer_a", "customer_b", "unassigned"]);
     expect(grouped.find((group) => group.key === "customer_a")?.netRevenueUsd).toBe(70);
     expect(grouped.find((group) => group.key === "unassigned")?.knownOperatingCostUsd).toBe(9);
+  });
+
+  it.each([
+    ["product", "product_1"],
+    ["customer", "customer_1"],
+    ["plan", "pro"],
+    ["task", "task_1"],
+    ["provider", "openai"],
+  ] as const)("groups deterministically by %s", (dimension, expectedKey) => {
+    const grouped = groupUnitEconomics(
+      [
+        row({ role: "gross_revenue", amountUsd: 25, costPurpose: null }),
+        row({ role: "variable_cost", amountUsd: 5, costPurpose: "paid_service" }),
+      ],
+      dimension,
+    );
+
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.key).toBe(expectedKey);
+    expect(grouped[0]?.netRevenueUsd).toBe(25);
+    expect(grouped[0]?.contributionProfitUsd).toBe(20);
+  });
+
+  it("counts evidence classes without changing the economic totals", () => {
+    const summary = summarizeUnitEconomics([
+      row({ role: "gross_revenue", amountUsd: 100, costPurpose: null, evidence: "platform_recorded" }),
+      row({ role: "processor_fee", amountUsd: 3, costPurpose: null, evidence: "reconciled" }),
+      row({ role: "variable_cost", amountUsd: 20, costPurpose: "paid_service", evidence: "provider_measured" }),
+      row({ role: "fixed_cost", amountUsd: 10, costPurpose: "fixed_overhead", evidence: "user_entered" }),
+    ]);
+
+    expect(summary.evidenceCounts.platform_recorded).toBe(1);
+    expect(summary.evidenceCounts.reconciled).toBe(1);
+    expect(summary.evidenceCounts.provider_measured).toBe(1);
+    expect(summary.evidenceCounts.user_entered).toBe(1);
+    expect(summary.netRevenueUsd).toBe(97);
+    expect(summary.operatingProfitUsd).toBe(67);
   });
 
   it("rejects negative or non-finite ledger magnitudes", () => {
