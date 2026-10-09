@@ -4,17 +4,25 @@ import {
   createTokenIntelligenceMcpServer as createBaseTokenIntelligenceMcpServer,
   type McpPrincipal,
 } from "@/lib/mcp/base-server";
-import { analyzeReceiptBackedOptimizerPlan } from "@/lib/optimization/receipt-backed-optimizer-plan";
+import { evaluateBudgetControl } from "@/lib/optimization/budget-control";
+import { buildCapabilityCoverageReport } from "@/lib/optimization/capability-coverage";
+import { evaluateOrchestrationEfficiency } from "@/lib/optimization/orchestration-efficiency";
 import type {
   StoredOutcomeReceiptInput,
   StoredRunReceiptInput,
 } from "@/lib/optimization/paired-run-evidence";
+import { evaluatePromptCacheEconomics } from "@/lib/optimization/prompt-cache-economics";
+import { analyzeReceiptBackedOptimizerPlan } from "@/lib/optimization/receipt-backed-optimizer-plan";
 
 export type { McpPrincipal } from "@/lib/mcp/base-server";
 
 function text(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
+
+const evidenceTypeSchema = z.enum(["measured_before_after", "historical_observation", "modeled_estimate", "unknown"]);
+const qualityGateSchema = z.enum(["passed", "failed", "not_run"]);
+const optionalNullableNonNegative = z.number().nonnegative().nullable().optional();
 
 const optimizerComponentSchema = z.object({
   id: z.string().min(1),
@@ -36,6 +44,71 @@ const receiptBackedOptimizerPlanInput = z.object({
   qualityNonInferiorityMargin: z.number().min(0).max(1).default(0.02),
   minimumQualityScore: z.number().min(0).max(1).nullable().optional(),
   maxCostRegressionPct: z.number().min(0).max(1000).default(0),
+}).strict();
+
+const promptCacheEconomicsInput = z.object({
+  id: z.string().min(1),
+  policyVersion: z.string().nullable().optional(),
+  evidenceType: evidenceTypeSchema,
+  qualityGate: qualityGateSchema,
+  cacheAccountingGate: z.enum(["verified", "failed", "not_run"]),
+  sampleSize: z.number().int().nonnegative(),
+  baselineCostUsd: z.number().nonnegative().nullable(),
+  candidateCostUsd: z.number().nonnegative().nullable(),
+  cacheControlOverheadCostUsd: optionalNullableNonNegative,
+  fallbackCostUsd: optionalNullableNonNegative,
+  baselineLogicalTokens: optionalNullableNonNegative,
+  candidateLogicalTokens: optionalNullableNonNegative,
+  cacheReadTokens: optionalNullableNonNegative,
+  cacheWriteTokens: optionalNullableNonNegative,
+  fallbackTokens: optionalNullableNonNegative,
+  stablePrefixRate: z.number().min(0).max(1).nullable().optional(),
+  minimumStablePrefixRate: z.number().min(0).max(1).optional(),
+  evidenceSource: z.string().nullable().optional(),
+  minimumSampleSize: z.number().int().min(1).max(100).default(5),
+}).strict();
+
+const budgetControlInput = z.object({
+  id: z.string().min(1),
+  policyVersion: z.string().nullable().optional(),
+  evidenceType: evidenceTypeSchema,
+  qualityGate: qualityGateSchema,
+  enforcementGate: z.enum(["verified", "failed", "not_run"]),
+  sampleSize: z.number().int().nonnegative(),
+  budgetLimitUsd: z.number().nonnegative(),
+  baselineCostUsd: z.number().nonnegative().nullable(),
+  candidateCostUsd: z.number().nonnegative().nullable(),
+  controlPlaneOverheadCostUsd: optionalNullableNonNegative,
+  baselineSessionTokens: optionalNullableNonNegative,
+  candidateSessionTokens: optionalNullableNonNegative,
+  hardLimitBreaches: z.number().int().nonnegative().optional(),
+  policyBypasses: z.number().int().nonnegative().optional(),
+  requiredWorkDenied: z.number().int().nonnegative().optional(),
+  evidenceSource: z.string().nullable().optional(),
+  minimumSampleSize: z.number().int().min(1).max(100).default(5),
+}).strict();
+
+const orchestrationEfficiencyInput = z.object({
+  id: z.string().min(1),
+  orchestrationVersion: z.string().nullable().optional(),
+  evidenceType: evidenceTypeSchema,
+  qualityGate: qualityGateSchema,
+  provenanceGate: z.enum(["verified", "failed", "not_run"]),
+  sampleSize: z.number().int().nonnegative(),
+  baselineSessionTokens: z.number().nonnegative().nullable(),
+  candidateWorkerTokens: z.number().nonnegative().nullable(),
+  coordinatorTokens: optionalNullableNonNegative,
+  handoffTokens: optionalNullableNonNegative,
+  retryTokens: optionalNullableNonNegative,
+  fallbackTokens: optionalNullableNonNegative,
+  baselineCostUsd: optionalNullableNonNegative,
+  candidateWorkerCostUsd: optionalNullableNonNegative,
+  coordinatorCostUsd: optionalNullableNonNegative,
+  fallbackCostUsd: optionalNullableNonNegative,
+  observedMaxFanout: z.number().int().nonnegative().optional(),
+  maxAllowedFanout: z.number().int().positive().optional(),
+  evidenceSource: z.string().nullable().optional(),
+  minimumSampleSize: z.number().int().min(1).max(100).default(5),
 }).strict();
 
 type RunDetail = NonNullable<Awaited<ReturnType<typeof getRunDetail>>>;
@@ -129,6 +202,42 @@ export function createTokenIntelligenceMcpServer(principal: McpPrincipal) {
         maxCostRegressionPct,
       }));
     },
+  );
+
+  server.registerTool(
+    "analyze_prompt_cache_economics",
+    {
+      description: "Evaluate provider prompt-cache economics from metadata-only evidence. Cache accounting must be authoritative; cache savings are cost-only and never promoted to raw token savings.",
+      inputSchema: promptCacheEconomicsInput,
+    },
+    async ({ minimumSampleSize, ...candidate }) => text(evaluatePromptCacheEconomics(candidate, { minimumSampleSize })),
+  );
+
+  server.registerTool(
+    "analyze_budget_control",
+    {
+      description: "Evaluate hard budget/control-plane economics. Policy bypasses, hard-limit breaches, denied required work and unverified enforcement fail closed; successful results remain cost-only.",
+      inputSchema: budgetControlInput,
+    },
+    async ({ minimumSampleSize, ...candidate }) => text(evaluateBudgetControl(candidate, { minimumSampleSize })),
+  );
+
+  server.registerTool(
+    "analyze_orchestration_efficiency",
+    {
+      description: "Evaluate agent/delegation token efficiency while charging coordinator, handoff, retry and fallback overhead. Bounded fanout, authoritative provenance and outcome parity are mandatory.",
+      inputSchema: orchestrationEfficiencyInput,
+    },
+    async ({ minimumSampleSize, ...candidate }) => text(evaluateOrchestrationEfficiency(candidate, { minimumSampleSize })),
+  );
+
+  server.registerTool(
+    "get_token_saving_capability_coverage",
+    {
+      description: "Return the clean-room coverage map from every enrolled token-saving donor to the owned Token Intelligence evaluator family. Coverage does not imply donor-specific evidence verification.",
+      inputSchema: z.object({}).strict(),
+    },
+    async () => text(buildCapabilityCoverageReport()),
   );
 
   return server;
