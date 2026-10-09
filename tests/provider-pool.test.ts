@@ -7,6 +7,12 @@ import {
 } from "@/lib/gateway/provider-pool";
 
 const NOW = Date.parse("2026-10-09T21:00:00Z");
+const TRUSTED_QUOTA_SOURCES = {
+  rpm: "configured",
+  rpd: "configured",
+  tpm: "configured",
+  tpd: "configured",
+} as const;
 
 function candidate(overrides: Partial<ProviderRouteCandidate> = {}): ProviderRouteCandidate {
   return {
@@ -24,9 +30,12 @@ function candidate(overrides: Partial<ProviderRouteCandidate> = {}): ProviderRou
       structured_output: "supported",
       vision: "unsupported",
     },
+    catalogStatus: "active",
     health: {
       snapshotId: "health-1",
       status: "healthy",
+      observedAtEpochMs: NOW - 1_000,
+      maxAgeMs: 60_000,
       cooldownUntil: null,
     },
     quota: {
@@ -34,6 +43,7 @@ function candidate(overrides: Partial<ProviderRouteCandidate> = {}): ProviderRou
       enforcement: "required",
       limits: { rpm: 60, rpd: 10_000, tpm: 100_000, tpd: 5_000_000 },
       used: { rpm: 0, rpd: 0, tpm: 0, tpd: 0 },
+      sourceByMetric: TRUSTED_QUOTA_SOURCES,
     },
     catalogSnapshotId: "catalog-1",
     ...overrides,
@@ -69,6 +79,7 @@ describe("provider pool routing", () => {
         enforcement: "required",
         limits: { rpm: 100, rpd: 10_000, tpm: 100_000, tpd: 5_000_000 },
         used: { rpm: 10, rpd: 100, tpm: 10_000, tpd: 100_000 },
+        sourceByMetric: TRUSTED_QUOTA_SOURCES,
       },
     });
     const highPressure = candidate({
@@ -80,6 +91,7 @@ describe("provider pool routing", () => {
         enforcement: "required",
         limits: { rpm: 100, rpd: 10_000, tpm: 100_000, tpd: 5_000_000 },
         used: { rpm: 80, rpd: 8_000, tpm: 80_000, tpd: 4_000_000 },
+        sourceByMetric: TRUSTED_QUOTA_SOURCES,
       },
     });
 
@@ -108,12 +120,31 @@ describe("provider pool routing", () => {
     expect(codes(decision, "pc_unknown")).toContain("CAPABILITY_UNKNOWN");
   });
 
+  it("expires stale healthy state instead of preserving healthy forever", () => {
+    const stale = candidate({
+      providerConnectionId: "pc_stale",
+      health: {
+        snapshotId: "health-stale",
+        status: "healthy",
+        observedAtEpochMs: NOW - 61_000,
+        maxAgeMs: 60_000,
+      },
+    });
+
+    const decision = selectProviderRoute([stale], request());
+
+    expect(decision.selected).toBeNull();
+    expect(codes(decision, "pc_stale")).toContain("HEALTH_STALE");
+  });
+
   it("skips active cooldowns and requires an explicit probe after expiry", () => {
     const active = candidate({
       providerConnectionId: "pc_active_cooldown",
       health: {
         snapshotId: "health-active",
         status: "cooling_down",
+        observedAtEpochMs: NOW - 1_000,
+        maxAgeMs: 60_000,
         cooldownUntil: new Date(NOW + 60_000).toISOString(),
       },
     });
@@ -122,6 +153,8 @@ describe("provider pool routing", () => {
       health: {
         snapshotId: "health-expired",
         status: "cooling_down",
+        observedAtEpochMs: NOW - 1_000,
+        maxAgeMs: 60_000,
         cooldownUntil: new Date(NOW - 1).toISOString(),
       },
     });
@@ -136,6 +169,17 @@ describe("provider pool routing", () => {
     expect(probe.selected?.probeRequired).toBe(true);
   });
 
+  it("never routes a retired or unknown catalog model", () => {
+    const retired = candidate({ providerConnectionId: "pc_retired", catalogStatus: "retired" });
+    const unknown = candidate({ providerConnectionId: "pc_catalog_unknown", catalogStatus: "unknown" });
+
+    const decision = selectProviderRoute([retired, unknown], request());
+
+    expect(decision.selected).toBeNull();
+    expect(codes(decision, "pc_retired")).toContain("CATALOG_RETIRED");
+    expect(codes(decision, "pc_catalog_unknown")).toContain("CATALOG_STATUS_UNKNOWN");
+  });
+
   it("excludes exhausted provider quota before dispatch", () => {
     const exhausted = candidate({
       providerConnectionId: "pc_exhausted",
@@ -144,6 +188,7 @@ describe("provider pool routing", () => {
         enforcement: "required",
         limits: { rpm: 60, rpd: 10_000, tpm: 1_200, tpd: 5_000_000 },
         used: { rpm: 0, rpd: 0, tpm: 200, tpd: 0 },
+        sourceByMetric: TRUSTED_QUOTA_SOURCES,
       },
     });
 
@@ -161,6 +206,7 @@ describe("provider pool routing", () => {
         enforcement: "required",
         limits: { rpm: 60, rpd: null, tpm: 100_000, tpd: 5_000_000 },
         used: { rpm: 0, rpd: null, tpm: 0, tpd: 0 },
+        sourceByMetric: TRUSTED_QUOTA_SOURCES,
       },
     });
 
@@ -168,6 +214,24 @@ describe("provider pool routing", () => {
 
     expect(decision.selected).toBeNull();
     expect(codes(decision, "pc_quota_unknown")).toContain("QUOTA_UNKNOWN");
+  });
+
+  it("does not treat inferred quota labels as authoritative headroom", () => {
+    const inferred = candidate({
+      providerConnectionId: "pc_inferred_quota",
+      quota: {
+        snapshotId: "quota-inferred",
+        enforcement: "required",
+        limits: { rpm: 60, rpd: 10_000, tpm: 100_000, tpd: 5_000_000 },
+        used: { rpm: 0, rpd: 0, tpm: 0, tpd: 0 },
+        sourceByMetric: { rpm: "configured", rpd: "configured", tpm: "inferred", tpd: "inferred" },
+      },
+    });
+
+    const decision = selectProviderRoute([inferred], request());
+
+    expect(decision.selected).toBeNull();
+    expect(codes(decision, "pc_inferred_quota")).toContain("QUOTA_PROVENANCE_UNTRUSTED");
   });
 
   it("keeps cross-tenant and policy-denied connections out of failover", () => {
@@ -213,17 +277,34 @@ describe("provider failure classification", () => {
         failureClass: "auth_or_permission",
         retryable: false,
         healthMutation: "unavailable",
+        catalogMutation: "none",
         cooldownMs: null,
+        qualitySampleEligible: false,
       });
     }
   });
 
-  it("turns 429 into bounded cooldown feedback", () => {
+  it("turns 404/410 into catalog retirement signals without poisoning provider quality", () => {
+    for (const statusCode of [404, 410]) {
+      expect(classifyProviderFailure({ statusCode })).toEqual({
+        failureClass: "model_unavailable",
+        retryable: false,
+        healthMutation: "none",
+        catalogMutation: "retirement_signal",
+        cooldownMs: null,
+        qualitySampleEligible: false,
+      });
+    }
+  });
+
+  it("turns 429 into bounded cooldown feedback without treating it as model quality", () => {
     expect(classifyProviderFailure({ statusCode: 429, retryAfterMs: 45_000 })).toEqual({
       failureClass: "rate_limited",
       retryable: true,
       healthMutation: "cooldown",
+      catalogMutation: "none",
       cooldownMs: 45_000,
+      qualitySampleEligible: false,
     });
 
     expect(classifyProviderFailure({ statusCode: 429, retryAfterMs: 60 * 60_000 }).cooldownMs).toBe(15 * 60_000);
