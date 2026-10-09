@@ -12,6 +12,14 @@ export type ProviderHealthStatus = "healthy" | "degraded" | "cooling_down" | "un
 export type ProviderConnectionStatus = "verified" | "unverified" | "disabled";
 export type ProviderQuotaEnforcement = "required" | "advisory" | "disabled";
 export type ProviderQuotaMetric = "rpm" | "rpd" | "tpm" | "tpd";
+export type ProviderQuotaObservationSource =
+  | "provider_api"
+  | "response_headers"
+  | "error_signal"
+  | "configured"
+  | "inferred"
+  | "unknown";
+export type ProviderCatalogStatus = "active" | "retired" | "unknown";
 
 export type RouteExclusionReasonCode =
   | "TENANT_MISMATCH"
@@ -20,12 +28,16 @@ export type RouteExclusionReasonCode =
   | "EXACT_ROUTE_MISMATCH"
   | "CAPABILITY_UNSUPPORTED"
   | "CAPABILITY_UNKNOWN"
+  | "CATALOG_RETIRED"
+  | "CATALOG_STATUS_UNKNOWN"
   | "HEALTH_COOLING_DOWN"
   | "HEALTH_PROBE_REQUIRED"
+  | "HEALTH_STALE"
   | "HEALTH_UNAVAILABLE"
   | "HEALTH_UNKNOWN"
   | "QUOTA_EXHAUSTED"
-  | "QUOTA_UNKNOWN";
+  | "QUOTA_UNKNOWN"
+  | "QUOTA_PROVENANCE_UNTRUSTED";
 
 export interface RouteExclusionReason {
   code: RouteExclusionReasonCode;
@@ -36,6 +48,8 @@ export interface RouteExclusionReason {
 export interface ProviderHealthSnapshot {
   snapshotId: string;
   status: ProviderHealthStatus;
+  observedAtEpochMs: number | null;
+  maxAgeMs: number | null;
   cooldownUntil?: string | null;
 }
 
@@ -44,6 +58,7 @@ export interface ProviderQuotaSnapshot {
   enforcement: ProviderQuotaEnforcement;
   limits: Partial<Record<ProviderQuotaMetric, number | null>>;
   used: Partial<Record<ProviderQuotaMetric, number | null>>;
+  sourceByMetric: Partial<Record<ProviderQuotaMetric, ProviderQuotaObservationSource>>;
 }
 
 export interface ProviderRouteCandidate {
@@ -55,6 +70,7 @@ export interface ProviderRouteCandidate {
   policyAllowed: boolean;
   priority: number;
   capabilities: Partial<Record<GatewayCapability, CapabilitySupport>>;
+  catalogStatus: ProviderCatalogStatus;
   health: ProviderHealthSnapshot;
   quota: ProviderQuotaSnapshot;
   catalogSnapshotId: string;
@@ -107,9 +123,19 @@ export interface ProviderRouteDecision {
 }
 
 const QUOTA_METRICS: readonly ProviderQuotaMetric[] = ["rpm", "rpd", "tpm", "tpd"];
+const TRUSTED_QUOTA_SOURCES = new Set<ProviderQuotaObservationSource>([
+  "provider_api",
+  "response_headers",
+  "error_signal",
+  "configured",
+]);
 
 function finiteNonNegative(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function positiveFinite(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function candidateRef(candidate: ProviderRouteCandidate): ProviderRouteCandidateRef {
@@ -137,10 +163,21 @@ function quotaPressure(candidate: ProviderRouteCandidate): number | null {
   for (const metric of QUOTA_METRICS) {
     const limit = candidate.quota.limits[metric];
     const used = candidate.quota.used[metric];
+    const source = candidate.quota.sourceByMetric[metric] ?? "unknown";
+    if (!TRUSTED_QUOTA_SOURCES.has(source)) continue;
     if (!finiteNonNegative(limit) || limit === 0 || !finiteNonNegative(used)) continue;
     pressures.push(used / limit);
   }
   return pressures.length ? Math.max(...pressures) : null;
+}
+
+function healthIsFresh(candidate: ProviderRouteCandidate, request: ProviderRouteRequest): boolean {
+  const observedAt = candidate.health.observedAtEpochMs;
+  const maxAge = candidate.health.maxAgeMs;
+  return finiteNonNegative(observedAt)
+    && positiveFinite(maxAge)
+    && request.nowEpochMs >= observedAt
+    && request.nowEpochMs - observedAt <= maxAge;
 }
 
 function healthReasons(
@@ -150,7 +187,9 @@ function healthReasons(
   switch (candidate.health.status) {
     case "healthy":
     case "degraded":
-      return { reasons: [], probeRequired: false };
+      return healthIsFresh(candidate, request)
+        ? { reasons: [], probeRequired: false }
+        : { reasons: [{ code: "HEALTH_STALE" }], probeRequired: true };
     case "unavailable":
       return { reasons: [{ code: "HEALTH_UNAVAILABLE" }], probeRequired: false };
     case "unknown":
@@ -181,6 +220,12 @@ function capabilityReasons(candidate: ProviderRouteCandidate, request: ProviderR
   return reasons;
 }
 
+function catalogReasons(candidate: ProviderRouteCandidate): RouteExclusionReason[] {
+  if (candidate.catalogStatus === "retired") return [{ code: "CATALOG_RETIRED" }];
+  if (candidate.catalogStatus !== "active") return [{ code: "CATALOG_STATUS_UNKNOWN" }];
+  return [];
+}
+
 function quotaReasons(candidate: ProviderRouteCandidate, request: ProviderRouteRequest): RouteExclusionReason[] {
   if (candidate.quota.enforcement === "disabled") return [];
   const needed = requiredQuota(request);
@@ -189,6 +234,14 @@ function quotaReasons(candidate: ProviderRouteCandidate, request: ProviderRouteR
   for (const metric of QUOTA_METRICS) {
     const limit = candidate.quota.limits[metric];
     const used = candidate.quota.used[metric];
+    const source = candidate.quota.sourceByMetric[metric] ?? "unknown";
+
+    if (!TRUSTED_QUOTA_SOURCES.has(source)) {
+      if (candidate.quota.enforcement === "required") {
+        reasons.push({ code: "QUOTA_PROVENANCE_UNTRUSTED", quotaMetric: metric });
+      }
+      continue;
+    }
     if (!finiteNonNegative(limit) || !finiteNonNegative(used)) {
       if (candidate.quota.enforcement === "required") {
         reasons.push({ code: "QUOTA_UNKNOWN", quotaMetric: metric });
@@ -223,6 +276,7 @@ function evaluateCandidate(candidate: ProviderRouteCandidate, request: ProviderR
   }
 
   reasons.push(...capabilityReasons(candidate, request));
+  reasons.push(...catalogReasons(candidate));
   const health = healthReasons(candidate, request);
   reasons.push(...health.reasons);
   reasons.push(...quotaReasons(candidate, request));
@@ -300,6 +354,7 @@ export function selectProviderRoute(
 export type ProviderFailureClass =
   | "auth_or_permission"
   | "rate_limited"
+  | "model_unavailable"
   | "upstream_5xx"
   | "timeout"
   | "network_error"
@@ -309,7 +364,9 @@ export interface ProviderFailureDisposition {
   failureClass: ProviderFailureClass;
   retryable: boolean;
   healthMutation: "none" | "cooldown" | "unavailable";
+  catalogMutation: "none" | "retirement_signal";
   cooldownMs: number | null;
+  qualitySampleEligible: false;
 }
 
 const MIN_COOLDOWN_MS = 1_000;
@@ -332,7 +389,9 @@ export function classifyProviderFailure(input: {
       failureClass: "timeout",
       retryable: true,
       healthMutation: "cooldown",
+      catalogMutation: "none",
       cooldownMs: boundedCooldown(input.retryAfterMs, DEFAULT_TRANSIENT_COOLDOWN_MS),
+      qualitySampleEligible: false,
     };
   }
   if (input.kind === "network") {
@@ -340,7 +399,9 @@ export function classifyProviderFailure(input: {
       failureClass: "network_error",
       retryable: true,
       healthMutation: "cooldown",
+      catalogMutation: "none",
       cooldownMs: boundedCooldown(input.retryAfterMs, DEFAULT_TRANSIENT_COOLDOWN_MS),
+      qualitySampleEligible: false,
     };
   }
 
@@ -350,7 +411,19 @@ export function classifyProviderFailure(input: {
       failureClass: "auth_or_permission",
       retryable: false,
       healthMutation: "unavailable",
+      catalogMutation: "none",
       cooldownMs: null,
+      qualitySampleEligible: false,
+    };
+  }
+  if (status === 404 || status === 410) {
+    return {
+      failureClass: "model_unavailable",
+      retryable: false,
+      healthMutation: "none",
+      catalogMutation: "retirement_signal",
+      cooldownMs: null,
+      qualitySampleEligible: false,
     };
   }
   if (status === 429) {
@@ -358,7 +431,9 @@ export function classifyProviderFailure(input: {
       failureClass: "rate_limited",
       retryable: true,
       healthMutation: "cooldown",
+      catalogMutation: "none",
       cooldownMs: boundedCooldown(input.retryAfterMs, DEFAULT_RATE_LIMIT_COOLDOWN_MS),
+      qualitySampleEligible: false,
     };
   }
   if (status >= 500 && status <= 599) {
@@ -366,13 +441,17 @@ export function classifyProviderFailure(input: {
       failureClass: "upstream_5xx",
       retryable: true,
       healthMutation: "cooldown",
+      catalogMutation: "none",
       cooldownMs: boundedCooldown(input.retryAfterMs, DEFAULT_TRANSIENT_COOLDOWN_MS),
+      qualitySampleEligible: false,
     };
   }
   return {
     failureClass: "non_retryable_http",
     retryable: false,
     healthMutation: "none",
+    catalogMutation: "none",
     cooldownMs: null,
+    qualitySampleEligible: false,
   };
 }
