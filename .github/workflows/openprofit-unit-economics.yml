@@ -1,0 +1,36 @@
+name: OpenProfit Unit Economics Verify
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/finops/unit-economics.ts"
+      - "src/lib/finops/stripe-revenue.ts"
+      - "tests/unit-economics.test.ts"
+      - "tests/stripe-revenue.test.ts"
+      - "tests/finops.test.ts"
+      - "docs/OPENPROFIT_UNIT_ECONOMICS_REVERSE_ENGINEERING.md"
+      - ".github/workflows/openprofit-unit-economics.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies without weakening repository audit policy
+        run: npm ci --no-audit --no-fund
+      - name: Repository typecheck
+        run: npm run typecheck
+      - name: Focused lint
+        run: npx eslint src/lib/finops/unit-economics.ts src/lib/finops/stripe-revenue.ts tests/unit-economics.test.ts tests/stripe-revenue.test.ts
+      - name: FinOps and unit-economics contracts
+        run: npx vitest run tests/finops.test.ts tests/unit-economics.test.ts tests/stripe-revenue.test.ts
