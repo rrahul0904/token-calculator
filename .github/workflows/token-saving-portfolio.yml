@@ -1,0 +1,79 @@
+name: Token-saving portfolio contracts
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/optimization/**"
+      - "src/lib/mcp/server.ts"
+      - "tests/*optimization*.test.ts"
+      - "tests/*reduction*.test.ts"
+      - "tests/*context*.test.ts"
+      - "tests/*density*.test.ts"
+      - "tests/*cache*.test.ts"
+      - "tests/*encoding*.test.ts"
+      - "tests/*routing*.test.ts"
+      - "tests/*optimizer*.test.ts"
+      - "tests/*memory*.test.ts"
+      - "tests/*budget*.test.ts"
+      - "tests/*orchestration*.test.ts"
+      - "tests/*coverage*.test.ts"
+      - "tests/*source*.test.ts"
+      - "tests/*portfolio*.test.ts"
+      - "tests/*evidence*.test.ts"
+      - "tests/*recommendations*.test.ts"
+      - "tests/*lifecycle*.test.ts"
+      - "tests/*adapter*.test.ts"
+      - "tests/reverse-engineering-agents.test.ts"
+      - "tests/mcp.test.ts"
+      - "docs/reverse-engineering/**"
+      - ".github/workflows/token-saving-portfolio.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: token-saving-portfolio-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies without mutating the lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Token-saving portfolio contract tests
+        run: >-
+          npx vitest run
+          tests/token-saving-portfolio.test.ts
+          tests/source-evidence.test.ts
+          tests/source-identification-backlog.test.ts
+          tests/output-reduction.test.ts
+          tests/repository-context.test.ts
+          tests/response-density-policy.test.ts
+          tests/reverse-engineering-agents.test.ts
+          tests/structured-encoding.test.ts
+          tests/semantic-cache.test.ts
+          tests/context-compression.test.ts
+          tests/prompt-cache-economics.test.ts
+          tests/routing-economics.test.ts
+          tests/budget-control.test.ts
+          tests/orchestration-efficiency.test.ts
+          tests/capability-coverage.test.ts
+          tests/optimizer-plan.test.ts
+          tests/persistent-memory.test.ts
+          tests/portfolio-analysis.test.ts
+          tests/paired-run-evidence.test.ts
+          tests/experiment-recommendations.test.ts
+          tests/portfolio-lifecycle.test.ts
+          tests/experiment-result-adapter.test.ts
+          tests/mcp.test.ts
