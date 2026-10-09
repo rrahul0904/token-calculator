@@ -1,4 +1,8 @@
 import {
+  evaluateBudgetControl,
+  type BudgetControlCandidate,
+} from "./budget-control";
+import {
   evaluateContextCompression,
   type ContextCompressionCandidate,
 } from "./context-compression";
@@ -7,6 +11,10 @@ import {
   type OptimizerPlanCandidate,
 } from "./optimizer-plan";
 import {
+  evaluateOrchestrationEfficiency,
+  type OrchestrationEfficiencyCandidate,
+} from "./orchestration-efficiency";
+import {
   evaluateOutputReduction,
   type OutputReductionCandidate,
 } from "./output-reduction";
@@ -14,6 +22,10 @@ import {
   evaluatePersistentMemory,
   type PersistentMemoryCandidate,
 } from "./persistent-memory";
+import {
+  evaluatePromptCacheEconomics,
+  type PromptCacheEconomicsCandidate,
+} from "./prompt-cache-economics";
 import {
   evaluateRepositoryContext,
   type RepositoryContextCandidate,
@@ -42,8 +54,11 @@ export type TokenSavingAnalysisRequest =
   | { kind: "structured_encoding"; candidate: StructuredEncodingCandidate }
   | { kind: "semantic_cache"; candidate: SemanticCacheCandidate }
   | { kind: "context_compression"; candidate: ContextCompressionCandidate }
+  | { kind: "prompt_cache_economics"; candidate: PromptCacheEconomicsCandidate }
   | { kind: "routing_economics"; candidate: RoutingEconomicsCandidate }
+  | { kind: "budget_control"; candidate: BudgetControlCandidate }
   | { kind: "persistent_memory"; candidate: PersistentMemoryCandidate }
+  | { kind: "orchestration_efficiency"; candidate: OrchestrationEfficiencyCandidate }
   | { kind: "optimizer_plan"; candidate: OptimizerPlanCandidate };
 
 export type TokenSavingAnalysisKind = TokenSavingAnalysisRequest["kind"];
@@ -79,11 +94,17 @@ export interface TokenSavingPortfolioAnalysisReport {
   decisions: NormalizedPortfolioDecision[];
 }
 
+function isCostOnlyKind(kind: TokenSavingAnalysisKind): boolean {
+  return kind === "routing_economics"
+    || kind === "prompt_cache_economics"
+    || kind === "budget_control";
+}
+
 function normalize(
   kind: TokenSavingAnalysisKind,
   result: Record<string, unknown>,
 ): NormalizedPortfolioDecision {
-  const costOnly = kind === "routing_economics";
+  const costOnly = isCostOnlyKind(kind);
   const claimable = costOnly
     ? result.costSavingsClaimable === true
     : kind === "optimizer_plan"
@@ -120,7 +141,8 @@ function asNullableNumber(value: unknown): number | null {
  * Provider-neutral entry point for the Token Intelligence optimization
  * portfolio. Agents can submit one metadata-only candidate without knowing the
  * underlying evaluator implementation. The facade never adds component savings
- * together and preserves the routing distinction between cost and token claims.
+ * together and preserves cost-only boundaries for routing, prompt caching and
+ * budget controls.
  */
 export function analyzeTokenSavingCandidate(
   request: TokenSavingAnalysisRequest,
@@ -141,10 +163,16 @@ export function analyzeTokenSavingCandidate(
       return normalize(request.kind, evaluateSemanticCache(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
     case "context_compression":
       return normalize(request.kind, evaluateContextCompression(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
+    case "prompt_cache_economics":
+      return normalize(request.kind, evaluatePromptCacheEconomics(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
     case "routing_economics":
       return normalize(request.kind, evaluateRoutingEconomics(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
+    case "budget_control":
+      return normalize(request.kind, evaluateBudgetControl(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
     case "persistent_memory":
       return normalize(request.kind, evaluatePersistentMemory(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
+    case "orchestration_efficiency":
+      return normalize(request.kind, evaluateOrchestrationEfficiency(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
     case "optimizer_plan":
       return normalize(request.kind, evaluateOptimizerPlan(request.candidate, { minimumSampleSize }) as unknown as Record<string, unknown>);
   }
