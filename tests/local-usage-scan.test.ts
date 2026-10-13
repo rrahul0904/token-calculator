@@ -73,6 +73,14 @@ describe("local multi-session usage scan", () => {
       sessionsWithKnownCost: 0,
       sessionsWithoutKnownCost: 2,
     });
+    expect(report.sessionMetricReceipts).toHaveLength(2);
+    expect(report.sessionMetricReceipts.every((receipt) =>
+      receipt.privacy.retention === "metadata_only" &&
+      receipt.privacy.automaticUpload === false &&
+      receipt.costs.completeTotalUsd === null &&
+      receipt.costs.coverage === "none",
+    )).toBe(true);
+    expect(JSON.stringify(report.sessionMetricReceipts)).not.toContain(root);
     expect(report.overall.opportunity.additiveSavingsClaimed).toBe(false);
     expect(report.overall.findings.find((finding) => finding.ruleId === "reasoning-review-candidate")).toMatchObject({
       occurrences: 2,
@@ -140,6 +148,9 @@ describe("local multi-session usage scan", () => {
     expect(report.collector).toBe("codex");
     expect(report.overall.sessions).toBe(1);
     expect(report.discovery.filesDiscovered).toBe(1);
+    expect(report.sessionMetricReceipts).toHaveLength(1);
+    expect(report.sessionMetricReceipts[0].sessionRef).toMatch(/^session_[a-f0-9]{32}$/);
+    expect(report.sessionMetricReceipts[0].privacy.instructionPolicyActivated).toBe(false);
     expect(report.privacy.networkRequestsRequired).toBe(false);
     expect(report.overall.findings.some((finding) => finding.ruleId === "reasoning-review-candidate")).toBe(true);
   });

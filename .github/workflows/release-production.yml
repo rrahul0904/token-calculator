@@ -56,6 +56,15 @@ jobs:
           ref: ${{ inputs.sha }}
           fetch-depth: 0
 
+      - name: Require certified SHA to be merged into main
+        shell: bash
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$TARGET_SHA" refs/remotes/origin/main || {
+            echo "Production can only stage a SHA that is already present on main."
+            exit 2
+          }
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -71,7 +80,24 @@ jobs:
           run-id: ${{ inputs.preview_run_id }}
 
       - name: Verify certified manifest
-        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="$TARGET_SHA" --status=preview_certified
+        env:
+          PREVIEW_RUN_ID: ${{ inputs.preview_run_id }}
+        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="$TARGET_SHA" --status=preview_certified --run-id="$PREVIEW_RUN_ID"
+
+      - name: Verify originating Preview workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_RUN_ID: ${{ inputs.preview_run_id }}
+        shell: bash
+        run: |
+          RUN_METADATA="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PREVIEW_RUN_ID" --jq '[.path, .name, .event, .conclusion, .head_branch] | @tsv')"
+          IFS=$'\t' read -r RUN_PATH RUN_NAME RUN_EVENT RUN_CONCLUSION RUN_BRANCH <<< "$RUN_METADATA"
+          test "$RUN_PATH" = ".github/workflows/release-preview.yml" || { echo "Manifest run is not Release Preview"; exit 2; }
+          test "$RUN_NAME" = "Release Preview" || { echo "Unexpected Preview workflow name"; exit 2; }
+          [[ "$RUN_EVENT" == "push" || "$RUN_EVENT" == "workflow_dispatch" ]] || { echo "Unexpected Preview trigger"; exit 2; }
+          test "$RUN_CONCLUSION" = "success" || { echo "Preview workflow run did not succeed"; exit 2; }
+          MANIFEST_BRANCH="$(node -e 'const m=require("./release-evidence/release-manifest.json"); process.stdout.write(m.gitBranch||"")')"
+          test "$RUN_BRANCH" = "$MANIFEST_BRANCH" || { echo "Manifest source branch differs from Preview workflow ref"; exit 2; }
 
       - name: Read certified Preview URL
         id: manifest
@@ -290,11 +316,22 @@ jobs:
             exit 2
           fi
 
+      - name: Read source branch from certified Preview manifest
+        id: source_branch
+        shell: bash
+        run: |
+          SOURCE_BRANCH="$(node -e 'const m=require("./release-evidence/release-manifest.json"); process.stdout.write(m.gitBranch||"")')"
+          test -n "$SOURCE_BRANCH" || { echo "Preview manifest has no source branch"; exit 2; }
+          git check-ref-format --branch "$SOURCE_BRANCH"
+          echo "name=$SOURCE_BRANCH" >> "$GITHUB_OUTPUT"
+
       - name: Write Production certification manifest
+        env:
+          SOURCE_BRANCH: ${{ steps.source_branch.outputs.name }}
         run: >
           npm run release:manifest --
           --sha="$TARGET_SHA"
-          --branch="release-candidate-full-site"
+          --branch="$SOURCE_BRANCH"
           --run-id="${{ github.run_id }}"
           --deployment-id="${{ steps.production_identity.outputs.deployment_id }}"
           --preview-url="${{ steps.manifest.outputs.preview_url }}"

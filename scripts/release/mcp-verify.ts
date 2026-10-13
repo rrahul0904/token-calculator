@@ -14,7 +14,7 @@ function clean(value: string) {
 }
 
 const baseUrl = clean(argument("base-url") ?? process.env.APP_BASE_URL ?? "");
-const resource = clean(process.env.MCP_RESOURCE_URI ?? "");
+const resource = clean(argument("resource-uri") ?? process.env.MCP_RESOURCE_URI ?? "");
 const issuerRaw = process.env.WORKOS_AUTHKIT_DOMAIN?.trim() ?? "";
 const issuer = issuerRaw ? clean(issuerRaw.includes("://") ? issuerRaw : `https://${issuerRaw}`) : "";
 const strict = process.argv.includes("--require");

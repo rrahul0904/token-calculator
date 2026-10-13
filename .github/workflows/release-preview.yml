@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: "Exact 40-character Git SHA to deploy; defaults to the workflow commit"
+        description: "Exact 40-character SHA reachable from the dispatch branch; defaults to the workflow commit"
         required: false
         type: string
 
@@ -66,6 +66,7 @@ jobs:
     timeout-minutes: 50
     env:
       TARGET_SHA: ${{ needs.preflight.outputs.sha }}
+      SOURCE_REF: ${{ github.ref_name }}
       VERCEL_ORG_ID: team_zmEezpOKGZy2sH5nqTfO44LD
       VERCEL_PROJECT_ID: prj_ADoR3dW8VcpJOaQcagZXOpioyM7l
       WORKOS_STAGING_WEBHOOK_ENDPOINT_ID: we_01M22710048TQRMA6YQSX3HEGW
@@ -105,6 +106,9 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
           test -z "$(git status --porcelain)"
+          git check-ref-format "refs/remotes/origin/$SOURCE_REF"
+          git show-ref --verify --quiet "refs/remotes/origin/$SOURCE_REF"
+          git merge-base --is-ancestor "$TARGET_SHA" "refs/remotes/origin/$SOURCE_REF"
 
       - name: Full-history secret scan
         run: >-
@@ -252,6 +256,7 @@ jobs:
           npx --yes vercel@59.11.7 env run -e preview --token="${{ secrets.VERCEL_TOKEN }}" --
           npm run mcp:verify --
           --base-url="${{ steps.deploy.outputs.url }}"
+          --resource-uri="${{ steps.deploy.outputs.url }}/mcp"
           --require
 
       - name: Read deployment identity
@@ -291,7 +296,7 @@ jobs:
         run: >
           npm run release:manifest --
           --sha="$TARGET_SHA"
-          --branch="release-candidate-full-site"
+          --branch="$SOURCE_REF"
           --run-id="${{ github.run_id }}"
           --deployment-id="${{ steps.identity.outputs.deployment_id }}"
           --preview-url="${{ steps.deploy.outputs.url }}"

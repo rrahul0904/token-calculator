@@ -4,6 +4,22 @@ const e2eSecret = process.env.TOKEN_INTELLIGENCE_E2E_AUTH_SECRET;
 const authenticated = Boolean(e2eSecret && process.env.TOKEN_INTELLIGENCE_E2E_AUTH_ENABLED === "1");
 const authHeaders: Record<string, string> = e2eSecret ? { "x-ti-e2e-auth": e2eSecret } : {};
 
+async function openPublicNavigationIfNeeded(page: import("@playwright/test").Page) {
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width <= 1000) {
+    const toggle = page.getByRole("button", { name: "Open public navigation" });
+    if (await toggle.isVisible()) await toggle.click();
+  }
+}
+
+async function openWorkspaceNavigationIfNeeded(page: import("@playwright/test").Page) {
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width <= 860) {
+    const toggle = page.getByRole("button", { name: "Open navigation" });
+    if (await toggle.isVisible()) await toggle.click();
+  }
+}
+
 test("new visitor can calculate locally and discover the core product surfaces", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
 
@@ -12,14 +28,17 @@ test("new visitor can calculate locally and discover the core product surfaces",
   );
   await expect(page.locator(".summary-number strong")).not.toHaveText("0", { timeout: 10_000 });
 
+  await openPublicNavigationIfNeeded(page);
   await page.getByRole("link", { name: "Cost Lab", exact: true }).first().click();
   await expect(page).toHaveURL(/\/tools\/cost/);
   await expect(page.locator("main")).toBeVisible();
 
+  await openPublicNavigationIfNeeded(page);
   await page.getByRole("link", { name: "Models", exact: true }).click();
   await expect(page).toHaveURL(/\/models$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(/model/i);
 
+  await openPublicNavigationIfNeeded(page);
   await page.getByRole("link", { name: "Developers", exact: true }).click();
   await expect(page).toHaveURL(/\/developers$/);
   await expect(page.locator("body")).toContainText(/API|SDK|developer/i);
@@ -51,14 +70,17 @@ test.describe("owner acceptance journey", () => {
     await page.goto("/app/overview", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
+    await openWorkspaceNavigationIfNeeded(page);
     await page.getByRole("link", { name: "Route Lab", exact: true }).click();
     await expect(page).toHaveURL(/\/app\/route-lab$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Route Lab/i);
 
+    await openWorkspaceNavigationIfNeeded(page);
     await page.getByRole("link", { name: "Experiments", exact: true }).click();
     await expect(page).toHaveURL(/\/app\/experiments$/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/Experiments/i);
 
+    await openWorkspaceNavigationIfNeeded(page);
     await page.getByRole("link", { name: "Budgets & policies", exact: true }).click();
     await expect(page).toHaveURL(/\/app\/budgets$/);
     await expect(page.getByRole("heading", { name: "Create policy" })).toBeVisible();

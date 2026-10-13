@@ -46,7 +46,22 @@ jobs:
           run-id: ${{ inputs.production_run_id }}
 
       - name: Require Production certification manifest for this SHA
-        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="${{ inputs.sha }}" --status=production_certified
+        env:
+          PRODUCTION_RUN_ID: ${{ inputs.production_run_id }}
+        run: npm run release:verify:manifest -- --file=release-evidence/release-manifest.json --sha="${{ inputs.sha }}" --status=production_certified --run-id="$PRODUCTION_RUN_ID"
+
+      - name: Verify originating Production workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_RUN_ID: ${{ inputs.production_run_id }}
+        shell: bash
+        run: |
+          RUN_METADATA="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PRODUCTION_RUN_ID" --jq '[.path, .name, .event, .conclusion] | @tsv')"
+          IFS=$'\t' read -r RUN_PATH RUN_NAME RUN_EVENT RUN_CONCLUSION <<< "$RUN_METADATA"
+          test "$RUN_PATH" = ".github/workflows/release-production.yml" || { echo "Manifest run is not Release Production"; exit 2; }
+          test "$RUN_NAME" = "Release Production" || { echo "Unexpected Production workflow name"; exit 2; }
+          test "$RUN_EVENT" = "workflow_dispatch" || { echo "Unexpected Production trigger"; exit 2; }
+          test "$RUN_CONCLUSION" = "success" || { echo "Production workflow run did not succeed"; exit 2; }
 
       - name: Require certified SHA on main
         run: |

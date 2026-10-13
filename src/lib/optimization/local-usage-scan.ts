@@ -4,6 +4,7 @@ import { extname, join, resolve } from "node:path";
 import { getCollector } from "@/lib/collectors/registry";
 import type { CollectorName, CollectorParseResult } from "@/lib/collectors/types";
 import { auditCollectorResult, type LocalAuditRecommendation, type LocalUsageAuditReport } from "@/lib/optimization/local-usage-audit";
+import type { LocalSessionMetricReceipt } from "@/lib/optimization/local-session-metrics";
 import type { TelemetryEventInput } from "@/lib/telemetry/schemas";
 
 const HISTORY_EXTENSIONS = new Set([".jsonl", ".ndjson"]);
@@ -101,6 +102,7 @@ export interface LocalUsageScanReport {
     sourcePathsIncludedInReport: false;
   };
   overall: LocalUsageAggregate;
+  sessionMetricReceipts: LocalSessionMetricReceipt[];
   rankings: {
     models: LocalUsageRankingItem[];
     projects: LocalUsageRankingItem[];
@@ -470,6 +472,7 @@ export async function scanLocalUsage(options: LocalUsageScanOptions): Promise<Lo
       sourcePathsIncludedInReport: false,
     },
     overall,
+    sessionMetricReceipts: sessions.map((session) => session.audit.metricReceipt),
     rankings: buildRankings(sessions),
     rollups: {
       daily: buildRollups(sessions, "day"),
