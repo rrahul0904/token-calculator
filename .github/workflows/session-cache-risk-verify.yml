@@ -1,0 +1,39 @@
+name: Session Cache Risk Verify
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/optimization/session-cache-risk.ts"
+      - "scripts/cache-risk.ts"
+      - "tests/session-cache-risk.test.ts"
+      - "tests/session-cache-risk-cli.test.ts"
+      - "docs/OPTIMAIZR_0_10_CACHE_SESSION_DELTA.md"
+      - ".github/workflows/session-cache-risk-verify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: session-cache-risk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck repository contracts
+        run: npm run typecheck
+      - name: Lint cache-risk slice
+        run: npx eslint src/lib/optimization/session-cache-risk.ts scripts/cache-risk.ts tests/session-cache-risk.test.ts tests/session-cache-risk-cli.test.ts
+      - name: Cache-risk unit and CLI contracts
+        run: npx vitest run tests/session-cache-risk.test.ts tests/session-cache-risk-cli.test.ts
