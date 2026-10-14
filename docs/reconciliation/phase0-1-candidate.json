@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "kind": "token-intelligence-phase0-1-candidate",
   "baseSha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541",
-  "candidateSha": null,
+  "candidateSha": "86393a0c3f8a73c426a67b045965cf2390d87a03",
   "branch": "codex/phase0-release-baseline-20261013",
   "scope": "Reconciliation baseline plus bounded release-verification security fixes; no production configuration, migration, or deployment changes.",
   "localVerification": {
