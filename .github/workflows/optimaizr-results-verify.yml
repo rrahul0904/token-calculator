@@ -1,0 +1,44 @@
+name: Optimaizr Results Delta Verify
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/optimization/change-effectiveness.ts"
+      - "src/lib/optimization/change-journal.ts"
+      - "src/lib/optimization/session-economics.ts"
+      - "scripts/change-results.ts"
+      - "tests/change-effectiveness.test.ts"
+      - "tests/change-journal.test.ts"
+      - "tests/session-economics.test.ts"
+      - "docs/reverse-engineering/OPTIMAIZR_0_11_RESULTS_DELTA.md"
+      - ".github/workflows/optimaizr-results-verify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: optimaizr-results-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck repository contracts
+        run: npm run typecheck
+      - name: Lint Optimaizr results delta
+        run: npx eslint src/lib/optimization/change-effectiveness.ts src/lib/optimization/change-journal.ts src/lib/optimization/session-economics.ts scripts/change-results.ts tests/change-effectiveness.test.ts tests/change-journal.test.ts tests/session-economics.test.ts
+      - name: Focused unit and privacy contracts
+        run: npx vitest run tests/change-effectiveness.test.ts tests/change-journal.test.ts tests/session-economics.test.ts
+      - name: CLI help smoke
+        run: npx tsx scripts/change-results.ts --help
