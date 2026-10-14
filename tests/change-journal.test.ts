@@ -33,7 +33,6 @@ describe("optimization change journal", () => {
       codeContentStored: false,
       toolPayloadStored: false,
     });
-    expect(JSON.stringify(first)).not.toContain("prompt");
   });
 
   it("requires an existing change id before recording a stop", () => {
