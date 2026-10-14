@@ -59,7 +59,7 @@ describe("collector checkpoints", () => {
     const openedInfo = await stat(openedFile);
     const handle = {
       stat: async () => openedInfo,
-      read: async (buffer: Buffer, offset: number, _length: number, _position: number) => {
+      read: async (buffer: Buffer, offset: number) => {
         const bytesRead = buffer.write('{"old":true}\n', offset, "utf8");
         return { bytesRead, buffer };
       },
