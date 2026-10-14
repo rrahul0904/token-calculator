@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { stdin as input, stdout as output } from "node:process";
 import { commitCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
+import { resolveCliBaseUrl } from "./ti-network";
 import { collectorCapabilities, getCollector } from "@/lib/collectors/registry";
 import type { CollectorName } from "@/lib/collectors/types";
 import { auditCollectorResult, formatLocalUsageAuditReport } from "@/lib/optimization/local-usage-audit";
@@ -51,9 +52,12 @@ function filterSince(events: TelemetryEventInput[], cutoff: Date | null) {
   return events.filter((event) => new Date(event.occurredAt).getTime() >= cutoff.getTime());
 }
 
-async function auth(args: string[]) {
+async function auth(args: string[], networkRequest = true) {
   const config = await readConfig();
-  const baseUrl = (argValue(args, "--base-url") ?? process.env.TOKEN_INTELLIGENCE_BASE_URL ?? config.baseUrl ?? "https://token-intelligence-eight.vercel.app").replace(/\/$/, "");
+  const rawBaseUrl = argValue(args, "--base-url") ?? process.env.TOKEN_INTELLIGENCE_BASE_URL ?? config.baseUrl ?? "https://token-intelligence-eight.vercel.app";
+  const baseUrl = networkRequest
+    ? resolveCliBaseUrl(rawBaseUrl, has(args, "--allow-custom-origin"))
+    : rawBaseUrl.replace(/\/$/, "");
   const apiKey = argValue(args, "--api-key") ?? process.env.TOKEN_INTELLIGENCE_API_KEY ?? config.apiKey;
   return { config, baseUrl, apiKey, projectId: argValue(args, "--project") ?? process.env.TOKEN_INTELLIGENCE_PROJECT_ID ?? config.projectId ?? null, environment: argValue(args, "--environment") ?? config.environment ?? "development" };
 }
@@ -104,7 +108,7 @@ async function compare(args: string[]) {
 async function parseLocalCollector(name: CollectorName, file: string, args: string[]) {
   const collector = getCollector(name);
   if (!collector) throw new Error(`Unknown collector ${name}`);
-  const current = await auth(args);
+  const current = await auth(args, false);
   const text = await readFile(resolve(file), "utf8");
   const parsed = collector.parseJsonLines(text.split(/\r?\n/), { projectId: current.projectId, environment: current.environment });
   return { ...parsed, events: filterSince(parsed.events, sinceCutoff(argValue(args, "--since"))) };
@@ -118,7 +122,7 @@ async function audit(name: CollectorName, file: string, args: string[]) {
 }
 
 async function scan(name: CollectorName, root: string | undefined, args: string[]) {
-  const current = await auth(args);
+  const current = await auth(args, false);
   const maxFiles = numberArg(args, "--max-files");
   const report = await scanLocalUsage({
     collector: name,
@@ -135,7 +139,7 @@ async function scan(name: CollectorName, root: string | undefined, args: string[
 async function collect(name: CollectorName, file: string, args: string[], upload: boolean) {
   const collector = getCollector(name);
   if (!collector) throw new Error(`Unknown collector ${name}`);
-  const current = await auth(args);
+  const current = await auth(args, upload && !has(args, "--dry-run"));
   const text = await readFile(resolve(file), "utf8");
   const parsed = collector.parseJsonLines(text.split(/\r?\n/), { projectId: current.projectId, environment: current.environment });
   const events = filterSince(parsed.events, sinceCutoff(argValue(args, "--since")));
@@ -149,7 +153,7 @@ async function collect(name: CollectorName, file: string, args: string[], upload
 async function sync(name: CollectorName, file: string, args: string[]) {
   const collector = getCollector(name);
   if (!collector) throw new Error(`Unknown collector ${name}`);
-  const current = await auth(args);
+  const current = await auth(args, !has(args, "--dry-run"));
   const absolute = resolve(file);
   if (has(args, "--reset-checkpoint")) await resetCheckpoint(name, absolute);
   const chunk = await readIncrementalJsonLines(name, absolute);
@@ -184,6 +188,7 @@ async function watch(name: CollectorName, file: string, args: string[]) {
 }
 
 function help() {
+  console.log("Non-default API origins require --allow-custom-origin on every request command. Custom origins must use HTTPS; local HTTP is limited to localhost/loopback.");
   console.log(`Token Intelligence CLI\n\nCommands:\n  login [--api-key KEY] [--base-url URL] [--project ID]\n  status\n  estimate --input N --output N [--cached N] [--requests N]\n  compare --input N --output N --models id,id\n  runs list\n  runs show RUN_ID\n  budget check [--project ID] [--observed-cost N] [--projected-cost N] [--tokens N] [--turns N] [--retries N] [--tools N] [--elapsed-ms N] [--provider-rounds N] [--result-bytes N] [--provider P] [--model M] [--action-risk low|medium|high|critical] [--action-category C] [--action-name NAME]\n  audit <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--json]\n  scan <codex|claude|cursor|antigravity> [ROOT] [--project ID] [--since 7d] [--max-files N] [--json]\n  collect <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--dry-run]\n  sync <codex|claude|cursor|antigravity> FILE [--project ID] [--since 7d] [--reset-checkpoint] [--dry-run]\n  watch <codex|claude|antigravity> FILE [--project ID] [--reset-checkpoint]\n  gateway status\n\nAudit and scan are strictly local: they analyze normalized metadata and do not require an API key or make a Token Intelligence API request. Scan auto-discovers repository-certified Codex/Claude history paths; Cursor/Antigravity require an explicit ROOT until stable on-disk paths are certified. Scan deduplicates sessions and emits daily/weekly/monthly session-end rollups without adding overlapping findings into a fake savings total. Sync/watch keep restart-safe byte checkpoints under ~/.config/token-intelligence/checkpoints.json. API key can also be supplied with TOKEN_INTELLIGENCE_API_KEY. Prompt/code/transcript content is never uploaded by collector commands; parsing occurs locally and only normalized events are sent.`);
 }
 

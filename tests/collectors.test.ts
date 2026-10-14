@@ -146,3 +146,30 @@ describe("Antigravity collector", () => {
     expect(serialized).not.toContain("private-response-text");
   });
 });
+
+describe("collector upload privacy", () => {
+  it("does not include prompt, response, or tool content in normalized events", () => {
+    const marker = "private-marker-not-for-upload";
+    const codex = codexCollector.parseJsonLines(jsonl([
+      { type: "session_meta", timestamp: "2026-08-31T10:00:00Z", payload: { session_id: "codex-privacy" } },
+      { type: "response_item", timestamp: "2026-08-31T10:00:01Z", payload: { type: "function_call", id: "tool-privacy", name: "read_file", arguments: marker } },
+      { type: "response_item", timestamp: "2026-08-31T10:00:02Z", payload: { type: "message", role: "assistant", content: marker } },
+    ]));
+    const claude = claudeCollector.parseJsonLines(jsonl([
+      { uuid: "claude-privacy", sessionId: "claude-privacy", type: "assistant", timestamp: "2026-08-31T11:00:00Z", message: { id: "msg-privacy", model: "claude-test", role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: marker }, { type: "tool_use", id: "tool-privacy", name: "Read", input: { path: marker } }], usage: { input_tokens: 1, output_tokens: 1 } } },
+    ]));
+    const cursor = cursorCollector.parseJsonLines(jsonl([
+      { sessionId: "cursor-privacy", type: "assistant_response", timestamp: "2026-08-31T12:00:00Z", text: marker },
+      { sessionId: "cursor-privacy", type: "file_read", timestamp: "2026-08-31T12:00:01Z", path: marker, output: marker },
+    ]));
+    const antigravity = antigravityCollector.parseJsonLines(jsonl([
+      { event: "init", conversation_id: "ag-privacy", init: { model: "gemini-test" } },
+      { event: "step_update", step_update: { conversation_id: "ag-privacy", step_index: 1, step_type: "tool", state: "DONE", tool_name: "run_command", tool_info: { output: marker } } },
+      { event: "step_update", step_update: { conversation_id: "ag-privacy", step_index: 2, step_type: "agent_response", state: "DONE", usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 }, response: marker } },
+    ]));
+
+    for (const result of [codex, claude, cursor, antigravity]) {
+      expect(JSON.stringify({ events: result.events })).not.toContain(marker);
+    }
+  });
+});

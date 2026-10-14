@@ -22,6 +22,10 @@ const keyFor = (collector: CollectorName, filePath: string) => `${collector}:${r
 
 export async function fileIdentity(filePath: string) {
   const info = await stat(filePath);
+  return identityFromStat(filePath, info);
+}
+
+function identityFromStat(filePath: string, info: Awaited<ReturnType<typeof stat>>) {
   return createHash("sha256").update(`${resolve(filePath)}:${info.dev}:${info.ino}`).digest("hex").slice(0, 24);
 }
 
@@ -60,30 +64,34 @@ export async function readIncrementalJsonLines(collector: CollectorName, filePat
   const absolute = resolve(filePath);
   const checkpointPath = options.checkpointPath ?? DEFAULT_CHECKPOINT_PATH;
   if (options.reset) await resetCheckpoint(collector, absolute, checkpointPath);
-  const identity = await fileIdentity(absolute);
-  const info = await stat(absolute);
-  const previous = await getCheckpoint(collector, absolute, checkpointPath);
-  const reusable = previous && previous.fileIdentity === identity && previous.byteOffset <= info.size;
-  const start = reusable ? previous.byteOffset : 0;
   const handle = await open(absolute, "r");
   try {
-    const length = Math.max(0, info.size - start);
-    const buffer = Buffer.alloc(length);
-    if (length) await handle.read(buffer, 0, length, start);
-    const text = buffer.toString("utf8");
-    // A collector record must be newline-delimited. Avoid checkpointing a partial trailing line.
-    const lastNewline = text.lastIndexOf("\n");
-    const completeText = lastNewline >= 0 ? text.slice(0, lastNewline + 1) : "";
-    const consumedBytes = Buffer.byteLength(completeText, "utf8");
-    return {
-      lines: completeText.split(/\r?\n/).filter(Boolean),
-      nextOffset: start + consumedBytes,
-      fileIdentity: identity,
-      startOffset: start,
-      fileSize: info.size,
-      checkpointPath,
-    };
+    return await readIncrementalJsonLinesFromHandle(collector, absolute, handle, checkpointPath);
   } finally { await handle.close(); }
+}
+
+export async function readIncrementalJsonLinesFromHandle(collector: CollectorName, absolutePath: string, handle: Awaited<ReturnType<typeof open>>, checkpointPath: string) {
+  const info = await handle.stat();
+  const identity = identityFromStat(absolutePath, info);
+  const previous = await getCheckpoint(collector, absolutePath, checkpointPath);
+  const reusable = previous && previous.fileIdentity === identity && previous.byteOffset <= info.size;
+  const start = reusable ? previous.byteOffset : 0;
+  const length = Math.max(0, info.size - start);
+  const buffer = Buffer.alloc(length);
+  if (length) await handle.read(buffer, 0, length, start);
+  const text = buffer.toString("utf8");
+  // A collector record must be newline-delimited. Avoid checkpointing a partial trailing line.
+  const lastNewline = text.lastIndexOf("\n");
+  const completeText = lastNewline >= 0 ? text.slice(0, lastNewline + 1) : "";
+  const consumedBytes = Buffer.byteLength(completeText, "utf8");
+  return {
+    lines: completeText.split(/\r?\n/).filter(Boolean),
+    nextOffset: start + consumedBytes,
+    fileIdentity: identity,
+    startOffset: start,
+    fileSize: info.size,
+    checkpointPath,
+  };
 }
 
 export async function commitCheckpoint(args: { collector: CollectorName; filePath: string; fileIdentity: string; nextOffset: number; sourceVersion?: string | null; checkpointPath?: string }) {

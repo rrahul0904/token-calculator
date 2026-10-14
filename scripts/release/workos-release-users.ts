@@ -1,6 +1,7 @@
 import { appendFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import process from "node:process";
+import { escapeGithubCommandData, formatGithubOutputs, resolveGithubOutputPath } from "./github-output";
 
 type WorkosUser = {
   id: string;
@@ -73,6 +74,13 @@ async function createUser(kind: "auth" | "onboarding", suffix: string): Promise<
       },
     }),
   }) as WorkosUser;
+  if (!created || typeof created.id !== "string" || !/^user_[A-Za-z0-9_-]{1,128}$/.test(created.id)) {
+    throw new Error("WORKOS_RELEASE_USER_RESPONSE_INVALID");
+  }
+  if (typeof created.email !== "string" || created.email.trim().toLowerCase() !== email.toLowerCase()) {
+    await deleteUser(created.id);
+    throw new Error("WORKOS_RELEASE_USER_EMAIL_MISMATCH");
+  }
   return { id: created.id, email: created.email, password: userPassword };
 }
 
@@ -87,12 +95,16 @@ async function deleteUser(id: string) {
 
 function mask(user: ReleaseUser) {
   for (const value of [user.id, user.email, user.password]) {
-    process.stdout.write(`::add-mask::${value}\n`);
+    process.stdout.write(`::add-mask::${escapeGithubCommandData(value)}\n`);
   }
 }
 
 async function provision() {
-  const outputPath = required("GITHUB_OUTPUT", argument("output") ?? process.env.GITHUB_OUTPUT);
+  if (process.env.GITHUB_ACTIONS !== "true") throw new Error("GITHUB_ACTIONS_REQUIRED_FOR_RELEASE_USER_PROVISIONING");
+  const outputPath = resolveGithubOutputPath(
+    required("GITHUB_OUTPUT", process.env.GITHUB_OUTPUT),
+    required("RUNNER_TEMP", process.env.RUNNER_TEMP),
+  );
   const profile = argument("profile") ?? "preview";
   if (profile !== "preview" && profile !== "auth-only") {
     throw new Error(`UNKNOWN_RELEASE_USER_PROFILE:${profile}`);
@@ -106,25 +118,22 @@ async function provision() {
     created.push(auth.id);
     mask(auth);
 
-    const output = [
-      `auth_user_id=${auth.id}`,
-      `auth_email=${auth.email}`,
-      `auth_password=${auth.password}`,
-    ];
+    const output: Record<string, string> = {
+      auth_user_id: auth.id,
+      auth_email: auth.email,
+      auth_password: auth.password,
+    };
 
     if (profile === "preview") {
       const onboarding = await createUser("onboarding", suffix);
       created.push(onboarding.id);
       mask(onboarding);
-      output.push(
-        `onboarding_user_id=${onboarding.id}`,
-        `onboarding_email=${onboarding.email}`,
-        `onboarding_password=${onboarding.password}`,
-      );
+      output.onboarding_user_id = onboarding.id;
+      output.onboarding_email = onboarding.email;
+      output.onboarding_password = onboarding.password;
     }
 
-    output.push("");
-    await appendFile(outputPath, output.join("\n"));
+    await appendFile(outputPath, formatGithubOutputs(output));
 
     process.stdout.write(JSON.stringify({
       provider: "workos-authkit",

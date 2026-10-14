@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, open, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { commitCheckpoint, getCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
+import { commitCheckpoint, fileIdentity, getCheckpoint, readIncrementalJsonLines, readIncrementalJsonLinesFromHandle, resetCheckpoint } from "@/lib/collectors/checkpoints";
 
 describe("collector checkpoints", () => {
   it("reads only complete appended JSONL records and resumes after commit", async () => {
@@ -47,5 +47,24 @@ describe("collector checkpoints", () => {
     const reset = await readIncrementalJsonLines("antigravity", file, { checkpointPath });
     expect(reset.startOffset).toBe(0);
     expect(reset.lines).toEqual(['{"b":1}']);
+  });
+
+  it("keeps identity and bytes bound to the opened file after its path is replaced", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ti-checkpoint-"));
+    const file = join(dir, "session.jsonl");
+    const moved = join(dir, "moved.jsonl");
+    await writeFile(file, '{"old":true}\n', "utf8");
+    const expectedIdentity = await fileIdentity(file);
+    const handle = await open(file, "r");
+    await rename(file, moved);
+    await writeFile(file, '{"new":true}\n', "utf8");
+
+    try {
+      const chunk = await readIncrementalJsonLinesFromHandle("codex", file, handle, join(dir, "checkpoints.json"));
+      expect(chunk.lines).toEqual(['{"old":true}']);
+      expect(chunk.fileIdentity).toBe(expectedIdentity);
+    } finally {
+      await handle.close();
+    }
   });
 });
