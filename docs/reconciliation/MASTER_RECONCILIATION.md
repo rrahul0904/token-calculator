@@ -23,6 +23,8 @@ Current `main` already has the platform foundations that donor branches must ext
 
 The migration journal and SQL inventory agree on 12 applied-source migrations, `0000` through `0011`. Five PR candidates attempt to introduce `0012`; only one sequential, reviewed migration chain may be produced. No production migration application is claimed from this source inventory or database health check.
 
+GitHub outcome attribution is optional for this release: it is not part of the mandatory `releaseReady` checks. Health reports an absent integration as `not_enabled`, partial configuration as blocked, and complete variable presence as `configured` rather than `live`; no GitHub App installation/webhook certification is claimed. Release readiness now also requires verified Neon project and branch identity, not merely a successful database connection.
+
 ## PR Dispositions
 
 | PR | Capability | Disposition | Key constraint |

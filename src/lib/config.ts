@@ -2,7 +2,7 @@ import { hasConfiguredWorkosRedirectUri } from "@/lib/auth/redirect-uri";
 import { hasRuntimeMcpResourceUri } from "@/lib/auth/deployment-origin";
 import { workosWebhookTargetUrl } from "@/lib/workos/webhook-endpoint";
 
-export type IntegrationState = "live" | "code_complete_configuration_blocked" | "not_enabled";
+export type IntegrationState = "live" | "configured" | "code_complete_configuration_blocked" | "not_enabled";
 
 function all(...names: string[]): boolean {
   return names.every((name) => Boolean(process.env[name]));
@@ -49,6 +49,8 @@ export function hasWorkosAuthConfiguration(): boolean {
 }
 
 export function getConfigurationStatus() {
+  const githubVariables = ["GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"];
+  const githubConfiguredCount = githubVariables.filter((name) => Boolean(process.env[name])).length;
   return {
     database: all("DATABASE_URL") ? "live" : "code_complete_configuration_blocked",
     auth:
@@ -65,14 +67,38 @@ export function getConfigurationStatus() {
       ? "live"
       : "code_complete_configuration_blocked",
     credentialVault: all("TOKEN_INTELLIGENCE_ENCRYPTION_KEY") ? "live" : "code_complete_configuration_blocked",
-    github: all("GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET")
-      ? "live"
-      : "code_complete_configuration_blocked",
+    github: githubConfiguredCount === githubVariables.length
+      ? "configured"
+      : githubConfiguredCount === 0
+        ? "not_enabled"
+        : "code_complete_configuration_blocked",
     otel: all("OTEL_EXPORTER_OTLP_ENDPOINT") ? "live" : "not_enabled",
     alerts: all("TOKEN_INTELLIGENCE_WEBHOOK_SECRET", "TOKEN_INTELLIGENCE_ENCRYPTION_KEY") ? "live" : "code_complete_configuration_blocked",
     retention: all("CRON_SECRET") ? "live" : "code_complete_configuration_blocked",
     redis: all("REDIS_URL") ? "live" : "not_enabled",
   } satisfies Record<string, IntegrationState>;
+}
+
+export function evaluateReleaseReadiness(input: {
+  database: "ok" | "not_configured" | "error";
+  databaseIdentity: "verified" | "unchecked" | "mismatch" | "not_configured" | "error";
+  auth: IntegrationState;
+  workosWebhook: IntegrationState;
+  mcpOAuth: IntegrationState;
+  stripe: IntegrationState;
+  credentialVault: IntegrationState;
+  retention: IntegrationState;
+}) {
+  const releaseChecks = {
+    database: input.database === "ok" && input.databaseIdentity === "verified",
+    auth: input.auth === "live",
+    workosWebhook: input.workosWebhook === "live",
+    mcpOAuth: input.mcpOAuth === "live",
+    billing: input.stripe === "live",
+    credentialVault: input.credentialVault === "live",
+    retention: input.retention === "live",
+  };
+  return { releaseChecks, releaseReady: Object.values(releaseChecks).every(Boolean) };
 }
 
 export function requiredConfiguration(feature: keyof ReturnType<typeof getConfigurationStatus>): string[] {
