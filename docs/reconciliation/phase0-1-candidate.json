@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "kind": "token-intelligence-phase0-1-candidate",
+  "baseSha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541",
+  "candidateSha": "86393a0c3f8a73c426a67b045965cf2390d87a03",
+  "branch": "codex/phase0-release-baseline-20261013",
+  "scope": "Reconciliation baseline plus bounded release-verification security fixes; no production configuration, migration, or deployment changes.",
+  "localVerification": {
+    "vitest": { "passed": 313, "skipped": 28, "failed": 0 },
+    "testFiles": { "passed": 72, "skipped": 6 },
+    "typescript": "passed",
+    "productionBuild": "passed",
+    "targetedLint": "passed",
+    "gitDiffCheck": "passed",
+    "reconciliationJson": "passed",
+    "productionDependencyAudit": "passed: 0 vulnerabilities across 41 dependencies",
+    "gitleaks": "passed: full history, 1240 commits, no findings"
+  },
+  "hostedVerification": {
+    "pullRequest": null,
+    "ci": "pending",
+    "codeql": "pending"
+  },
+  "production": {
+    "healthHttpStatus": 503,
+    "releaseReady": false,
+    "deploymentChanged": false,
+    "externalConfigurationChanged": false
+  },
+  "remainingBlockers": [
+    "Stripe billing configuration and Test-mode certification",
+    "MCP OAuth provider configuration and flow certification",
+    "GitHub integration configuration and certification",
+    "WorkOS cookie-password source discrepancy between project inventory and runtime health",
+    "Direct Neon, WorkOS, and Stripe provider-console audit",
+    "Fresh hosted CodeQL result and evidence-backed triage of remaining baseline alerts",
+    "Production migration-state audit"
+  ],
+  "releaseClaim": "not-production-ready"
+}

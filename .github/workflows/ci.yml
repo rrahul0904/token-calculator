@@ -118,7 +118,7 @@ jobs:
           cat /tmp/token-intelligence-next.log
           exit 1
       - name: CLI local API smoke
-        run: npm run ti -- estimate --base-url http://127.0.0.1:3000 --input 1000 --output 200 --cached 100 --requests 10
+        run: npm run ti -- estimate --base-url http://127.0.0.1:3000 --allow-custom-origin --input 1000 --output 200 --cached 100 --requests 10
       - name: Defensive dynamic attack-surface checks
         run: npm run security:dast
       - name: Playwright production smoke

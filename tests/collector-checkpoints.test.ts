@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { commitCheckpoint, getCheckpoint, readIncrementalJsonLines, resetCheckpoint } from "@/lib/collectors/checkpoints";
+import { commitCheckpoint, fileIdentity, getCheckpoint, readIncrementalJsonLines, readIncrementalJsonLinesFromHandle, resetCheckpoint } from "@/lib/collectors/checkpoints";
 
 describe("collector checkpoints", () => {
   it("reads only complete appended JSONL records and resumes after commit", async () => {
@@ -47,5 +48,32 @@ describe("collector checkpoints", () => {
     const reset = await readIncrementalJsonLines("antigravity", file, { checkpointPath });
     expect(reset.startOffset).toBe(0);
     expect(reset.lines).toEqual(['{"b":1}']);
+  });
+
+  it("keeps identity and bytes bound to the opened file handle", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ti-checkpoint-"));
+    const file = join(dir, "session.jsonl");
+    const openedFile = join(dir, "opened-session.jsonl");
+    await writeFile(openedFile, '{"old":true}\n', "utf8");
+    await writeFile(file, '{"new":true}\n', "utf8");
+    const openedInfo = await stat(openedFile);
+    const handle = {
+      stat: async () => openedInfo,
+      read: async (buffer: Buffer, offset: number) => {
+        const bytesRead = buffer.write('{"old":true}\n', offset, "utf8");
+        return { bytesRead, buffer };
+      },
+      close: async () => undefined,
+    } as unknown as Awaited<ReturnType<typeof import("node:fs/promises").open>>;
+
+    try {
+      const chunk = await readIncrementalJsonLinesFromHandle("codex", file, handle, join(dir, "checkpoints.json"));
+      expect(chunk.lines).toEqual(['{"old":true}']);
+      const expectedIdentity = createHash("sha256").update(`${resolve(file)}:${openedInfo.dev}:${openedInfo.ino}`).digest("hex").slice(0, 24);
+      expect(chunk.fileIdentity).toBe(expectedIdentity);
+      expect(chunk.fileIdentity).not.toBe(await fileIdentity(file));
+    } finally {
+      await handle.close();
+    }
   });
 });

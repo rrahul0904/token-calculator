@@ -3,6 +3,7 @@ import { chromium } from "@playwright/test";
 import postgres from "postgres";
 import Stripe from "stripe";
 import process from "node:process";
+import { isTrustedStripePortalUrl } from "./stripe-url";
 
 function argument(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -193,7 +194,7 @@ try {
     throw new Error(`LIVE_BILLING_PORTAL_HTTP_${portalResponse.status()}`);
   }
   const portalBody = await portalResponse.json() as { data?: { portalUrl?: string } };
-  if (!portalBody.data?.portalUrl || !new URL(portalBody.data.portalUrl).hostname.endsWith("stripe.com")) {
+  if (!portalBody.data?.portalUrl || !isTrustedStripePortalUrl(portalBody.data.portalUrl)) {
     throw new Error("LIVE_BILLING_PORTAL_URL_INVALID");
   }
 

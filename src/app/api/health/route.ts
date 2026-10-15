@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/db/client";
-import { getConfigurationStatus } from "@/lib/config";
+import { evaluateReleaseReadiness, getConfigurationStatus } from "@/lib/config";
 import { inspectWorkosWebhookProvider, workosWebhookTargetForRequestUrl } from "@/lib/workos/webhook-endpoint";
 
 export const runtime = "nodejs";
@@ -57,16 +57,16 @@ export async function GET(request: Request) {
     });
     if (!provider.ready) workosWebhook = "code_complete_configuration_blocked";
   }
-  const releaseChecks = {
-    database: database === "ok",
-    auth: configuration.auth === "live",
-    workosWebhook: workosWebhook === "live",
-    mcpOAuth: configuration.mcpOAuth === "live",
-    billing: configuration.stripe === "live",
-    credentialVault: configuration.credentialVault === "live",
-    retention: configuration.retention === "live",
-  };
-  const releaseReady = Object.values(releaseChecks).every(Boolean);
+  const { releaseChecks, releaseReady } = evaluateReleaseReadiness({
+    database,
+    databaseIdentity: databaseHealthResult.identity,
+    auth: configuration.auth,
+    workosWebhook,
+    mcpOAuth: configuration.mcpOAuth,
+    stripe: configuration.stripe,
+    credentialVault: configuration.credentialVault,
+    retention: configuration.retention,
+  });
   const production = process.env.VERCEL_ENV === "production";
   const unhealthy = database === "error" || (production && !releaseReady);
 

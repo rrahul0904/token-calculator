@@ -59,8 +59,21 @@ export async function getAdminSectionData(section: string, pagination: { limit?:
   if (section === "providers") return { overview, rows: await db.select({ provider: schema.llmCalls.provider, model: schema.llmCalls.modelResolved, costUsd: schema.llmCalls.costUsd, costSource: schema.llmCalls.costSource, startedAt: schema.llmCalls.startedAt }).from(schema.llmCalls).orderBy(desc(schema.llmCalls.startedAt)).limit(limit).offset(offset) };
   if (section === "audit") return { overview, rows: await db.select().from(schema.platformAdminAuditEvents).orderBy(desc(schema.platformAdminAuditEvents.occurredAt)).limit(limit).offset(offset) };
   if (section === "usage") return { overview, rows: await db.select({ id: schema.runs.id, organizationId: schema.runs.organizationId, status: schema.runs.status, agentName: schema.runs.agentName, startedAt: schema.runs.startedAt, cost: schema.runs.reconciledCostUsd }).from(schema.runs).orderBy(desc(schema.runs.startedAt)).limit(limit).offset(offset) };
-  if (section === "system") return { overview, rows: Object.entries(getConfigurationStatus()).map(([service, status]) => ({ service, status, evidence: status === "live" ? "runtime_configured" : status === "not_enabled" ? "optional_disabled" : "configuration_blocked" })) };
-  if (section === "integrations") return { overview, rows: platformCostProviderStates().map((provider) => ({ ...provider, runtimeStatus: provider.provider === "stripe" ? getConfigurationStatus().stripe : provider.provider === "github" ? getConfigurationStatus().github : provider.provider === "workos" ? getConfigurationStatus().auth : provider.provider === "otel" ? getConfigurationStatus().otel : "not_configured" })) };
+  if (section === "system") return { overview, rows: Object.entries(getConfigurationStatus()).map(([service, status]) => ({ service, status, evidence: status === "live" ? "runtime_configured" : status === "configured" ? "configured_unverified" : status === "not_enabled" ? "optional_disabled" : "configuration_blocked" })) };
+  if (section === "integrations") {
+    const configuration = getConfigurationStatus();
+    return {
+      overview,
+      rows: platformCostProviderStates().map((provider) => ({
+        ...provider,
+        runtimeStatus: provider.provider === "stripe" ? configuration.stripe
+          : provider.provider === "github" ? configuration.github === "configured" ? "configured_unverified" : configuration.github
+            : provider.provider === "workos" ? configuration.auth
+              : provider.provider === "otel" ? configuration.otel
+                : "not_configured",
+      })),
+    };
+  }
   if (section === "release") return { overview, rows: releaseReadiness(overview) };
   return { overview, rows: [] as Record<string, unknown>[] };
 }
@@ -73,7 +86,7 @@ function releaseReadiness(overview: Awaited<ReturnType<typeof getAdminOverviewDa
     ["authentication", overview.health.auth === "live" ? "configured" : "blocked", overview.health.auth],
     ["billing_test_mode", overview.health.stripe === "live" ? "configured" : "blocked", overview.health.stripe],
     ["credential_vault", overview.health.credentialVault === "live" ? "configured" : "blocked", overview.health.credentialVault],
-    ["github_integration", overview.health.github === "live" ? "configured" : "blocked", overview.health.github],
+    ["github_integration", overview.health.github === "not_enabled" ? "optional_not_enabled" : overview.health.github === "configured" ? "configured_unverified" : "blocked", overview.health.github],
     ["browser_matrix", process.env.CI === "true" ? "running_or_recorded" : "unavailable", "Recorded by GitHub Actions; never inferred locally"],
   ];
   return items.map(([gate, state, evidence]) => ({ gate, state, evidence }));

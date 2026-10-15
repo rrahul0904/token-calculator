@@ -1,8 +1,8 @@
 import process from "node:process";
 import { afterEach, describe, expect, it } from "vitest";
-import { getConfigurationStatus } from "@/lib/config";
+import { evaluateReleaseReadiness, getConfigurationStatus } from "@/lib/config";
 
-const keys = ["APP_BASE_URL", "WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET", "WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI"] as const;
+const keys = ["APP_BASE_URL", "WORKOS_API_KEY", "WORKOS_WEBHOOK_SECRET", "WORKOS_AUTHKIT_DOMAIN", "MCP_RESOURCE_URI", "GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"] as const;
 const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
 afterEach(() => {
@@ -43,5 +43,38 @@ describe("production release integration readiness", () => {
     const configuration = getConfigurationStatus();
     expect(configuration.workosWebhook).toBe("live");
     expect(configuration.mcpOAuth).toBe("live");
+  });
+
+  it("keeps the optional GitHub integration non-live until independently certified", () => {
+    for (const key of ["GITHUB_APP_ID", "GITHUB_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"]) delete process.env[key];
+    expect(getConfigurationStatus().github).toBe("not_enabled");
+
+    process.env.GITHUB_APP_ID = "app-id";
+    expect(getConfigurationStatus().github).toBe("code_complete_configuration_blocked");
+
+    process.env.GITHUB_PRIVATE_KEY = "private-key";
+    process.env.GITHUB_WEBHOOK_SECRET = "webhook-secret";
+    expect(getConfigurationStatus().github).toBe("configured");
+    expect(getConfigurationStatus().github).not.toBe("live");
+  });
+
+  it("requires verified database identity and excludes optional GitHub from release readiness", () => {
+    const shared = {
+      database: "ok" as const,
+      auth: "live" as const,
+      workosWebhook: "live" as const,
+      mcpOAuth: "live" as const,
+      stripe: "live" as const,
+      credentialVault: "live" as const,
+      retention: "live" as const,
+    };
+
+    const unchecked = evaluateReleaseReadiness({ ...shared, databaseIdentity: "unchecked" });
+    expect(unchecked.releaseReady).toBe(false);
+    expect(unchecked.releaseChecks.database).toBe(false);
+
+    const verified = evaluateReleaseReadiness({ ...shared, databaseIdentity: "verified" });
+    expect(verified.releaseReady).toBe(true);
+    expect(verified.releaseChecks).not.toHaveProperty("github");
   });
 });

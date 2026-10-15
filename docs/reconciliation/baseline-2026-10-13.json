@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "kind": "token-intelligence-release-baseline",
+  "auditedAt": "2026-10-13T21:45:30-04:00",
+  "repository": "rrahul0904/token-calculator",
+  "source": {
+    "branch": "main",
+    "sha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541",
+    "commitSubject": "Merge pull request #53 from rrahul0904/codex/token-intelligence-reconciliation-20261001"
+  },
+  "production": {
+    "provider": "Vercel",
+    "stableAlias": "https://token-intelligence-eight.vercel.app",
+    "deploymentId": "dpl_3KPi6FSVHmUdpm9qhdVvGKYmM76Q",
+    "deploymentUrl": "https://token-intelligence-5bl667gh9-rrahul0904-5013s-projects.vercel.app",
+    "deploymentState": "READY",
+    "deployedSha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541",
+    "stableAliasBuildEvidence": {
+      "endpoint": "https://token-intelligence-eight.vercel.app/api/build",
+      "gitSha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541",
+      "deploymentId": "dpl_3KPi6FSVHmUdpm9qhdVvGKYmM76Q",
+      "environment": "production"
+    },
+    "runtimeHealth": {
+      "httpStatus": 503,
+      "application": "ok",
+      "database": "ok",
+      "databaseIdentity": "verified",
+      "auth": "live",
+      "workosWebhook": "live",
+      "billing": "code_complete_configuration_blocked",
+      "mcp": "ok",
+      "mcpOAuth": "code_complete_configuration_blocked",
+      "github": "code_complete_configuration_blocked",
+      "credentialVault": "live",
+      "alerts": "live",
+      "retention": "live",
+      "releaseReady": false
+    },
+    "integrationConfigEvidence": {
+      "stripeProductionVariablesVisible": false,
+      "mcpOAuthProductionVariablesVisible": false,
+      "githubProductionVariablesVisible": false,
+      "workosApiKeyAndClientIdVisible": true,
+      "workosCookiePasswordVisible": false,
+      "workosRuntimeAuthStatus": "live",
+      "notes": "Vercel project variable inventory and runtime health disagree about the source of WorkOS cookie configuration; investigate deployment snapshot/system scope before changing it. Secret values were not revealed."
+    }
+  },
+  "githubActions": [
+    { "runId": 38339741263, "workflow": "CI", "sha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541", "conclusion": "success" },
+    { "runId": 38339741400, "workflow": "Security CodeQL", "sha": "f6372728e0de9cafdb32a1c5f5f867ad58a8c541", "conclusion": "success" }
+  ],
+  "neon": {
+    "productionDatabaseIdentity": "verified-by-runtime-health",
+    "directNeonConsoleAudit": "not-available-in-this-session"
+  },
+  "workos": {
+    "authentication": "live-by-runtime-health",
+    "webhook": "live-by-runtime-health",
+    "directProviderConsoleAudit": "not-performed"
+  },
+  "stripe": {
+    "billing": "configuration-blocked-by-runtime-health",
+    "testModeCertification": "not-performed"
+  },
+  "mcpOAuth": {
+    "status": "configuration-blocked-by-runtime-health",
+    "providerFlowCertification": "not-performed"
+  },
+  "migrations": {
+    "count": 12,
+    "first": "0000_agent_economics_foundation",
+    "last": "0011_verified_savings_revalidations",
+    "journalMatchesSqlFiles": true,
+    "pendingProductionMigrationAudit": "not-performed"
+  },
+  "productionDependencyAudit": {
+    "command": "npm audit --omit=dev --json",
+    "npmVersion": "10.9.9",
+    "productionDependencies": 41,
+    "vulnerabilities": { "info": 0, "low": 0, "moderate": 0, "high": 0, "critical": 0, "total": 0 }
+  },
+  "security": {
+    "codeqlOpenAlerts": 8,
+    "highSeverity": 3,
+    "mediumSeverity": 5,
+    "dependabotAlerts": "not-verifiable: disabled-for-repository-and-current-token-lacks-required-scope",
+    "fullHistorySecretScan": "passed-on-candidate-worktree-1240-commits-no-findings"
+  },
+  "openPullRequests": {
+    "count": 18,
+    "numbers": [44, 45, 46, 49, 51, 52, 54, 55, 57, 58, 59, 61, 63, 65, 66, 68, 69, 71],
+    "dispositions": "pending-master-reconciliation"
+  },
+  "nonClaims": [
+    "Production is not release-ready: /api/health returns HTTP 503 and releaseReady is false.",
+    "Green CI and a Ready deployment do not certify Stripe, MCP OAuth, GitHub integration, or user journeys.",
+    "No secret values were read, copied, or changed.",
+    "Direct Neon, WorkOS, and Stripe provider-console configuration was not independently inspected.",
+    "No Production deployment or external provider configuration was changed during this audit."
+  ]
+}
