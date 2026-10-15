@@ -60,7 +60,20 @@ export async function getAdminSectionData(section: string, pagination: { limit?:
   if (section === "audit") return { overview, rows: await db.select().from(schema.platformAdminAuditEvents).orderBy(desc(schema.platformAdminAuditEvents.occurredAt)).limit(limit).offset(offset) };
   if (section === "usage") return { overview, rows: await db.select({ id: schema.runs.id, organizationId: schema.runs.organizationId, status: schema.runs.status, agentName: schema.runs.agentName, startedAt: schema.runs.startedAt, cost: schema.runs.reconciledCostUsd }).from(schema.runs).orderBy(desc(schema.runs.startedAt)).limit(limit).offset(offset) };
   if (section === "system") return { overview, rows: Object.entries(getConfigurationStatus()).map(([service, status]) => ({ service, status, evidence: status === "live" ? "runtime_configured" : status === "configured" ? "configured_unverified" : status === "not_enabled" ? "optional_disabled" : "configuration_blocked" })) };
-  if (section === "integrations") return { overview, rows: platformCostProviderStates().map((provider) => ({ ...provider, runtimeStatus: provider.provider === "stripe" ? getConfigurationStatus().stripe : provider.provider === "github" ? getConfigurationStatus().github : provider.provider === "workos" ? getConfigurationStatus().auth : provider.provider === "otel" ? getConfigurationStatus().otel : "not_configured" })) };
+  if (section === "integrations") {
+    const configuration = getConfigurationStatus();
+    return {
+      overview,
+      rows: platformCostProviderStates().map((provider) => ({
+        ...provider,
+        runtimeStatus: provider.provider === "stripe" ? configuration.stripe
+          : provider.provider === "github" ? configuration.github === "configured" ? "configured_unverified" : configuration.github
+            : provider.provider === "workos" ? configuration.auth
+              : provider.provider === "otel" ? configuration.otel
+                : "not_configured",
+      })),
+    };
+  }
   if (section === "release") return { overview, rows: releaseReadiness(overview) };
   return { overview, rows: [] as Record<string, unknown>[] };
 }
