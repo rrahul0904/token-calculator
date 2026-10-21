@@ -1,0 +1,33 @@
+name: REA TokenEconomizer advisor verification
+
+on:
+  push:
+    branches:
+      - research/rea-tokeneconomizer-20261021
+  pull_request:
+    paths:
+      - src/lib/optimization/agent-session-advisor.ts
+      - tests/agent-session-advisor.test.ts
+      - .github/workflows/tokeneconomizer-advisor-verify.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisor-contracts:
+    name: Advisor contract and TypeScript verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+      - name: Verify advisor tests
+        run: npx vitest run tests/agent-session-advisor.test.ts
+      - name: Verify TypeScript
+        run: npm run typecheck
