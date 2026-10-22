@@ -1,0 +1,33 @@
+name: Context Packet P0
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/optimization/context-packet.ts"
+      - "src/components/context-packet-planner.tsx"
+      - "src/app/tools/context/**"
+      - "tests/context-packet.test.ts"
+      - ".github/workflows/context-packet.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  module-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install declared dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Focused module tests
+        run: npx vitest run tests/context-packet.test.ts
