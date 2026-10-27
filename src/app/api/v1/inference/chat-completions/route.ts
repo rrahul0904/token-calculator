@@ -103,7 +103,8 @@ export async function POST(request: Request): Promise<Response> {
     }
     // Dollars require a verified price schedule and accounting; never invent a cost.
     if (quota.monthlyCostLimitUsd !== null) return reply("COST_QUOTA_REQUIRES_VERIFIED_PRICING", 403);
-    if (quota.monthlyTokenLimit === null) return reply("MONTHLY_TOKEN_CAP_REQUIRED", 403);
+    const monthlyTokenLimit = quota.monthlyTokenLimit;
+    if (monthlyTokenLimit === null) return reply("MONTHLY_TOKEN_CAP_REQUIRED", 403);
 
     const decision: Decision = await db.transaction(async (tx): Promise<Decision> => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${principal.organizationId}), hashtext(${principal.apiKeyId}))`);
@@ -135,7 +136,7 @@ export async function POST(request: Request): Promise<Response> {
       const [monthly] = await tx.select({
         reserved: sql<string>`coalesce(sum((${usageEvents.payload} ->> 'reservedTokens')::int), 0)`,
       }).from(usageEvents).where(and(...filters, gte(usageEvents.occurredAt, monthStart)));
-      if (Number(monthly?.reserved ?? 0) + estimated.reserve > quota.monthlyTokenLimit) {
+      if (Number(monthly?.reserved ?? 0) + estimated.reserve > monthlyTokenLimit) {
         return { kind: "rejected", status: 429, code: "MONTHLY_RESERVATION_CAP_EXCEEDED" };
       }
 
