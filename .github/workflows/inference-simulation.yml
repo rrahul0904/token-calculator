@@ -1,11 +1,13 @@
-name: Inference Simulation — Focused Checks
+name: Inference Gateway — Focused Simulated and Live Provider Checks
 
 on:
   pull_request:
     paths:
       - "src/lib/inference/**"
       - "src/app/api/v1/inference-simulations/**"
+      - "src/app/api/v1/inference/**"
       - "tests/inference-simulations*.test.ts"
+      - "tests/inference-live*.test.ts"
       - ".github/workflows/inference-simulation.yml"
   workflow_dispatch:
 
@@ -48,8 +50,8 @@ jobs:
       - name: Apply existing PostgreSQL migrations
         run: npm run db:migrate
       - name: Gateway-focused unit, HTTP, and database acceptance
-        run: npx vitest run tests/inference-simulations.test.ts tests/inference-simulations-route.test.ts tests/inference-simulations-db.test.ts
+        run: npx vitest run tests/inference-simulations.test.ts tests/inference-simulations-route.test.ts tests/inference-simulations-db.test.ts tests/inference-live.test.ts tests/inference-live-db.test.ts
       - name: Security disclaimer
         run: |
-          echo "Focused acceptance does NOT waive repository-wide npm audit."
+          echo "Focused acceptance does NOT waive repository-wide npm audit or commercial billing certification."
           echo "Critical/high dependency findings are tracked in Issue #80."
