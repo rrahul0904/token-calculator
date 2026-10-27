@@ -14,9 +14,28 @@ permissions:
 
 jobs:
   verify:
-    name: Contract + types + access controls
+    name: Contract, PostgreSQL, types and access controls
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/token_intelligence
+      DATABASE_SSL: disable
+      TOKEN_INTELLIGENCE_INTEGRATION_TESTS: "1"
+      INFERENCE_SIMULATION_ENABLED: "1"
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: token_intelligence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d token_intelligence"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v7
@@ -26,9 +45,11 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Type-check all application code
         run: npm run typecheck
-      - name: Gateway-focused tests
-        run: npx vitest run tests/inference-simulations.test.ts tests/inference-simulations-route.test.ts
+      - name: Apply existing PostgreSQL migrations
+        run: npm run db:migrate
+      - name: Gateway-focused unit, HTTP, and database acceptance
+        run: npx vitest run tests/inference-simulations.test.ts tests/inference-simulations-route.test.ts tests/inference-simulations-db.test.ts
       - name: Security disclaimer
         run: |
-          echo "Focused checks do NOT waive the repository-wide npm audit requirement."
-          echo "The separate CI dependency vulnerability gate must pass before release."
+          echo "Focused acceptance does NOT waive repository-wide npm audit."
+          echo "Critical/high dependency findings are tracked in Issue #80."
