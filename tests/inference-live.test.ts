@@ -9,10 +9,11 @@ const req: LiveRequest = {
   messages: [{ role: "user", content: "Explain a pure function." }],
   max_tokens: 64,
 };
-const localEnv = {
+const localEnv: NodeJS.ProcessEnv = {
+  ...process.env,
   TI_INFERENCE_UPSTREAM_BASE_URL: "http://127.0.0.1:8000/v1",
   TI_INFERENCE_UPSTREAM_MODEL: "qwen-example",
-} as NodeJS.ProcessEnv;
+};
 
 describe("live inference protocol and egress policy", () => {
   it("accepts one fixed model and bounded chat messages but no store or streaming", () => {
