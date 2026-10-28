@@ -23,12 +23,6 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-      - name: Redacted historical finding metadata (never secret values)
-        if: failure()
-        run: node scripts/security-redacted-gitleaks-triage.mjs .ci-gitleaks-report.json
-      - name: Delete ephemeral scanner report
-        if: always()
-        run: rm -f .ci-gitleaks-report.json
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -80,6 +74,12 @@ jobs:
           -v "${{ github.workspace }}:/repo"
           zricethezav/gitleaks:v8.24.3
           detect --source=/repo --config=/repo/.gitleaks.toml --redact --exit-code=2 --log-opts="--all" --report-format=json --report-path=/repo/.ci-gitleaks-report.json
+      - name: Redacted historical finding metadata (never secret values)
+        if: failure()
+        run: node scripts/security-redacted-gitleaks-triage.mjs .ci-gitleaks-report.json
+      - name: Delete ephemeral scanner report
+        if: always()
+        run: rm -f .ci-gitleaks-report.json
       - uses: actions/setup-node@v7
         with:
           node-version: 22
