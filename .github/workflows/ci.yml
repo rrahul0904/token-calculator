@@ -14,6 +14,25 @@ permissions:
   contents: read
 
 jobs:
+
+  independent_dependency_audit:
+    name: Production dependency audit (independent of historical gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Deterministic install from reviewed lockfile
+        run: npm ci --ignore-scripts --no-fund --no-audit
+      - name: Production CVE verification (no severity waivers)
+        run: npm audit --omit=dev --audit-level=high
+      - name: MCP/Zod API compatibility and type contract
+        run: npm run typecheck
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
