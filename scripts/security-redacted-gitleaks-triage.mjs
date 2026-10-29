@@ -22,8 +22,8 @@ if(!source || !fs.existsSync(source)){
     // Only the four known historical commits/rule may expose a fingerprint;
     // all new or unexpected findings remain redacted and FAIL the scan.
     const knownHistoricalCommits = new Set(["5f355f905276fb6a9fd76bc323f884a6ae5c336a","dc8c99b92fbdce7bdcbd9bb97b8e2cf972e2caa3"]);
-    const rows = rows;
-    const reviewedFingerprints = rows.map(x => {
+    const historicalRows = rows;
+    const reviewedFingerprints = historicalRows.map(x => {
       if (x.RuleID !== "generic-api-key" || !knownHistoricalCommits.has(x.Commit)) return null;
       if (typeof x.Fingerprint !== "string" ||
           !/^[a-f0-9]{40}:[a-zA-Z0-9._/@ -]+:generic-api-key:[1-9][0-9]{0,6}$/.test(x.Fingerprint) ||
