@@ -1,3 +1,10 @@
 # Proven documentation placeholders, not credentials. See docs/SECRET_SCAN_PROVENANCE.md.
 8364708f1b45bbbb230548effc311f37ee778639:apps/route-gateway-pilot/README.md:curl-auth-header:26
 8364708f1b45bbbb230548effc311f37ee778639:apps/route-gateway-pilot/public/index.html:curl-auth-header:2
+
+# 2026-10-29 owner-attested synthetic inference test identities. Exact commit/path/rule/line only.
+# Each comes from generateApiKey() within disposable DB integration tests.
+# Provenance: docs/SECRET_SCAN_PROVENANCE_20261029.md; independent reviewer sign-off pending.
+dc8c99b92fbdce7bdcbd9bb97b8e2cf972e2caa3:tests/inference-live-db.test.ts:generic-api-key:139
+dc8c99b92fbdce7bdcbd9bb97b8e2cf972e2caa3:tests/inference-live-db.test.ts:generic-api-key:149
+5f355f905276fb6a9fd76bc323f884a6ae5c336a:tests/inference-simulations-db.test.ts:generic-api-key:123
