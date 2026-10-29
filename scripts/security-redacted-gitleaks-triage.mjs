@@ -17,6 +17,22 @@ if(!source || !fs.existsSync(source)){
       rule:typeof row.RuleID==="string"&&/^[A-Za-z0-9._-]{1,80}$/.test(row.RuleID)?row.RuleID:"unknown",
       commit:typeof row.Commit==="string"&&/^[a-f0-9]{40}$/.test(row.Commit)?row.Commit.slice(0,12):"unknown"
     }));
+    // Security reviewer can cross-reference precise historical fingerprints without
+    // revealing the Gitleaks Secret, Match, Line, Email, or Description fields.
+    // Only the four known historical commits/rule may expose a fingerprint;
+    // all new or unexpected findings remain redacted and FAIL the scan.
+    const knownHistoricalCommits = new Set(["5f355f905276fb6a9fd76bc323f884a6ae5c336a","dc8c99b92fbdce7bdcbd9bb97b8e2cf972e2caa3"]);
+    const rows = rows;
+    const reviewedFingerprints = rows.map(x => {
+      if (x.RuleID !== "generic-api-key" || !knownHistoricalCommits.has(x.Commit)) return null;
+      if (typeof x.Fingerprint !== "string" ||
+          !/^[a-f0-9]{40}:[a-zA-Z0-9._/@ -]+:generic-api-key:[1-9][0-9]{0,6}$/.test(x.Fingerprint) ||
+          !x.Fingerprint.startsWith(x.Commit + ":")) return null;
+      return x.Fingerprint;
+    });
+    indicators.forEach((x, i) => {
+      if (reviewedFingerprints[i]) x.historicalFingerprintForReview = reviewedFingerprints[i];
+    });
     console.log(JSON.stringify({verdict:indicators.length?"NO_GO":"NO_FINDINGS",
       findingCount:indicators.length,indicators,
       secretValuesIncluded:false,classification:"SECURITY_REVIEW_REQUIRED"},null,2));
